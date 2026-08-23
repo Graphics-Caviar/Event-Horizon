@@ -14,3 +14,13 @@ dist-ssr/
 *.log
 npm-debug.log*
 .DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Placeholder asset folders are tracked on purpose (public/assets/**/*.txt)
+# so the intended folder structure survives in git even though it's empty
+# of real assets right now. Once real files land, this section is a no-op.
