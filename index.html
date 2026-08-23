@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Event Horizon: Escape from Singularity</title>
+  <link rel="stylesheet" href="public/style.css" />
+
+  <!-- No bundler: three.js is loaded straight from a CDN via an import map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+      <div id="screen-start" class="screen">
+    <h1>EVENT&nbsp;HORIZON</h1>
+    <h2>Escape from Singularity</h2>
+    <p class="lore">
+      Your ship has just been spat out of a black hole, hull screaming, systems failing.
+      The singularity isn't done with you yet — its pull is growing stronger by the second.
+      Weave through the asteroid field, grab Nitrogen canisters to boost your escape,
+      and break free before you're dragged back into the dark.
+    </p>
+    <div id="name-entry">
+      <label for="player-name-input" class="hud-label">PILOT CALLSIGN</label>
+      <input id="player-name-input" type="text" maxlength="16" placeholder="Enter your name" autocomplete="off" />
+    </div>
+    <button id="btn-start">LAUNCH</button>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
