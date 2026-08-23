@@ -1,0 +1,51 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidLevel(levelId) {
+      return levelId in ['level_1', 'level_2', 'level_3', 'global'];
+    }
+
+    // 1. User Profiles: Only owner can read/write their own document
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // 2. User Game Saves: Only owner can read/write their own save slots
+      match /saves/{slotId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // 3. Leaderboards: Public read, authenticated creation with ownership validation, immutable records
+    match /leaderboards/{levelId}/scores/{scoreId} {
+      allow read: if true;
+      allow create: if isAuthenticated()
+        && isValidLevel(levelId)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.displayName is string
+        && request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.timeElapsed is number
+        && request.resource.data.timeElapsed >= 0
+        && request.resource.data.nitrogenCollected is number
+        && request.resource.data.nitrogenCollected >= 0;
+      allow update, delete: if false;
+    }
+
+    // 4. Achievements: Public read-only reference data
+    match /achievements/{achievementId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
