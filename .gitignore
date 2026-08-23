@@ -1,1 +1,16 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment variables & local configuration
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+dist/
+dist-ssr/
+
+# Logs & temp
+*.log
+npm-debug.log*
+.DS_Store
