@@ -36,6 +36,8 @@ export class Level1 extends Level {
 		this.asteroidGroup.name = 'asteroids'
 		this.populateAsteroids(1000, 5)
 		this.addObject(this.asteroidGroup)
+
+		this.noDestroyedAsteroids = 0
 	}
 
 	clearStartMenu() {
@@ -264,7 +266,8 @@ export class Level1 extends Level {
 	}
 
 	destroyAsteroid(asteroid) {
-		console.log('one mississipi')
+		this.noDestroyedAsteroids++
+		console.log(`${this.noDestroyedAsteroids} mississipi`)
 		this.asteroids.delete(asteroid)
 		this.asteroidGroup.remove(asteroid)
 		this.resources.remove(asteroid.geometry)
