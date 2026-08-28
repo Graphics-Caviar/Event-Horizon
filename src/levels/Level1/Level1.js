@@ -3,6 +3,8 @@ import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 
 import { Level, clearScene } from '../../core/Level.js'
 
+// set to view asteroids from a more zoomed out level with rings around the asteroids to
+// identify them easier
 const ASTEROID_FIELD_DEBUG = true
 
 export class Level1 extends Level {
@@ -13,7 +15,8 @@ export class Level1 extends Level {
 		this.addLights()
 
 		this.sceneManager.camera.position.set(0, 0, 800)
-		this.timeScale = 100
+		// Adjust this to simulate a 'fast-forward'
+		this.timeScale = 200
 
 		this.blackHoleGroup = new THREE.Group()
 		this.blackHoleGroup.name = 'blackhole'
@@ -30,7 +33,7 @@ export class Level1 extends Level {
 		this.asteroids = new Set()
 		this.asteroidGroup = new THREE.Group()
 		this.asteroidGroup.name = 'asteroids'
-		this.populateAsteroids(1000, 5)
+		this.populateAsteroids(1000, 5, 50, 500)
 		this.addObject(this.asteroidGroup)
 
 		this.noDestroyedAsteroids = 0
@@ -96,11 +99,11 @@ export class Level1 extends Level {
 		console.log(this.blackHoleGroup)
 	}
 
-	populateAsteroids(no, radius) {
+	populateAsteroids(no, radius, minOrbitRadius, maxOrbitRadius) {
 		const asteroidPositions = this.generateUniqueVertices(
 			no,
-			50,
-			500
+			minOrbitRadius,
+			maxOrbitRadius
 		)
 		const asteroidMaterial = this.createBasicAsteroidMaterial()
 		this.own(asteroidMaterial)
@@ -130,7 +133,6 @@ export class Level1 extends Level {
 				position.y,
 				position.z
 			)
-
 			asteroid.velocity = this.orbitLikeVelocity(position)
 
 			this.own(asteroidGeometry)
@@ -209,24 +211,34 @@ export class Level1 extends Level {
 
 	orbitLikeVelocity(position) {
 		// Asteroids should go fast enough perpendicular to the pull so asteroids
-		// look like they are orbiting the blackhole
+		// look like they are orbiting the blackhole.
+		// Adjust orbitSpeedFactor to modify whether it is below that threshold
+		// or above, with 1.0 meaning that it should try to be exactly on orbit.
 		const r = Math.max(position.length(), 1)
 		const speed =
 			Math.sqrt(this.blackHoleGravityStrength / r) *
 			this.orbitSpeedFactor
 
+		// Get direction of black hole (since it is in origin) and calculate
+		// the tangent of that so it is perpendicular to the force applied by the
+		// black hole (our celestial body).
 		const radial = position.clone().normalize()
 		const up = new THREE.Vector3(0, 1, 0)
+		// Cross product of the radial and our up should give something perpendicular to
+		// both of these vectors.
 		let tangent = new THREE.Vector3().crossVectors(up, radial)
 		if (tangent.lengthSq() < 1e-6) {
 			tangent = new THREE.Vector3(1, 0, 0)
 		}
 		tangent.normalize()
 
+		// Now we apply the magnitude fo the required speed to the direction required
+		// to get the velocity.
 		return tangent.multiplyScalar(speed)
 	}
 
 	updateAsteroidPhysics(delta) {
+		// Time multiplier.
 		const dt = delta * this.timeScale
 		for (const asteroid of this.asteroids) {
 			const direction = new THREE.Vector3().subVectors(
@@ -234,19 +246,17 @@ export class Level1 extends Level {
 				asteroid.position
 			)
 			const distance = direction.length()
+			// Close to enough to the black hole that we may as well consider
+			// it having fallen in.
 			if (distance < this.blackHoleEventHorizonRadius) {
 				this.destroyAsteroid(asteroid)
 				continue
 			}
 			direction.normalize()
-			const softenedDistance = Math.max(
-				distance,
-				this.blackHoleEventHorizonRadius
-			)
 
 			const force =
 				this.blackHoleGravityStrength /
-				(softenedDistance * softenedDistance)
+				(distance * distance)
 
 			asteroid.velocity.addScaledVector(direction, force * dt)
 			if (
