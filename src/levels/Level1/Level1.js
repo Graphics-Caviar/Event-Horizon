@@ -16,7 +16,7 @@ export class Level1 extends Level {
 
 		this.sceneManager.camera.position.set(0, 0, 800)
 		// Adjust this to simulate a 'fast-forward'
-		this.timeScale = 200
+		this.timeScale = 50
 
 		this.blackHoleGroup = new THREE.Group()
 		this.blackHoleGroup.name = 'blackhole'
@@ -284,6 +284,8 @@ export class Level1 extends Level {
 	updateBlackHoleDisk(delta) {
 		if (this.blackHoleDisk) {
 			this.blackHoleDisk.rotation.z += 0.005 * this.timeScale
+			this.blackHoleDisk.rotation.x += 0.005 * this.timeScale
+			this.blackHoleDisk.rotation.y += 0.005 * this.timeScale
 		}
 	}
 
