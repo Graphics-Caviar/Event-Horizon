@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Level1 } from '../levels/Level1/Level1.js'
 import { SceneManager } from './SceneManager.js';
 import { AssetManager } from './AssetManager.js';
 import { GameState, STATUS } from './GameState.js';
@@ -11,6 +12,7 @@ export class Game {
     this.sceneManager = new SceneManager(canvas);
     this.assetManager = new AssetManager();
     this.gameState = new GameState();
+    this.currentLevel = null;
 
     this.menu = new Menu({
       onStart: (name) => this._startLevel1(name),
@@ -27,7 +29,9 @@ export class Game {
   _startLevel1(name) {
     // TODO: Level 1 not wired up yet.
     this.gameState.playerName = name || this.gameState.playerName;
-    console.log(`LAUNCH pressed for "${this.gameState.playerName}" — Level 1 coming soon.`);
+    console.log(`LAUNCH pressed for "${this.gameState.playerName}".`);
+    this.currentLevel?.dispose();
+    this.currentLevel = new Level1(this);
   }
 
   _loop() {
@@ -36,6 +40,7 @@ export class Game {
     if (this.gameState.status === STATUS.MENU && this.menuBackground) {
       this.menuBackground.update(delta);
     }
+    this.currentLevel?.update?.(delta);
     this.sceneManager.render();
   }
 }
