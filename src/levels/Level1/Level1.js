@@ -272,6 +272,7 @@ export class Level1 extends Level {
 	}
 
 	destroyAsteroid(asteroid) {
+		// For the laughs
 		this.noDestroyedAsteroids++
 		console.log(`${this.noDestroyedAsteroids} mississipi`)
 		this.asteroids.delete(asteroid)
