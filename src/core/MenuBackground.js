@@ -15,16 +15,16 @@ export class MenuBackground {
     this.nebula = this._buildNebula();
     this.group.add(this.nebula);
 
-    this.distantHole = this._buildDistantHole();
-    this.group.add(this.distantHole);
+    this.holeGroup = this._buildBlackHole();
+    this.group.add(this.holeGroup);
 
-    this.asteroids = this._buildAsteroidDrift(assetManager);
-    this.group.add(this.asteroids);
+    this.ship = this._buildDriftingShip();
+    this.group.add(this.ship);
 
     sceneManager.scene.add(this.group);
 
     this.camera.position.set(0, 3, 26);
-    this.camera.lookAt(0, -1, -80);
+    this.camera.lookAt(4, -2, -60);
 
     this._t = 0;
   }
@@ -65,51 +65,81 @@ export class MenuBackground {
     return new THREE.Points(geo, mat);
   }
 
-  _buildDistantHole() {
-    // A small, silent black hole far off in the distance — foreshadows
-    // Level 1 without competing with the HUD/menu text for attention.
+  _buildBlackHole() {
+    // A large, dramatic swirling accretion disk as the focal point of the
+    // composition — echoes the reference art's centrepiece without needing
+    // any image assets.
     const group = new THREE.Group();
-    group.position.set(30, -6, -140);
+    group.position.set(10, -1, -70);
+    group.rotation.x = -0.15;
+    group.rotation.z = 0.1;
 
     const core = new THREE.Mesh(
-      new THREE.SphereGeometry(6, 24, 24),
+      new THREE.SphereGeometry(9, 32, 32),
       new THREE.MeshBasicMaterial({ color: 0x000000 })
     );
     group.add(core);
 
     const glow = new THREE.Mesh(
-      new THREE.RingGeometry(6.5, 11, 48),
-      new THREE.MeshBasicMaterial({ color: 0xffb066, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      new THREE.SphereGeometry(12, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xff9a55, transparent: true, opacity: 0.1 })
     );
-    glow.rotation.x = Math.PI / 2.4;
     group.add(glow);
+
+    const diskCount = 4000;
+    const positions = new Float32Array(diskCount * 3);
+    const colors = new Float32Array(diskCount * 3);
+    const warm = new THREE.Color(0xffb066);
+    const hot = new THREE.Color(0xfff2d8);
+
+    for (let i = 0; i < diskCount; i++) {
+      const r = 9.5 * (1 + Math.random() * 3.2);
+      const angle = Math.random() * Math.PI * 2;
+      const spiral = angle + r * 0.05; // gentle spiral bias, not a perfect ring
+      const height = (Math.random() - 0.5) * 1.4 * (1 - Math.min(r / 40, 1));
+
+      positions[i * 3] = Math.cos(spiral) * r;
+      positions[i * 3 + 1] = height;
+      positions[i * 3 + 2] = Math.sin(spiral) * r;
+
+      const c = warm.clone().lerp(hot, Math.random());
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.7, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false });
+    this.disk = new THREE.Points(geo, mat);
+    group.add(this.disk);
 
     return group;
   }
 
-  _buildAsteroidDrift(assetManager) {
-    // Cosmetic asteroid cluster drifting behind the menu — uses the same
-    // procedural geometry/material factories Level 1 uses, but with no
-    // collision, damage, or storm logic attached; purely for atmosphere.
+  _buildDriftingShip() {
+    // A small, simple silhouette (no game logic here — Spaceship.js owns
+    // the real player ship) that drifts across the menu for a bit of life.
     const group = new THREE.Group();
-    const geo = assetManager.createAsteroidGeometry();
-    const mat = assetManager.createAsteroidMaterial();
 
-    const count = 14;
-    for (let i = 0; i < count; i++) {
-      const rock = new THREE.Mesh(geo, mat);
-      const angle = Math.random() * Math.PI * 2;
-      const r = 40 + Math.random() * 90;
-      rock.position.set(
-        Math.cos(angle) * r,
-        (Math.random() - 0.5) * 30 - 5,
-        -60 - Math.random() * 200
-      );
-      const s = 1 + Math.random() * 3;
-      rock.scale.setScalar(s);
-      rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
-      group.add(rock);
-    }
+    const hullMat = new THREE.MeshBasicMaterial({ color: 0x9fb3c8 });
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.6, 2.4, 6), hullMat);
+    body.rotation.x = Math.PI / 2;
+    group.add(body);
+
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0x4de3ff, transparent: true, opacity: 0.9 });
+    const trail = new THREE.Mesh(new THREE.ConeGeometry(0.22, 3.2, 8), glowMat);
+    trail.rotation.x = -Math.PI / 2;
+    trail.position.z = 1.6;
+    group.add(trail);
+
+    const light = new THREE.PointLight(0x4de3ff, 1.8, 14);
+    light.position.z = 1.8;
+    group.add(light);
+
+    group.position.set(-14, -3, -18);
+    group.rotation.y = 2.6;
     return group;
   }
 
@@ -118,17 +148,18 @@ export class MenuBackground {
 
     this.starfield.rotation.y += delta * 0.008;
     this.nebula.rotation.y -= delta * 0.012;
-    this.distantHole.rotation.z += delta * 0.05;
+    this.disk.rotation.y += delta * 0.05;
+    this.holeGroup.rotation.z += delta * 0.01;
 
-    this.asteroids.children.forEach((rock) => {
-      rock.rotation.x += delta * 0.05;
-      rock.rotation.y += delta * 0.03;
-    });
+    // Ship drifts slowly left-to-right across the scene and loops.
+    this.ship.position.x += delta * 1.4;
+    this.ship.position.y = -3 + Math.sin(this._t * 0.5) * 0.4;
+    if (this.ship.position.x > 20) this.ship.position.x = -20;
 
     // Slow, breathing camera drift so the background never looks static.
-    this.camera.position.x = Math.sin(this._t * 0.12) * 4;
-    this.camera.position.y = 3 + Math.sin(this._t * 0.08) * 1.2;
-    this.camera.lookAt(0, -1, -80);
+    this.camera.position.x = Math.sin(this._t * 0.1) * 3;
+    this.camera.position.y = 3 + Math.sin(this._t * 0.07) * 1;
+    this.camera.lookAt(4, -2, -60);
   }
 
   dispose() {

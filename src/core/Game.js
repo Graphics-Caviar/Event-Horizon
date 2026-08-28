@@ -1,9 +1,16 @@
 import * as THREE from 'three';
 import { SceneManager } from './SceneManager.js';
 import { AssetManager } from './AssetManager.js';
-import { GameState, STATUS } from './GameState.js';
+import { GameState } from './GameState.js';
 import { Menu } from '../ui/Menu.js';
+import { AudioManager } from '../audio/AudioManager.js';
 import { MenuBackground } from './MenuBackground.js';
+
+// This build is scoped to the launch/menu screen only. Level 1 gameplay
+// (src/levels/Level1/**, src/player/**, src/physics/**, src/ui/HUD.js)
+// exists in the repo from an earlier prototype but is deliberately NOT
+// wired up here — see README.md. PLAY currently leads to a "coming soon"
+// placeholder rather than starting a level.
 
 export class Game {
   constructor() {
@@ -11,10 +18,11 @@ export class Game {
     this.sceneManager = new SceneManager(canvas);
     this.assetManager = new AssetManager();
     this.gameState = new GameState();
+    this.audio = new AudioManager();
 
     this.menu = new Menu({
-      onStart: (name) => this._startLevel1(name),
-      onRetry: () => this._startLevel1(this.gameState.playerName),
+      onLaunch: (name) => this._showPlaceholder(name),
+      audioManager: this.audio,
     });
 
     this.clock = new THREE.Clock();
@@ -24,18 +32,15 @@ export class Game {
     this._loop();
   }
 
-  _startLevel1(name) {
-    // TODO: Level 1 not wired up yet.
+  _showPlaceholder(name) {
     this.gameState.playerName = name || this.gameState.playerName;
-    console.log(`LAUNCH pressed for "${this.gameState.playerName}" — Level 1 coming soon.`);
+    this.menu.showPlaceholder(this.gameState.playerName);
   }
 
   _loop() {
     requestAnimationFrame(() => this._loop());
-    const delta = Math.min(this.clock.getDelta(), 0.1);
-    if (this.gameState.status === STATUS.MENU && this.menuBackground) {
-      this.menuBackground.update(delta);
-    }
+    const delta = Math.min(this.clock.getDelta(), 0.1); // clamp huge tab-switch gaps
+    this.menuBackground.update(delta);
     this.sceneManager.render();
   }
 }

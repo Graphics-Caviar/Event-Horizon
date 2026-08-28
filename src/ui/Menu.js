@@ -1,61 +1,145 @@
 export class Menu {
-  constructor({ onStart, onRetry }) {
+  constructor({ onLaunch, audioManager }) {
+    this.onLaunch = onLaunch;
+    this.audio = audioManager;
+
     this.screens = {
       start: document.getElementById('screen-start'),
-      gameover: document.getElementById('screen-gameover'),
-      complete: document.getElementById('screen-complete'),
+      placeholder: document.getElementById('screen-placeholder'),
     };
 
-    this.nameInput = document.getElementById('player-name-input');
-
-    const launch = () => onStart(this._readName());
-    document.getElementById('btn-start').addEventListener('click', launch);
-    this.nameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') launch();
+    this.overlay = document.getElementById('menu-modal-overlay');
+    this.modalContent = document.getElementById('modal-content');
+    document.getElementById('modal-close').addEventListener('click', () => this._closeModal());
+    this.overlay.addEventListener('click', (e) => {
+      if (e.target === this.overlay) this._closeModal();
     });
 
-    // Gameover/complete screens don't exist yet in a launch-only build —
-    // only wire these up if the markup is actually present.
-    const retryGameover = document.getElementById('btn-retry-gameover');
-    if (retryGameover) retryGameover.addEventListener('click', onRetry);
-
-    const retryComplete = document.getElementById('btn-retry-complete');
-    if (retryComplete) retryComplete.addEventListener('click', onRetry);
+    document.getElementById('btn-start').addEventListener('click', () => this._openNameModal());
+    document.getElementById('btn-controls').addEventListener('click', () => this._openControlsModal());
+    document.getElementById('btn-settings').addEventListener('click', () => this._openSettingsModal());
+    document.getElementById('btn-credits').addEventListener('click', () => this._openCreditsModal());
+    document.getElementById('btn-exit').addEventListener('click', () => this._openExitModal());
+    document.getElementById('btn-back-to-menu').addEventListener('click', () => this.showStart());
   }
 
-  _readName() {
-    const raw = this.nameInput.value.trim();
-    return raw.length > 0 ? raw : 'Pilot';
+  // ---------------- generic modal plumbing ----------------
+
+  _openModal(html) {
+    this.modalContent.innerHTML = html;
+    this.overlay.classList.remove('hidden');
   }
+
+  _closeModal() {
+    this.overlay.classList.add('hidden');
+    this.modalContent.innerHTML = '';
+  }
+
+  // ---------------- individual modals ----------------
+
+  _openNameModal() {
+    this._openModal(`
+      <h3>PILOT CALLSIGN</h3>
+      <p class="modal-desc">Enter a name before you launch — the Devourer likes to know who it's hunting.</p>
+      <input id="player-name-input" class="modal-input" type="text" maxlength="16" placeholder="Enter your name" autocomplete="off" />
+      <div class="modal-actions">
+        <button id="modal-launch-btn">LAUNCH</button>
+      </div>
+    `);
+
+    const input = document.getElementById('player-name-input');
+    input.focus();
+
+    const launch = () => {
+      const raw = input.value.trim();
+      this._closeModal();
+      this.onLaunch(raw.length > 0 ? raw : 'Pilot');
+    };
+    document.getElementById('modal-launch-btn').addEventListener('click', launch);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') launch(); });
+  }
+
+  _openControlsModal() {
+    this._openModal(`
+      <h3>CONTROLS</h3>
+      <p class="modal-desc">Flight controls for The Singularity Run.</p>
+      <ul class="key-list">
+        <li><span>Accelerate</span><kbd>W / ↑</kbd></li>
+        <li><span>Brake / Reverse</span><kbd>S / ↓</kbd></li>
+        <li><span>Turn Left</span><kbd>A / ←</kbd></li>
+        <li><span>Turn Right</span><kbd>D / →</kbd></li>
+      </ul>
+    `);
+  }
+
+  _openSettingsModal() {
+    const muted = this.audio ? this.audio.isMuted() : false;
+    this._openModal(`
+      <h3>SETTINGS</h3>
+      <div class="settings-row">
+        <span>Mute sound effects</span>
+        <input id="setting-mute" type="checkbox" ${muted ? 'checked' : ''} />
+      </div>
+    `);
+
+    document.getElementById('setting-mute').addEventListener('change', (e) => {
+      if (this.audio) this.audio.setMuted(e.target.checked);
+    });
+  }
+
+  _openCreditsModal() {
+    this._openModal(`
+      <h3>CREDITS</h3>
+      <div class="credits-text">
+        <div><span class="role">Design &amp; Development</span> — your team here</div>
+        <div><span class="role">Engine</span> — three.js</div>
+        <div><span class="role">Built for</span> — course project</div>
+      </div>
+    `);
+  }
+
+  _openExitModal() {
+    this._openModal(`
+      <h3>EXIT GAME</h3>
+      <p class="modal-desc">Leave Event Horizon? Any unsaved progress will be lost.</p>
+      <div class="modal-actions">
+        <button id="modal-exit-cancel" class="btn-secondary">CANCEL</button>
+        <button id="modal-exit-confirm" class="btn-danger">EXIT</button>
+      </div>
+    `);
+
+    document.getElementById('modal-exit-cancel').addEventListener('click', () => this._closeModal());
+    document.getElementById('modal-exit-confirm').addEventListener('click', () => {
+      // Only closes tabs the page itself opened; browsers block closing a
+      // regular tab from script, so this is a graceful fallback either way.
+      window.close();
+      this._openModal(`
+        <h3>SAFE TO CLOSE</h3>
+        <p class="modal-desc">You can close this browser tab now. See you out there, Pilot.</p>
+      `);
+    });
+  }
+
+  // ---------------- top-level screens ----------------
 
   _hideAll() {
-    Object.values(this.screens).forEach((el) => el && el.classList.add('hidden'));
+    Object.values(this.screens).forEach((el) => el.classList.add('hidden'));
   }
 
   showStart() {
     this._hideAll();
     this.screens.start.classList.remove('hidden');
-    this.nameInput.focus();
   }
 
-  showGameOver(finalScore, playerName) {
-    if (!this.screens.gameover) return;
+  showPlaceholder(playerName) {
     this._hideAll();
-    document.getElementById('gameover-lore').textContent =
-      `The black hole reclaimed ${playerName}'s ship. The Devourer is patient — you were not fast enough.`;
-    document.getElementById('final-score-gameover').textContent = `Final score: ${Math.floor(finalScore)}`;
-    this.screens.gameover.classList.remove('hidden');
+    document.getElementById('placeholder-lore').textContent =
+      `Gameplay is still being built by the rest of the crew. Check back soon, ${playerName}.`;
+    this.screens.placeholder.classList.remove('hidden');
   }
 
-  showComplete(finalScore, playerName) {
-    if (!this.screens.complete) return;
+  hideAll() {
     this._hideAll();
-    document.getElementById('complete-lore').textContent =
-      `${playerName} breaks free of the singularity's grasp — but the ship can't take much more. ` +
-      `Control fails as you streak toward a nearby alien world...`;
-    document.getElementById('final-score-complete').textContent = `Final score: ${Math.floor(finalScore)}`;
-    this.screens.complete.classList.remove('hidden');
+    this._closeModal();
   }
-
-  hideAll() { this._hideAll(); }
 }
