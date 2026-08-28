@@ -143,7 +143,7 @@ export class Level1 extends Level {
 			if (ASTEROID_FIELD_DEBUG) {
 				const diskGeo = new THREE.RingGeometry(
 					radius + radius * 0.1,
-					this.visualExaggeration * radius,
+					radius,
 					64
 				)
 				this.own(diskGeo)
