@@ -3,10 +3,6 @@ import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 
 import { Level, clearScene } from '../../core/Level.js'
 
-// Physics constants
-const G = 6.6743e-11 // m^3 kg^-1 s^-2
-const C = 299792.458 // km/s (speed of light)
-const SOLAR_MASS = 1.989e30 // kg
 const ASTEROID_FIELD_DEBUG = true
 
 export class Level1 extends Level {
