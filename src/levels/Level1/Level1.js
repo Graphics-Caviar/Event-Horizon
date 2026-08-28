@@ -251,7 +251,10 @@ export class Level1 extends Level {
 				(softenedDistance * softenedDistance)
 
 			asteroid.velocity.addScaledVector(direction, force * dt)
-			if (asteroid.velocity.length() > this.maxAsteroidSpeed) {
+			if (
+				asteroid.velocity.length() >
+				this.maxAsteroidSpeed
+			) {
 				asteroid.velocity
 					.normalize()
 					.multiplyScalar(this.maxAsteroidSpeed)
