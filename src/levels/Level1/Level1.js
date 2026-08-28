@@ -246,7 +246,7 @@ export class Level1 extends Level {
 				asteroid.position
 			)
 			const distance = direction.length()
-			// Close to enough to the black hole that we may as well consider
+			// Close enough to the black hole that we may as well consider
 			// it having fallen in.
 			if (distance < this.blackHoleEventHorizonRadius) {
 				this.destroyAsteroid(asteroid)
