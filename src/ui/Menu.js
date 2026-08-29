@@ -1,7 +1,8 @@
 export class Menu {
-  constructor({ onLaunch, audioManager }) {
+  constructor({ onLaunch, audioManager, storage }) {
     this.onLaunch = onLaunch;
     this.audio = audioManager;
+    this.storage = storage;
 
     this.screens = {
       start: document.getElementById('screen-start'),
@@ -48,12 +49,15 @@ export class Menu {
     `);
 
     const input = document.getElementById('player-name-input');
+    input.value = this.storage.load().playerName;
     input.focus();
 
     const launch = () => {
       const raw = input.value.trim();
+      const name = raw.length > 0 ? raw : 'Pilot';
+      this.storage.save({ ...this.storage.load(), playerName: name });
       this._closeModal();
-      this.onLaunch(raw.length > 0 ? raw : 'Pilot');
+      this.onLaunch(name);
     };
     document.getElementById('modal-launch-btn').addEventListener('click', launch);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') launch(); });
@@ -73,7 +77,7 @@ export class Menu {
   }
 
   _openSettingsModal() {
-    const muted = this.audio ? this.audio.isMuted() : false;
+    const muted = this.storage.load().settings.muted;
     this._openModal(`
       <h3>SETTINGS</h3>
       <div class="settings-row">
@@ -83,7 +87,11 @@ export class Menu {
     `);
 
     document.getElementById('setting-mute').addEventListener('change', (e) => {
-      if (this.audio) this.audio.setMuted(e.target.checked);
+      const muted = e.target.checked;
+      if (this.audio) this.audio.setMuted(muted);
+      const profile = this.storage.load();
+      profile.settings.muted = muted;
+      this.storage.save(profile);
     });
   }
 
@@ -91,9 +99,9 @@ export class Menu {
     this._openModal(`
       <h3>CREDITS</h3>
       <div class="credits-text">
-        <div><span class="role">Design &amp; Development</span> — your team here</div>
+        <div><span class="role">Design &amp; Development</span> — Graphics & Cavier</div>
         <div><span class="role">Engine</span> — three.js</div>
-        <div><span class="role">Built for</span> — course project</div>
+        <div><span class="role">Built for</span> — Course project</div>
       </div>
     `);
   }

@@ -5,6 +5,7 @@ import { GameState } from './GameState.js';
 import { Menu } from '../ui/Menu.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { MenuBackground } from './MenuBackground.js';
+import storage from '../services/StorageService.js';
 
 // This build is scoped to the launch/menu screen only. Level 1 gameplay
 // (src/levels/Level1/**, src/player/**, src/physics/**, src/ui/HUD.js)
@@ -20,9 +21,14 @@ export class Game {
     this.gameState = new GameState();
     this.audio = new AudioManager();
 
+    const profile = storage.load();
+    this.gameState.playerName = profile.playerName;
+    this.audio.setMuted(profile.settings.muted);
+
     this.menu = new Menu({
       onLaunch: (name) => this._showPlaceholder(name),
       audioManager: this.audio,
+      storage,
     });
 
     this.clock = new THREE.Clock();
