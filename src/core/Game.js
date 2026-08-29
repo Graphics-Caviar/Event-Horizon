@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Level1 } from '../levels/Level1/Level1.js'
 import { SceneManager } from './SceneManager.js';
 import { AssetManager } from './AssetManager.js';
 import { GameState } from './GameState.js';
@@ -19,6 +20,7 @@ export class Game {
     this.sceneManager = new SceneManager(canvas);
     this.assetManager = new AssetManager();
     this.gameState = new GameState();
+    this.currentLevel = null;
     this.audio = new AudioManager();
 
     const profile = storage.load();
@@ -26,7 +28,7 @@ export class Game {
     this.audio.setMuted(profile.settings.muted);
 
     this.menu = new Menu({
-      onLaunch: (name) => this._showPlaceholder(name),
+      onLaunch: (name) => this._level1(name),
       audioManager: this.audio,
       storage,
     });
@@ -38,15 +40,21 @@ export class Game {
     this._loop();
   }
 
-  _showPlaceholder(name) {
+  _level1(name) {
     this.gameState.playerName = name || this.gameState.playerName;
-    this.menu.showPlaceholder(this.gameState.playerName);
+    console.log(`LAUNCH pressed for "${this.gameState.playerName}".`);
+    this.currentLevel?.dispose();
+    this.currentLevel = new Level1(this);
+    // this.menu.showPlaceholder(this.gameState.playerName);
   }
 
   _loop() {
     requestAnimationFrame(() => this._loop());
-    const delta = Math.min(this.clock.getDelta(), 0.1); // clamp huge tab-switch gaps
-    this.menuBackground.update(delta);
+    const delta = Math.min(this.clock.getDelta(), 0.1);
+    if (this.menuBackground) {
+      this.menuBackground.update(delta);
+    }
+    this.currentLevel?.update?.(delta);
     this.sceneManager.render();
   }
 }
