@@ -154,6 +154,32 @@
     <button id="btn-back-to-menu">BACK TO MENU</button>
   </div>
 
+  <!-- ============ Hangar (character/ship select) ============ -->
+  <div id="screen-character-select" class="screen hangar-screen hidden">
+    <div class="hangar-header">
+      <div class="hangar-title">EVENT&nbsp;HORIZON</div>
+      <div class="hangar-subtitle">HANGAR BAY</div>
+      <div class="hangar-tabs">
+        <button id="tab-pilot" class="hangar-tab active">CHOOSE YOUR PILOT</button>
+        <button id="tab-ship" class="hangar-tab">YOUR STARFIGHTER</button>
+      </div>
+    </div>
+
+    <div id="pilot-panel" class="hangar-panel">
+      <div class="pilot-cards" id="pilot-cards"></div>
+      <div class="stat-comparison" id="stat-comparison"></div>
+    </div>
+
+    <div id="ship-panel" class="hangar-panel hidden">
+      <div class="ship-info" id="ship-info"></div>
+    </div>
+
+    <div class="hangar-footer">
+      <button id="btn-hangar-back" class="btn-secondary">BACK</button>
+      <button id="btn-hangar-continue">READY — CONTINUE TO LAUNCH BAY</button>
+    </div>
+  </div>
+
   <script type="module" src="src/main.js"></script>
 </body>
 </html>
