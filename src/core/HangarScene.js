@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Spaceship } from '../models/Spaceship.js';
 import { CharacterManager } from '../systems/CharacterManager.js';
+import { SHIPS } from '../systems/ShipManager.js';
 
 /**
  * HangarScene — the 3D content behind the character-select screen.
@@ -32,6 +33,7 @@ export class HangarScene {
     // exactly the same as a Scene for this purpose.
     this.characterManager = new CharacterManager(this.group);
     this.ship = null;
+    this._currentShipKey = null;
 
     this._time = 0;
     this._mode = 'character'; // 'character' | 'ship'
@@ -44,6 +46,7 @@ export class HangarScene {
     if (this.ship) {
       this.ship.dispose();
       this.ship = null;
+      this._currentShipKey = null;
     }
     const model = this.characterManager.select(key);
     model.root.position.set(0, 0, 0);
@@ -52,14 +55,24 @@ export class HangarScene {
     return model;
   }
 
-  showShip() {
+  showShip(shipKey = 'raven') {
     this._mode = 'ship';
     this.characterManager.dispose(); // drops the current character model
     this.podium.visible = false;
-    if (!this.ship) {
-      this.ship = new Spaceship(this.group);
-      this.ship.group.scale.setScalar(0.5);
+
+    if (this.ship && this._currentShipKey === shipKey) {
+      return;
     }
+
+    if (this.ship) {
+      this.ship.dispose();
+      this.ship = null;
+    }
+
+    const shipConfig = SHIPS[shipKey] || SHIPS.raven;
+    this._currentShipKey = shipKey;
+    this.ship = new Spaceship(this.group, { colors: shipConfig.colors });
+    this.ship.group.scale.setScalar(0.5);
   }
 
   update(delta) {

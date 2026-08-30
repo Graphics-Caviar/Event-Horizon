@@ -29,7 +29,20 @@ import { createEngineCoreMaterial } from '../shaders/engineShader.js';
  * is really asking for.
  */
 export class Spaceship {
-  constructor(scene) {
+  constructor(scene, options = {}) {
+    this.options = options;
+    this.colors = Object.assign(
+      {
+        hull: 0xd7dde4,
+        panel: 0x565f6b,
+        cockpit: 0x08131c,
+        engineHousing: 0x2b2f36,
+        engineGlow: 0x4de3ff,
+        gearMetal: 0x3a3f47,
+      },
+      options.colors || {}
+    );
+
     this.group = new THREE.Group();
     this.bankPivot = new THREE.Group();
     this.group.add(this.bankPivot);
@@ -61,26 +74,53 @@ export class Spaceship {
   // ------------------------------------------------------------------
   _createMaterials() {
     return {
-      hull: new THREE.MeshStandardMaterial({ color: 0xd7dde4, metalness: 0.85, roughness: 0.32 }),
+      hull: new THREE.MeshStandardMaterial({
+        color: this.colors.hull,
+        metalness: 0.85,
+        roughness: 0.32,
+      }),
       // DoubleSide on panels: extruded + mirrored geometry (wings/fins)
       // can end up with reversed winding on the mirrored side — DoubleSide
       // is a simple, cheap guard against that rather than hand-fixing
       // triangle winding for a handful of small flat panels.
-      panel: new THREE.MeshStandardMaterial({ color: 0x565f6b, metalness: 0.6, roughness: 0.5, side: THREE.DoubleSide }),
-      cockpit: new THREE.MeshPhysicalMaterial({
-        color: 0x08131c, metalness: 0.1, roughness: 0.08,
-        transmission: 0.55, transparent: true, opacity: 0.9,
-        clearcoat: 1, clearcoatRoughness: 0.12, side: THREE.DoubleSide,
+      panel: new THREE.MeshStandardMaterial({
+        color: this.colors.panel,
+        metalness: 0.6,
+        roughness: 0.5,
+        side: THREE.DoubleSide,
       }),
-      engineHousing: new THREE.MeshStandardMaterial({ color: 0x2b2f36, metalness: 0.75, roughness: 0.4 }),
+      cockpit: new THREE.MeshPhysicalMaterial({
+        color: this.colors.cockpit,
+        metalness: 0.1,
+        roughness: 0.08,
+        transmission: 0.55,
+        transparent: true,
+        opacity: 0.9,
+        clearcoat: 1,
+        clearcoatRoughness: 0.12,
+        side: THREE.DoubleSide,
+      }),
+      engineHousing: new THREE.MeshStandardMaterial({
+        color: this.colors.engineHousing,
+        metalness: 0.75,
+        roughness: 0.4,
+      }),
       exhaust: new THREE.MeshBasicMaterial({
-        color: 0x4de3ff, transparent: true, opacity: 0.4,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        color: this.colors.engineGlow,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
       }),
       navLightRed: new THREE.MeshBasicMaterial({ color: 0xff3b3b }),
       navLightGreen: new THREE.MeshBasicMaterial({ color: 0x3bff6a }),
       navLightWhite: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-      gearMetal: new THREE.MeshStandardMaterial({ color: 0x3a3f47, metalness: 0.7, roughness: 0.45 }),
+      gearMetal: new THREE.MeshStandardMaterial({
+        color: this.colors.gearMetal,
+        metalness: 0.7,
+        roughness: 0.45,
+      }),
     };
   }
 
@@ -245,12 +285,13 @@ export class Spaceship {
 
     const coreGeo = new THREE.SphereGeometry(0.36, 20, 20);
     this._geometries.push(coreGeo);
-    const coreMaterial = createEngineCoreMaterial(0x4de3ff);
+    const glowColor = this.colors.engineGlow || 0x4de3ff;
+    const coreMaterial = createEngineCoreMaterial(glowColor);
     const core = new THREE.Mesh(coreGeo, coreMaterial);
     core.position.z = 0.75; // toward the rear opening (tail is +Z)
     group.add(core);
 
-    const engineLight = new THREE.PointLight(0x4de3ff, 1.4, 9);
+    const engineLight = new THREE.PointLight(glowColor, 1.4, 9);
     engineLight.position.copy(core.position);
     group.add(engineLight);
 

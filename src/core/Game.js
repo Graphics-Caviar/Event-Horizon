@@ -25,6 +25,8 @@ export class Game {
 
     const profile = storage.load();
     this.gameState.playerName = profile.playerName;
+    this.gameState.selectedCharacter = profile.selectedCharacter;
+    this.gameState.selectedShip = profile.selectedShip;
     this.audio.setMuted(profile.settings.muted);
 
     this.menu = new Menu({
@@ -46,7 +48,10 @@ export class Game {
   /** PLAY -> callsign entered -> here. Shows the hangar (pick a pilot,
    * look over the ship) before actually launching into a level. */
   _showHangar(name) {
-    this.gameState.playerName = name || this.gameState.playerName;
+    const profile = storage.load();
+    this.gameState.playerName = name || profile.playerName || this.gameState.playerName;
+    this.gameState.selectedCharacter = profile.selectedCharacter || this.gameState.selectedCharacter || 'zara';
+    this.gameState.selectedShip = profile.selectedShip || this.gameState.selectedShip || 'raven';
     this.menu.hideAll();
 
     if (this.menuBackground) {
@@ -55,16 +60,29 @@ export class Game {
     }
 
     this.hangarScene = new HangarScene(this.sceneManager, this.assetManager);
-    this.hangarScene.showCharacter('zara');
+    this.hangarScene.showCharacter(this.gameState.selectedCharacter);
 
     this.characterSelect = new CharacterSelect({
-      onSelect: (key) => this.hangarScene.showCharacter(key),
-      onTabChange: (tab) => {
-        if (tab === 'ship') this.hangarScene.showShip();
-        else this.hangarScene.showCharacter(this.characterSelect.getSelectedKey());
+      initialPilot: this.gameState.selectedCharacter,
+      initialShip: this.gameState.selectedShip,
+      onSelectPilot: (key) => {
+        this.gameState.selectedCharacter = key;
+        this.hangarScene.showCharacter(key);
       },
-      onContinue: (key) => this._level1(this.gameState.playerName, key),
+      onSelectShip: (key) => {
+        this.gameState.selectedShip = key;
+        this.hangarScene.showShip(key);
+      },
+      onTabChange: (tab) => {
+        if (tab === 'ship') {
+          this.hangarScene.showShip(this.characterSelect.getSelectedShipKey());
+        } else {
+          this.hangarScene.showCharacter(this.characterSelect.getSelectedPilotKey());
+        }
+      },
+      onContinue: (pilotKey, shipKey) => this._level1(this.gameState.playerName, pilotKey, shipKey),
       onBack: () => this._backToMenu(),
+      storageService: storage,
     });
     this.characterSelect.show();
   }
@@ -82,12 +100,20 @@ export class Game {
     this.menu.showStart();
   }
 
-  _level1(name, characterKey) {
+  _level1(name, characterKey, shipKey) {
     this.gameState.playerName = name || this.gameState.playerName;
-    // Stored for whenever Level1/the player model reads it — not
-    // consumed anywhere yet, but the pilot's choice survives the launch.
     this.gameState.selectedCharacter = characterKey || this.gameState.selectedCharacter || 'zara';
-    console.log(`LAUNCH pressed for "${this.gameState.playerName}" flying as "${this.gameState.selectedCharacter}".`);
+    this.gameState.selectedShip = shipKey || this.gameState.selectedShip || 'raven';
+
+    storage.save({
+      playerName: this.gameState.playerName,
+      selectedCharacter: this.gameState.selectedCharacter,
+      selectedShip: this.gameState.selectedShip,
+    });
+
+    console.log(
+      `LAUNCH pressed for "${this.gameState.playerName}" flying as "${this.gameState.selectedCharacter}" in spaceship "${this.gameState.selectedShip}".`
+    );
 
     if (this.characterSelect) {
       this.characterSelect.hide();

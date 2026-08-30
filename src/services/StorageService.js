@@ -11,7 +11,9 @@
 const STORAGE_KEY = 'event-horizon:profile';
 
 export const DEFAULT_PROFILE = Object.freeze({
-  playerName: 'Pilot',
+  playerName: '',
+  selectedCharacter: 'zara',
+  selectedShip: 'raven',
   settings: Object.freeze({
     muted: false,
   }),
@@ -23,7 +25,10 @@ export class StorageService {
    * when nothing is stored yet or the data is corrupt/unavailable.
    */
   load() {
-    const fallback = () => ({ ...DEFAULT_PROFILE, settings: { ...DEFAULT_PROFILE.settings } });
+    const fallback = () => ({
+      ...DEFAULT_PROFILE,
+      settings: { ...DEFAULT_PROFILE.settings },
+    });
 
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -34,12 +39,32 @@ export class StorageService {
         typeof parsed.playerName === 'string' && parsed.playerName.trim()
           ? parsed.playerName.trim().slice(0, 16)
           : DEFAULT_PROFILE.playerName;
+
+      const validCharacters = ['zara', 'kai', 'nyx'];
+      const selectedCharacter =
+        typeof parsed.selectedCharacter === 'string' &&
+        validCharacters.includes(parsed.selectedCharacter)
+          ? parsed.selectedCharacter
+          : DEFAULT_PROFILE.selectedCharacter;
+
+      const validShips = ['raven', 'phantom', 'interceptor'];
+      const selectedShip =
+        typeof parsed.selectedShip === 'string' &&
+        validShips.includes(parsed.selectedShip)
+          ? parsed.selectedShip
+          : DEFAULT_PROFILE.selectedShip;
+
       const muted =
         parsed.settings && typeof parsed.settings.muted === 'boolean'
           ? parsed.settings.muted
           : DEFAULT_PROFILE.settings.muted;
 
-      return { playerName, settings: { muted } };
+      return {
+        playerName,
+        selectedCharacter,
+        selectedShip,
+        settings: { muted },
+      };
     } catch (error) {
       console.warn('[Storage] Falling back to defaults:', error);
       return fallback();
@@ -51,10 +76,45 @@ export class StorageService {
    */
   save(profile) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+      const current = this.load();
+      const merged = {
+        ...current,
+        ...profile,
+        settings: {
+          ...current.settings,
+          ...(profile && profile.settings ? profile.settings : {}),
+        },
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     } catch (error) {
       console.warn('[Storage] Could not save profile:', error);
     }
+  }
+
+  getPlayerName() {
+    return this.load().playerName;
+  }
+
+  setPlayerName(name) {
+    const sanitized = (name || '').trim().slice(0, 16) || DEFAULT_PROFILE.playerName;
+    this.save({ playerName: sanitized });
+    return sanitized;
+  }
+
+  getSelectedPilot() {
+    return this.load().selectedCharacter;
+  }
+
+  setSelectedPilot(characterKey) {
+    this.save({ selectedCharacter: characterKey });
+  }
+
+  getSelectedShip() {
+    return this.load().selectedShip;
+  }
+
+  setSelectedShip(shipKey) {
+    this.save({ selectedShip: shipKey });
   }
 }
 

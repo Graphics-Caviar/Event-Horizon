@@ -1,40 +1,65 @@
 import { CHARACTERS } from '../systems/CharacterManager.js';
+import { SHIPS } from '../systems/ShipManager.js';
+import storage from '../services/StorageService.js';
 
-const ACCENT_CLASS = { zara: 'accent-cyan', kai: 'accent-green', nyx: 'accent-purple' };
-const STAT_NAMES = ['speed', 'firepower', 'durability', 'tech', 'utility'];
+const ACCENT_CLASS = {
+  zara: 'accent-cyan',
+  kai: 'accent-green',
+  nyx: 'accent-purple',
+  raven: 'accent-cyan',
+  phantom: 'accent-gold',
+  interceptor: 'accent-purple',
+};
+
+const PILOT_STAT_NAMES = ['speed', 'firepower', 'durability', 'tech', 'utility'];
+const SHIP_STAT_NAMES = ['speed', 'firepower', 'durability', 'shields', 'agility'];
 
 /**
- * CharacterSelect — DOM/UI layer for the Hangar screen. Knows nothing
- * about three.js; it only reads CHARACTERS (plain data) and fires
- * callbacks. HangarScene (the 3D side) is driven separately by Game.js
- * listening to those same callbacks — this keeps "what's on screen" and
- * "what's rendered in 3D" as two independently testable pieces.
+ * CharacterSelect — DOM/UI layer for the Hangar screen.
+ * Supports choosing both Pilot and Starfighter, showing live stats,
+ * and saving selections directly to local storage.
  */
 export class CharacterSelect {
-  constructor({ onSelect, onTabChange, onContinue, onBack }) {
-    this.onSelect = onSelect;
-    this.onTabChange = onTabChange;
-    this.onContinue = onContinue;
-    this.onBack = onBack;
+  constructor({
+    initialPilot,
+    initialShip,
+    onSelectPilot,
+    onSelectShip,
+    onTabChange,
+    onContinue,
+    onBack,
+    storageService = storage,
+  }) {
+    this.storage = storageService;
+    this.onSelectPilot = onSelectPilot || (() => {});
+    this.onSelectShip = onSelectShip || (() => {});
+    this.onTabChange = onTabChange || (() => {});
+    this.onContinue = onContinue || (() => {});
+    this.onBack = onBack || (() => {});
 
-    this.selectedKey = 'zara';
+    this.selectedPilotKey = initialPilot || this.storage.getSelectedPilot() || 'zara';
+    this.selectedShipKey = initialShip || this.storage.getSelectedShip() || 'raven';
 
     this.screen = document.getElementById('screen-character-select');
     this.pilotCardsEl = document.getElementById('pilot-cards');
     this.statComparisonEl = document.getElementById('stat-comparison');
-    this.shipInfoEl = document.getElementById('ship-info');
+    this.shipCardsEl = document.getElementById('ship-cards');
+    this.shipStatComparisonEl = document.getElementById('ship-stat-comparison');
     this.pilotPanel = document.getElementById('pilot-panel');
     this.shipPanel = document.getElementById('ship-panel');
     this.tabPilotBtn = document.getElementById('tab-pilot');
     this.tabShipBtn = document.getElementById('tab-ship');
 
     this._renderPilotCards();
-    this._renderStatComparison();
-    this._renderShipInfo();
+    this._renderPilotStatComparison();
+    this._renderShipCards();
+    this._renderShipStatComparison();
 
     this.tabPilotBtn.addEventListener('click', () => this._setTab('pilot'));
     this.tabShipBtn.addEventListener('click', () => this._setTab('ship'));
-    document.getElementById('btn-hangar-continue').addEventListener('click', () => this.onContinue(this.selectedKey));
+    document.getElementById('btn-hangar-continue').addEventListener('click', () => {
+      this.onContinue(this.selectedPilotKey, this.selectedShipKey);
+    });
     document.getElementById('btn-hangar-back').addEventListener('click', () => this.onBack());
   }
 
@@ -48,7 +73,7 @@ export class CharacterSelect {
 
   _renderPilotCards() {
     this.pilotCardsEl.innerHTML = Object.values(CHARACTERS).map((c) => `
-      <div class="pilot-card ${ACCENT_CLASS[c.key]} ${c.key === this.selectedKey ? 'selected' : ''}">
+      <div class="pilot-card ${ACCENT_CLASS[c.key]} ${c.key === this.selectedPilotKey ? 'selected' : ''}">
         <div class="pilot-card-name">${c.name}</div>
         <div class="pilot-card-role">${c.role}</div>
         <p class="pilot-card-desc">${c.description}</p>
@@ -60,7 +85,7 @@ export class CharacterSelect {
             </div>
           `).join('')}
         </div>
-        <button class="pilot-select-btn" data-key="${c.key}">${c.key === this.selectedKey ? 'SELECTED' : 'SELECT'}</button>
+        <button class="pilot-select-btn" data-key="${c.key}">${c.key === this.selectedPilotKey ? 'SELECTED' : 'SELECT'}</button>
       </div>
     `).join('');
 
@@ -70,14 +95,15 @@ export class CharacterSelect {
   }
 
   _selectPilot(key) {
-    if (key === this.selectedKey) return;
-    this.selectedKey = key;
+    if (key === this.selectedPilotKey) return;
+    this.selectedPilotKey = key;
+    this.storage.setSelectedPilot(key);
     this._renderPilotCards();
-    this.onSelect(key);
+    this.onSelectPilot(key);
   }
 
-  _renderStatComparison() {
-    this.statComparisonEl.innerHTML = STAT_NAMES.map((stat) => `
+  _renderPilotStatComparison() {
+    this.statComparisonEl.innerHTML = PILOT_STAT_NAMES.map((stat) => `
       <div class="stat-compare-row">
         <span class="stat-compare-label">${stat.toUpperCase()}</span>
         ${Object.values(CHARACTERS).map((c) => `
@@ -89,17 +115,51 @@ export class CharacterSelect {
     `).join('');
   }
 
-  _renderShipInfo() {
-    this.shipInfoEl.innerHTML = `
-      <div class="ship-name">ORBITAL RAVEN <span class="ship-mark">MK VII</span></div>
-      <div class="ship-tagline">"Built for the impossible."</div>
-      <div class="ship-specs">
-        <div class="spec-row"><span>Engine</span><span>Twin Ion Thrusters</span></div>
-        <div class="spec-row"><span>Hull</span><span>Titanium Composite</span></div>
-        <div class="spec-row"><span>Shielding</span><span>Quantum Energy Shield</span></div>
-        <div class="spec-row"><span>Crew</span><span>1</span></div>
+  _renderShipCards() {
+    if (!this.shipCardsEl) return;
+    this.shipCardsEl.innerHTML = Object.values(SHIPS).map((s) => `
+      <div class="ship-card ${s.accentClass} ${s.key === this.selectedShipKey ? 'selected' : ''}">
+        <div class="ship-card-name">${s.name} <span class="ship-card-mark">${s.mark}</span></div>
+        <div class="ship-card-role">${s.role}</div>
+        <div class="ship-card-tagline">${s.tagline}</div>
+        <p class="ship-card-desc">${s.description}</p>
+        <div class="ship-card-specs">
+          ${s.specs.map((spec) => `
+            <div class="spec-mini-row">
+              <span>${spec.label}</span>
+              <span>${spec.value}</span>
+            </div>
+          `).join('')}
+        </div>
+        <button class="ship-select-btn" data-key="${s.key}">${s.key === this.selectedShipKey ? 'SELECTED' : 'SELECT'}</button>
       </div>
-    `;
+    `).join('');
+
+    this.shipCardsEl.querySelectorAll('.ship-select-btn').forEach((btn) => {
+      btn.addEventListener('click', () => this._selectShip(btn.dataset.key));
+    });
+  }
+
+  _selectShip(key) {
+    if (key === this.selectedShipKey) return;
+    this.selectedShipKey = key;
+    this.storage.setSelectedShip(key);
+    this._renderShipCards();
+    this.onSelectShip(key);
+  }
+
+  _renderShipStatComparison() {
+    if (!this.shipStatComparisonEl) return;
+    this.shipStatComparisonEl.innerHTML = SHIP_STAT_NAMES.map((stat) => `
+      <div class="stat-compare-row">
+        <span class="stat-compare-label">${stat.toUpperCase()}</span>
+        ${Object.values(SHIPS).map((s) => `
+          <div class="stat-bar-track ${s.accentClass}">
+            <div class="stat-bar-fill" style="width:${s.stats[stat] * 10}%"></div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
   }
 
   show() {
@@ -111,7 +171,12 @@ export class CharacterSelect {
     this.screen.classList.add('hidden');
   }
 
-  getSelectedKey() {
-    return this.selectedKey;
+  getSelectedPilotKey() {
+    return this.selectedPilotKey;
+  }
+
+  getSelectedShipKey() {
+    return this.selectedShipKey;
   }
 }
+
