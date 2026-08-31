@@ -18,23 +18,23 @@
  * @param {number} dt       delta time in seconds
  */
 export function damp(current, target, lambda, dt) {
-  return target + (current - target) * Math.exp(-lambda * dt);
+	return target + (current - target) * Math.exp(-lambda * dt)
 }
 
 /** Damps a THREE.Vector3 in place toward a target vector. */
 export function dampVector3(current, target, lambda, dt) {
-  current.x = damp(current.x, target.x, lambda, dt);
-  current.y = damp(current.y, target.y, lambda, dt);
-  current.z = damp(current.z, target.z, lambda, dt);
-  return current;
+	current.x = damp(current.x, target.x, lambda, dt)
+	current.y = damp(current.y, target.y, lambda, dt)
+	current.z = damp(current.z, target.z, lambda, dt)
+	return current
 }
 
 /** Standard smoothstep, useful for UI fades / non-realtime transitions. */
 export function smoothstep(edge0, edge1, x) {
-  const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
-  return t * t * (3 - 2 * t);
+	const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1)
+	return t * t * (3 - 2 * t)
 }
 
 export function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
+	return Math.min(Math.max(value, min), max)
 }

@@ -1,1 +1,1 @@
-export { default } from './CharacterModel.js';
+export { default } from './CharacterModel.js'

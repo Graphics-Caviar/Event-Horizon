@@ -8,20 +8,22 @@
  *   - every caller gets the same error shape to handle
  */
 
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 
 // Draco only activates for meshes actually compressed with it — harmless
 // (and unused) for plain GLBs, but lets compressed assets work without
 // each caller having to think about it.
-const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+const dracoLoader = new DRACOLoader()
+dracoLoader.setDecoderPath(
+	'https://www.gstatic.com/draco/versioned/decoders/1.5.6/'
+)
 
-const gltfLoader = new GLTFLoader();
-gltfLoader.setDRACOLoader(dracoLoader);
+const gltfLoader = new GLTFLoader()
+gltfLoader.setDRACOLoader(dracoLoader)
 
 /** url -> in-flight/resolved Promise<GLTF>, so repeat requests share one load. */
-const inFlight = new Map();
+const inFlight = new Map()
 
 /**
  * Load a GLB/GLTF file.
@@ -34,31 +36,42 @@ const inFlight = new Map();
  * @returns {Promise<import('three/examples/jsm/loaders/GLTFLoader.js').GLTF>}
  */
 export function loadGLTF(url, onProgress) {
-  if (inFlight.has(url)) return inFlight.get(url);
+	if (inFlight.has(url)) return inFlight.get(url)
 
-  const promise = new Promise((resolve, reject) => {
-    gltfLoader.load(
-      url,
-      (gltf) => resolve(gltf),
-      (event) => {
-        if (onProgress && event.lengthComputable && event.total > 0) {
-          onProgress(event.loaded / event.total);
-        }
-      },
-      (error) => {
-        // Let a failed load be retried later instead of caching a rejection.
-        inFlight.delete(url);
-        const message = error?.message || error?.type || 'unknown error';
-        reject(new Error(`Failed to load model "${url}": ${message}`));
-      }
-    );
-  });
+	const promise = new Promise((resolve, reject) => {
+		gltfLoader.load(
+			url,
+			(gltf) => resolve(gltf),
+			(event) => {
+				if (
+					onProgress &&
+					event.lengthComputable &&
+					event.total > 0
+				) {
+					onProgress(event.loaded / event.total)
+				}
+			},
+			(error) => {
+				// Let a failed load be retried later instead of caching a rejection.
+				inFlight.delete(url)
+				const message =
+					error?.message ||
+					error?.type ||
+					'unknown error'
+				reject(
+					new Error(
+						`Failed to load model "${url}": ${message}`
+					)
+				)
+			}
+		)
+	})
 
-  inFlight.set(url, promise);
-  return promise;
+	inFlight.set(url, promise)
+	return promise
 }
 
 /** Release the Draco decoder's worker pool. Call on full app teardown. */
 export function disposeAssetLoader() {
-  dracoLoader.dispose();
+	dracoLoader.dispose()
 }

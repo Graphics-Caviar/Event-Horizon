@@ -1,1 +1,1 @@
-export { default } from './StatsPanel.js';
+export { default } from './StatsPanel.js'

@@ -1,1 +1,1 @@
-export { default } from './ReadyButton.js';
+export { default } from './ReadyButton.js'

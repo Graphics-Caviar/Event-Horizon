@@ -1,1 +1,1 @@
-export { default } from './HUD.js';
+export { default } from './HUD.js'

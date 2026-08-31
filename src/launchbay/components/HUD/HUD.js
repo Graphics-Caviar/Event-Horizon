@@ -14,7 +14,7 @@
  * primary call to action. Flag this if a different split was intended.
  */
 
-import ReadyButton from '../ReadyButton/ReadyButton.js';
+import ReadyButton from '../ReadyButton/ReadyButton.js'
 
 const GEAR_ICON = `
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -22,22 +22,28 @@ const GEAR_ICON = `
     <path d="M12 2v2.5M12 19.5V22M22 12h-2.5M4.5 12H2M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8M18.7 18.7l-1.8-1.8M7.1 7.1L5.3 5.3"
       stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
   </svg>
-`;
+`
 
 export default class HUD {
-  /**
-   * @param {object} options
-   * @param {string} options.playerName
-   * @param {number|string} options.playerLevel
-   * @param {() => void} [options.onBack]
-   * @param {() => void} [options.onSettings]
-   * @param {() => void} [options.onReady]
-   */
-  constructor({ playerName, playerLevel, onBack, onSettings, onReady } = {}) {
-    this._el = document.createElement('div');
-    this._el.className = 'hud-shell';
+	/**
+	 * @param {object} options
+	 * @param {string} options.playerName
+	 * @param {number|string} options.playerLevel
+	 * @param {() => void} [options.onBack]
+	 * @param {() => void} [options.onSettings]
+	 * @param {() => void} [options.onReady]
+	 */
+	constructor({
+		playerName,
+		playerLevel,
+		onBack,
+		onSettings,
+		onReady,
+	} = {}) {
+		this._el = document.createElement('div')
+		this._el.className = 'hud-shell'
 
-    this._el.innerHTML = `
+		this._el.innerHTML = `
       <header class="hud-topbar">
         <div class="hud-topbar__brand">
           <div class="hud-topbar__title">EVENT HORIZON</div>
@@ -71,31 +77,40 @@ export default class HUD {
         </p>
         <div class="hud-bottombar__right"></div>
       </footer>
-    `;
+    `
 
-    this._centerSlot = this._el.querySelector('.hud-center');
-    this._readyButton = new ReadyButton({ onReady });
-    this._el.querySelector('.hud-bottombar__right').appendChild(this._readyButton.element);
+		this._centerSlot = this._el.querySelector('.hud-center')
+		this._readyButton = new ReadyButton({ onReady })
+		this._el
+			.querySelector('.hud-bottombar__right')
+			.appendChild(this._readyButton.element)
 
-    this._el.querySelector('[data-action="back"]').addEventListener('click', () => onBack?.());
-    this._el.querySelector('[data-action="settings"]').addEventListener('click', () => onSettings?.());
-  }
+		this._el
+			.querySelector('[data-action="back"]')
+			.addEventListener('click', () => onBack?.())
+		this._el
+			.querySelector('[data-action="settings"]')
+			.addEventListener('click', () => onSettings?.())
+	}
 
-  get element() {
-    return this._el;
-  }
+	get element() {
+		return this._el
+	}
 
-  /** Appends content (the character grid) into the HUD's center region. */
-  mountCenterContent(el) {
-    this._centerSlot.appendChild(el);
-  }
+	/** Appends content (the character grid) into the HUD's center region. */
+	mountCenterContent(el) {
+		this._centerSlot.appendChild(el)
+	}
 
-  setReadyEnabled(enabled) {
-    this._readyButton.setEnabled(enabled);
-  }
+	setReadyEnabled(enabled) {
+		this._readyButton.setEnabled(enabled)
+	}
 
-  /** Tints the READY button and header accents to match the selected pilot. */
-  setAccentColor(color) {
-    this._el.style.setProperty('--hud-accent', color ?? 'var(--color-text-primary)');
-  }
+	/** Tints the READY button and header accents to match the selected pilot. */
+	setAccentColor(color) {
+		this._el.style.setProperty(
+			'--hud-accent',
+			color ?? 'var(--color-text-primary)'
+		)
+	}
 }

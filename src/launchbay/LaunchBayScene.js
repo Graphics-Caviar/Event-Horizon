@@ -34,7 +34,11 @@ export class LaunchBayScene {
 	 * @param {(shipKey: string) => void} options.onLaunch
 	 * @param {() => void} options.onBack
 	 */
-	constructor(sceneManager, assetManager, { initialShip, pilotName, onLaunch, onBack } = {}) {
+	constructor(
+		sceneManager,
+		assetManager,
+		{ initialShip, pilotName, onLaunch, onBack } = {}
+	) {
 		this.sceneManager = sceneManager
 		this.assetManager = assetManager
 		this.camera = sceneManager.camera
@@ -64,11 +68,17 @@ export class LaunchBayScene {
 
 	async _loadShipModel() {
 		try {
-			this._shipTemplate = await this.assetManager.loadModel(SHIP_MODEL_PATH)
+			this._shipTemplate =
+				await this.assetManager.loadModel(
+					SHIP_MODEL_PATH
+				)
 			this._loadingEl.remove()
 			this._applyShip(this._shipKey)
 		} catch (err) {
-			console.error('[LaunchBayScene] failed to load spaceship.glb:', err)
+			console.error(
+				'[LaunchBayScene] failed to load spaceship.glb:',
+				err
+			)
 			this._loadError = true
 			this._loadingEl.textContent = 'SHIP MODEL UNAVAILABLE'
 		}
@@ -149,36 +159,55 @@ export class LaunchBayScene {
 		this._loadingEl.textContent = 'LOADING SHIP MODEL…'
 		document.body.appendChild(this._loadingEl)
 
-		this._panel.querySelectorAll('.launchbay-panel__nav-btn').forEach((btn) => {
-			btn.addEventListener('click', () => {
-				const dir = Number(btn.dataset.dir)
-				const idx = SHIP_ORDER.indexOf(this._shipKey)
-				const next = SHIP_ORDER[(idx + dir + SHIP_ORDER.length) % SHIP_ORDER.length]
-				this._applyShip(next)
+		this._panel
+			.querySelectorAll('.launchbay-panel__nav-btn')
+			.forEach((btn) => {
+				btn.addEventListener('click', () => {
+					const dir = Number(btn.dataset.dir)
+					const idx = SHIP_ORDER.indexOf(
+						this._shipKey
+					)
+					const next =
+						SHIP_ORDER[
+							(idx +
+								dir +
+								SHIP_ORDER.length) %
+								SHIP_ORDER.length
+						]
+					this._applyShip(next)
+				})
 			})
-		})
 
-		this._panel.querySelector('.launchbay-panel__back-btn').addEventListener('click', () => {
-			this._onBack?.()
-		})
-		this._panel.querySelector('.launchbay-panel__launch-btn').addEventListener('click', () => {
-			this._onLaunch?.(this._shipKey)
-		})
+		this._panel
+			.querySelector('.launchbay-panel__back-btn')
+			.addEventListener('click', () => {
+				this._onBack?.()
+			})
+		this._panel
+			.querySelector('.launchbay-panel__launch-btn')
+			.addEventListener('click', () => {
+				this._onLaunch?.(this._shipKey)
+			})
 
 		this._updatePanelText(SHIPS[this._shipKey] || SHIPS.raven)
 	}
 
 	_updatePanelText(config) {
-		this._panel.querySelector('.launchbay-panel__ship-name').textContent = config.name
-		this._panel.querySelector('.launchbay-panel__ship-role').textContent =
-			`${config.mark} · ${config.role}`
-		this._panel.querySelector('.launchbay-panel__pilot').textContent = this._pilotName
-			? `PILOT: `
-			: ''
+		this._panel.querySelector(
+			'.launchbay-panel__ship-name'
+		).textContent = config.name
+		this._panel.querySelector(
+			'.launchbay-panel__ship-role'
+		).textContent = `${config.mark} · ${config.role}`
+		this._panel.querySelector(
+			'.launchbay-panel__pilot'
+		).textContent = this._pilotName ? `PILOT: ` : ''
 		if (this._pilotName) {
 			const strong = document.createElement('strong')
 			strong.textContent = this._pilotName.toUpperCase()
-			this._panel.querySelector('.launchbay-panel__pilot').appendChild(strong)
+			this._panel
+				.querySelector('.launchbay-panel__pilot')
+				.appendChild(strong)
 		}
 	}
 

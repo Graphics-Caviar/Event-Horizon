@@ -1,1 +1,1 @@
-export { default } from './AbilityList.js';
+export { default } from './AbilityList.js'

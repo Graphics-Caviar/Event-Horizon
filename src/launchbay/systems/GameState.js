@@ -18,54 +18,54 @@
  */
 
 const DEFAULT_STATE = {
-  selectedCharacter: null,
-  currentScene: 'character-select',
-  isLoading: true,
-  isReady: false,
-};
+	selectedCharacter: null,
+	currentScene: 'character-select',
+	isLoading: true,
+	isReady: false,
+}
 
 class GameState {
-  constructor(initial = DEFAULT_STATE) {
-    this._state = { ...initial };
-    this._listeners = new Set();
-  }
+	constructor(initial = DEFAULT_STATE) {
+		this._state = { ...initial }
+		this._listeners = new Set()
+	}
 
-  get state() {
-    return this._state;
-  }
+	get state() {
+		return this._state
+	}
 
-  /** Read a single field. */
-  get(key) {
-    return this._state[key];
-  }
+	/** Read a single field. */
+	get(key) {
+		return this._state[key]
+	}
 
-  /**
-   * Shallow-merge a patch into state and notify listeners with the
-   * resulting state plus the list of keys that actually changed value.
-   */
-  set(patch) {
-    const changedKeys = Object.keys(patch).filter(
-      (key) => this._state[key] !== patch[key]
-    );
+	/**
+	 * Shallow-merge a patch into state and notify listeners with the
+	 * resulting state plus the list of keys that actually changed value.
+	 */
+	set(patch) {
+		const changedKeys = Object.keys(patch).filter(
+			(key) => this._state[key] !== patch[key]
+		)
 
-    if (changedKeys.length === 0) return;
+		if (changedKeys.length === 0) return
 
-    this._state = { ...this._state, ...patch };
-    for (const listener of this._listeners) {
-      listener(this._state, changedKeys);
-    }
-  }
+		this._state = { ...this._state, ...patch }
+		for (const listener of this._listeners) {
+			listener(this._state, changedKeys)
+		}
+	}
 
-  /** Subscribe to state changes. Returns an unsubscribe function. */
-  subscribe(listener) {
-    this._listeners.add(listener);
-    return () => this._listeners.delete(listener);
-  }
+	/** Subscribe to state changes. Returns an unsubscribe function. */
+	subscribe(listener) {
+		this._listeners.add(listener)
+		return () => this._listeners.delete(listener)
+	}
 
-  reset() {
-    this.set({ ...DEFAULT_STATE });
-  }
+	reset() {
+		this.set({ ...DEFAULT_STATE })
+	}
 }
 
 // Singleton — the whole app shares one GameState instance.
-export const gameState = new GameState();
+export const gameState = new GameState()

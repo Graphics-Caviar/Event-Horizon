@@ -26,7 +26,8 @@ export class AssetManager {
 	 * @returns {Promise<THREE.Object3D>}
 	 */
 	loadModel(path) {
-		if (this._modelCache.has(path)) return this._modelCache.get(path)
+		if (this._modelCache.has(path))
+			return this._modelCache.get(path)
 
 		const promise = new Promise((resolve, reject) => {
 			this._gltfLoader.load(
@@ -36,7 +37,9 @@ export class AssetManager {
 				(err) => {
 					this._modelCache.delete(path)
 					reject(
-						new Error(`Failed to load model "${path}": ${err?.message || err}`)
+						new Error(
+							`Failed to load model "${path}": ${err?.message || err}`
+						)
 					)
 				}
 			)

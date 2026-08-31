@@ -7,4 +7,4 @@
  * Provides play(name, { fade, loop }) and update(dt); falls back to a procedural idle bob/breathe when a GLB has no clips.
  */
 
-export {};
+export {}

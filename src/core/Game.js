@@ -103,14 +103,20 @@ export class Game {
 			this.assetManager,
 			{
 				initialShip: this.gameState.selectedShip,
-				pilotName: pilot?.name || this.gameState.playerName,
+				pilotName:
+					pilot?.name ||
+					this.gameState.playerName,
 				onLaunch: (shipKey) =>
 					this._level1(
 						this.gameState.playerName,
-						this.gameState.selectedCharacter,
+						this.gameState
+							.selectedCharacter,
 						shipKey
 					),
-				onBack: () => this._showCharacterSelect(this.gameState.playerName),
+				onBack: () =>
+					this._showCharacterSelect(
+						this.gameState.playerName
+					),
 			}
 		)
 	}

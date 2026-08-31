@@ -8,25 +8,25 @@
  */
 
 export default class ReadyButton {
-  constructor({ onReady } = {}) {
-    this._el = document.createElement('button');
-    this._el.type = 'button';
-    this._el.className = 'hud-btn hud-btn--ready interactive';
-    this._el.disabled = true;
-    this._el.innerHTML = `
+	constructor({ onReady } = {}) {
+		this._el = document.createElement('button')
+		this._el.type = 'button'
+		this._el.className = 'hud-btn hud-btn--ready interactive'
+		this._el.disabled = true
+		this._el.innerHTML = `
       <span class="hud-btn--ready-label">READY</span>
       <span class="hud-btn--ready-sub">CONTINUE TO LAUNCH BAY</span>
-    `;
-    this._el.addEventListener('click', () => {
-      if (!this._el.disabled) onReady?.();
-    });
-  }
+    `
+		this._el.addEventListener('click', () => {
+			if (!this._el.disabled) onReady?.()
+		})
+	}
 
-  get element() {
-    return this._el;
-  }
+	get element() {
+		return this._el
+	}
 
-  setEnabled(enabled) {
-    this._el.disabled = !enabled;
-  }
+	setEnabled(enabled) {
+		this._el.disabled = !enabled
+	}
 }

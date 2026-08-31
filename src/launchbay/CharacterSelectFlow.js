@@ -23,15 +23,15 @@
  * now wired to Game.js's Launch Bay instead of a console.log.
  */
 
-import * as THREE from 'three';
-import { CHARACTERS, getCharacterById } from './data/characters.js';
-import { gameState } from './systems/GameState.js';
-import { CharacterSelectScene } from './scenes/CharacterSelectScene.js';
-import { CharacterSystem } from './systems/CharacterSystem.js';
-import CharacterCard from './components/CharacterCard/CharacterCard.js';
-import PilotInfoPanel from './components/PilotInfoPanel/PilotInfoPanel.js';
-import HUD from './components/HUD/HUD.js';
-import './styles/character-select.css';
+import * as THREE from 'three'
+import { CHARACTERS, getCharacterById } from './data/characters.js'
+import { gameState } from './systems/GameState.js'
+import { CharacterSelectScene } from './scenes/CharacterSelectScene.js'
+import { CharacterSystem } from './systems/CharacterSystem.js'
+import CharacterCard from './components/CharacterCard/CharacterCard.js'
+import PilotInfoPanel from './components/PilotInfoPanel/PilotInfoPanel.js'
+import HUD from './components/HUD/HUD.js'
+import './styles/character-select.css'
 
 export class CharacterSelectFlow {
 	/**
@@ -48,7 +48,10 @@ export class CharacterSelectFlow {
 		this._playerName = playerName || 'PILOT'
 
 		gameState.reset()
-		if (initialPilot && CHARACTERS.some((c) => c.id === initialPilot)) {
+		if (
+			initialPilot &&
+			CHARACTERS.some((c) => c.id === initialPilot)
+		) {
 			gameState.set({ selectedCharacter: initialPilot })
 		}
 
@@ -69,8 +72,10 @@ export class CharacterSelectFlow {
 
 		this._sceneRoot = this._root.querySelector('#scene-root')
 		this._uiRoot = this._root.querySelector('#ui-root')
-		this._loadingScreen = this._root.querySelector('#loading-screen')
-		this._loadingStatus = this._loadingScreen.querySelector('.loading-status')
+		this._loadingScreen =
+			this._root.querySelector('#loading-screen')
+		this._loadingStatus =
+			this._loadingScreen.querySelector('.loading-status')
 
 		this._unsubscribers = []
 		this._init()
@@ -84,16 +89,23 @@ export class CharacterSelectFlow {
 		try {
 			this._setLoadingStatus('LOADING PILOT DATA…')
 
-			if (!Array.isArray(CHARACTERS) || CHARACTERS.length !== 3) {
+			if (
+				!Array.isArray(CHARACTERS) ||
+				CHARACTERS.length !== 3
+			) {
 				throw new Error(
 					`Expected 3 characters in data/characters.js, found ${CHARACTERS?.length ?? 0}`
 				)
 			}
 			if (!THREE.Scene) {
-				throw new Error('three.js failed to load correctly — check node_modules/three')
+				throw new Error(
+					'three.js failed to load correctly — check node_modules/three'
+				)
 			}
 
-			this._setLoadingStatus('INITIALIZING SPACE ENVIRONMENT…')
+			this._setLoadingStatus(
+				'INITIALIZING SPACE ENVIRONMENT…'
+			)
 			this.scene = new CharacterSelectScene(this._sceneRoot)
 			this.scene.mount()
 
@@ -124,20 +136,34 @@ export class CharacterSelectFlow {
 				new CharacterCard(character, {
 					onHover: (id) => {
 						hoveredId = id
-						this.characterSystem.setHovered(id)
+						this.characterSystem.setHovered(
+							id
+						)
 						refreshCardStates()
 					},
 					onHoverEnd: () => {
 						hoveredId = null
-						this.characterSystem.setHovered(null)
+						this.characterSystem.setHovered(
+							null
+						)
 						refreshCardStates()
 					},
 					onSelect: (id) => {
-						gameState.set({ selectedCharacter: id, isReady: true })
+						gameState.set({
+							selectedCharacter: id,
+							isReady: true,
+						})
 
-						const character = getCharacterById(id)
-						const slot = this.scene.characterSlots[id]
-						this.characterSystem.setSelected(id)
+						const character =
+							getCharacterById(id)
+						const slot =
+							this.scene
+								.characterSlots[
+								id
+							]
+						this.characterSystem.setSelected(
+							id
+						)
 						if (character && slot) {
 							this.scene.cameraSystem.focusOn(
 								slot.position,
@@ -150,12 +176,17 @@ export class CharacterSelectFlow {
 
 		const refreshCardStates = () => {
 			const { selectedCharacter } = gameState.state
-			grid.classList.toggle('has-selection', Boolean(selectedCharacter))
+			grid.classList.toggle(
+				'has-selection',
+				Boolean(selectedCharacter)
+			)
 			for (const card of cards) {
 				const id = card.character.id
 				card.setState({
 					isSelected: selectedCharacter === id,
-					isHovered: hoveredId === id && selectedCharacter !== id,
+					isHovered:
+						hoveredId === id &&
+						selectedCharacter !== id,
 					isDimmed:
 						Boolean(selectedCharacter) &&
 						selectedCharacter !== id &&
@@ -168,7 +199,8 @@ export class CharacterSelectFlow {
 
 		this._unsubscribers.push(
 			gameState.subscribe((state, changedKeys) => {
-				if (changedKeys.includes('selectedCharacter')) refreshCardStates()
+				if (changedKeys.includes('selectedCharacter'))
+					refreshCardStates()
 			})
 		)
 
@@ -186,16 +218,22 @@ export class CharacterSelectFlow {
 			playerName: this._playerName,
 			playerLevel: 12,
 			onBack: () => {
-				gameState.set({ selectedCharacter: null, isReady: false })
+				gameState.set({
+					selectedCharacter: null,
+					isReady: false,
+				})
 				this.characterSystem.setSelected(null)
 				this.scene.cameraSystem.release()
 				this._onBack?.()
 			},
 			onSettings: () => {
-				console.log('[HUD] SETTINGS clicked — no settings screen exists yet')
+				console.log(
+					'[HUD] SETTINGS clicked — no settings screen exists yet'
+				)
 			},
 			onReady: () => {
-				const pilotId = gameState.state.selectedCharacter
+				const pilotId =
+					gameState.state.selectedCharacter
 				if (!pilotId) return
 				this._onReady?.(pilotId)
 			},
@@ -203,7 +241,10 @@ export class CharacterSelectFlow {
 
 		this.infoPanel = new PilotInfoPanel({
 			onSelect: (id) => {
-				gameState.set({ selectedCharacter: id, isReady: true })
+				gameState.set({
+					selectedCharacter: id,
+					isReady: true,
+				})
 			},
 		})
 
@@ -215,10 +256,17 @@ export class CharacterSelectFlow {
 
 		this._unsubscribers.push(
 			gameState.subscribe((state, changedKeys) => {
-				if (!changedKeys.includes('selectedCharacter')) return
-				const character = getCharacterById(state.selectedCharacter)
-				this.hud.setAccentColor(character?.themeColor ?? null)
-				this.hud.setReadyEnabled(Boolean(state.selectedCharacter))
+				if (!changedKeys.includes('selectedCharacter'))
+					return
+				const character = getCharacterById(
+					state.selectedCharacter
+				)
+				this.hud.setAccentColor(
+					character?.themeColor ?? null
+				)
+				this.hud.setReadyEnabled(
+					Boolean(state.selectedCharacter)
+				)
 				this.infoPanel.setCharacter(character ?? null)
 			})
 		)
