@@ -41,26 +41,51 @@ export class Menu {
   _openNameModal() {
     this._openModal(`
       <h3>PILOT CALLSIGN</h3>
-      <p class="modal-desc">Enter a name before you launch — the Devourer likes to know who it's hunting.</p>
-      <input id="player-name-input" class="modal-input" type="text" maxlength="16" placeholder="Enter your name" autocomplete="off" />
+      <p class="modal-desc">Enter a name before you launch — the Devourer likes to know who it's hunting</p>
+      <input id="player-name-input" class="modal-input" type="text" maxlength="16" placeholder="Enter your name" autocomplete="off" spellcheck="false" />
+      <div id="modal-name-error" class="modal-error hidden">Name is required</div>
       <div class="modal-actions">
-        <button id="modal-launch-btn">LAUNCH</button>
+        <button id="modal-name-cancel" class="btn-secondary">CANCEL</button>
+        <button id="modal-launch-btn">Enter</button>
       </div>
     `);
 
     const input = document.getElementById('player-name-input');
-    input.value = this.storage.load().playerName;
+    const errorEl = document.getElementById('modal-name-error');
+    const cancelBtn = document.getElementById('modal-name-cancel');
+    const confirmBtn = document.getElementById('modal-launch-btn');
+
+    input.value = '';
     input.focus();
 
-    const launch = () => {
-      const raw = input.value.trim();
-      const name = raw.length > 0 ? raw : 'Pilot';
-      this.storage.save({ ...this.storage.load(), playerName: name });
-      this._closeModal();
-      this.onLaunch(name);
+    const clearError = () => {
+      errorEl.classList.add('hidden');
+      input.classList.remove('input-error');
     };
-    document.getElementById('modal-launch-btn').addEventListener('click', launch);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') launch(); });
+
+    input.addEventListener('input', clearError);
+
+    const submit = () => {
+      const raw = input.value.trim();
+      if (!raw) {
+        errorEl.classList.remove('hidden');
+        input.classList.add('input-error');
+        input.focus();
+        return;
+      }
+
+      this.storage.setPlayerName(raw);
+      this._closeModal();
+      this.hideAll();
+      this.onLaunch(raw);
+    };
+
+    confirmBtn.addEventListener('click', submit);
+    cancelBtn.addEventListener('click', () => this._closeModal());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submit();
+      if (e.key === 'Escape') this._closeModal();
+    });
   }
 
   _openControlsModal() {

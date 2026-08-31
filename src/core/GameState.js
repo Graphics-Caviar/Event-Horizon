@@ -13,6 +13,8 @@ export const STATUS = Object.freeze({
 export class GameState {
   constructor() {
     this.playerName = 'Pilot';
+    this.selectedCharacter = 'zara';
+    this.selectedShip = 'raven';
     this.reset();
   }
 
@@ -25,8 +27,8 @@ export class GameState {
     this.boostTimeRemaining = 0; // seconds of active nitrogen boost
     this.elapsedTime = 0;        // seconds since level start
     this.distanceFromHazard = 0; // level-specific "progress" metric
-    // playerName is intentionally NOT reset here — it's set once at
-    // launch and should survive a retry (reset() runs again each retry).
+    // playerName, selectedCharacter, selectedShip are intentionally NOT reset here —
+    // they are preserved across retries.
   }
 
   damage(amount) {
