@@ -1,11 +1,11 @@
-import { Game } from './core/Game.js';
+import { Game } from './core/Game.js'
 
 function boot() {
-  new Game();
+	new Game()
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
+	document.addEventListener('DOMContentLoaded', boot)
 } else {
-  boot();
+	boot()
 }
