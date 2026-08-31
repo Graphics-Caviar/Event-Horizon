@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three'
 
 // Live version of voidVertex.glsl / voidFragment.glsl — see the note at
 // the top of engineShader.js for why this is duplicated as a JS string,
@@ -26,7 +26,7 @@ void main() {
 
   gl_Position = projectionMatrix * viewPosition;
 }
-`;
+`
 
 export const voidFragmentShader = /* glsl */ `
 uniform float uTime;
@@ -53,20 +53,20 @@ void main() {
 
   gl_FragColor = vec4(finalColor, alpha);
 }
-`;
+`
 
 export function createVoidMaterial(color = 0xa86bff) {
-  return new THREE.ShaderMaterial({
-    vertexShader: voidVertexShader,
-    fragmentShader: voidFragmentShader,
-    uniforms: {
-      uTime: { value: 0 },
-      uColor: { value: new THREE.Color(color) },
-      uIntensity: { value: 1.0 },
-    },
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
+	return new THREE.ShaderMaterial({
+		vertexShader: voidVertexShader,
+		fragmentShader: voidFragmentShader,
+		uniforms: {
+			uTime: { value: 0 },
+			uColor: { value: new THREE.Color(color) },
+			uIntensity: { value: 1.0 },
+		},
+		transparent: true,
+		blending: THREE.AdditiveBlending,
+		depthWrite: false,
+		side: THREE.DoubleSide,
+	})
 }

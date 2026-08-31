@@ -1,13 +1,16 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "scores",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "score", "order": "DESCENDING" },
-        { "fieldPath": "timeElapsed", "order": "ASCENDING" }
-      ]
-    }
-  ],
-  "fieldOverrides": []
+	"indexes": [
+		{
+			"collectionGroup": "scores",
+			"queryScope": "COLLECTION",
+			"fields": [
+				{ "fieldPath": "score", "order": "DESCENDING" },
+				{
+					"fieldPath": "timeElapsed",
+					"order": "ASCENDING"
+				}
+			]
+		}
+	],
+	"fieldOverrides": []
 }

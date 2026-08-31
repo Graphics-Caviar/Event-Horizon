@@ -43,7 +43,9 @@ To populate the static `achievements` collection and initial leaderboard records
 ```bash
 npm run seed
 ```
+
 Or directly:
+
 ```bash
 node scripts/seedFirestore.js
 ```
@@ -53,9 +55,11 @@ node scripts/seedFirestore.js
 ## 4. Firebase Local Emulator Suite (Optional)
 
 To test Firebase locally:
+
 ```bash
 firebase emulators:start
 ```
+
 - **Emulator UI:** `http://localhost:4000`
 - **Firestore Emulator:** `http://localhost:8080`
 - **Auth Emulator:** `http://localhost:9099`

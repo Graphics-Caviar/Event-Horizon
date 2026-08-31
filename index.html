@@ -1,186 +1,479 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Event Horizon: Escape from Singularity</title>
-  <link rel="stylesheet" href="public/style.css" />
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0"
+		/>
+		<title>Event Horizon: Escape from Singularity</title>
+		<link rel="stylesheet" href="public/style.css" />
 
-  <!-- No bundler: three.js is loaded straight from a CDN via an import map -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-    }
-  }
-  </script>
-</head>
-<body>
-  <canvas id="game-canvas"></canvas>
+		<!-- No bundler: three.js is loaded straight from a CDN via an import map -->
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+				}
+			}
+		</script>
+	</head>
+	<body>
+		<canvas id="game-canvas"></canvas>
 
-  <!-- ============ HUD (in-game) ============ -->
-  <div id="hud" class="hidden">
-    <div id="hud-top-left">
-      <div id="pilot-tag" class="hud-label"></div>
-      <div class="hud-label">HULL INTEGRITY</div>
-      <div class="bar-track"><div id="integrity-bar" class="bar-fill integrity"></div></div>
+		<!-- ============ HUD (in-game) ============ -->
+		<div id="hud" class="hidden">
+			<div id="hud-top-left">
+				<div id="pilot-tag" class="hud-label"></div>
+				<div class="hud-label">HULL INTEGRITY</div>
+				<div class="bar-track">
+					<div
+						id="integrity-bar"
+						class="bar-fill integrity"
+					></div>
+				</div>
 
-      <div class="hud-label">ESCAPE PROGRESS</div>
-      <div class="bar-track"><div id="distance-bar" class="bar-fill distance"></div></div>
-    </div>
+				<div class="hud-label">ESCAPE PROGRESS</div>
+				<div class="bar-track">
+					<div
+						id="distance-bar"
+						class="bar-fill distance"
+					></div>
+				</div>
+			</div>
 
-    <div id="hud-top-right">
-      <div class="hud-label">SCORE</div>
-      <div id="score-value">0</div>
-      <div class="hud-label">NITROGEN <span id="nitrogen-count">0</span></div>
-      <div id="boost-indicator" class="hidden">BOOST ACTIVE <span id="boost-timer">0.0</span>s</div>
-    </div>
+			<div id="hud-top-right">
+				<div class="hud-label">SCORE</div>
+				<div id="score-value">0</div>
+				<div class="hud-label">
+					NITROGEN
+					<span id="nitrogen-count">0</span>
+				</div>
+				<div id="boost-indicator" class="hidden">
+					BOOST ACTIVE
+					<span id="boost-timer">0.0</span>
+					s
+				</div>
+			</div>
 
-    <div id="hud-bottom-center">
-      <div id="warning-text" class="hidden">⚠ GRAVITATIONAL PULL CRITICAL ⚠</div>
-      <div id="controls-hint">W/↑ Thrust &nbsp;·&nbsp; S/↓ Brake &nbsp;·&nbsp; A/D or ←/→ Turn</div>
-    </div>
-  </div>
+			<div id="hud-bottom-center">
+				<div id="warning-text" class="hidden">
+					⚠ GRAVITATIONAL PULL CRITICAL ⚠
+				</div>
+				<div id="controls-hint">
+					W/↑ Thrust &nbsp;·&nbsp; S/↓ Brake
+					&nbsp;·&nbsp; A/D or ←/→ Turn
+				</div>
+			</div>
+		</div>
 
-  <!-- ============ Overlays ============ -->
-  <div id="screen-start" class="screen menu-screen">
-    <div class="menu-scrim"></div>
+		<!-- ============ Overlays ============ -->
+		<div id="screen-start" class="screen menu-screen">
+			<div class="menu-scrim"></div>
 
-    <div class="menu-left">
-      <div class="brand-block">
-        <h1 class="brand-title">EVENT<br />H<span class="o-ring">O</span>RIZON</h1>
-        <div class="brand-subtitle">ESCAPE&nbsp;FROM&nbsp;SINGULARITY</div>
-      </div>
+			<div class="menu-left">
+				<div class="brand-block">
+					<h1 class="brand-title">
+						EVENT
+						<br />
+						H
+						<span class="o-ring">O</span>
+						RIZON
+					</h1>
+					<div class="brand-subtitle">
+						ESCAPE&nbsp;FROM&nbsp;SINGULARITY
+					</div>
+				</div>
 
-      <p class="brand-tagline">
-        A cosmic entity hunts you.<br />
-        Three worlds stand between you and freedom.<br />
-        <strong>SURVIVE. ADAPT. ESCAPE.</strong>
-      </p>
+				<p class="brand-tagline">
+					A cosmic entity hunts you.
+					<br />
+					Three worlds stand between you and
+					freedom.
+					<br />
+					<strong>SURVIVE. ADAPT. ESCAPE.</strong>
+				</p>
 
-      <nav class="menu-actions">
-        <button id="btn-start" class="menu-btn menu-btn-primary">
-          <svg viewBox="0 0 24 24" class="menu-icon"><path d="M6 4l14 8-14 8V4z" fill="currentColor" /></svg>
-          <span>PLAY</span>
-        </button>
-        <button id="btn-controls" class="menu-btn">
-          <svg viewBox="0 0 24 24" class="menu-icon"><path d="M6 9h2m-1-1v2m7-1h.01M17 9h.01M4 9c0-2 1.5-3 4-3h8c2.5 0 4 1 4 3l1 6c.3 2-1 3.5-2.5 2.5L16 15H8l-2.5 2.5C4 18.5 2.7 17 3 15l1-6z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          <span>CONTROLS</span>
-        </button>
-        <button id="btn-settings" class="menu-btn">
-          <svg viewBox="0 0 24 24" class="menu-icon"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 00-2-1.2L14.2 3H9.8l-.4 2.6a7 7 0 00-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 000 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 002 1.2l.4 2.6h4.4l.4-2.6a7 7 0 002-1.2l2.3.9 2-3.4-2-1.5c.07-.4.1-.8.1-1.2z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /></svg>
-          <span>SETTINGS</span>
-        </button>
-        <button id="btn-credits" class="menu-btn">
-          <svg viewBox="0 0 24 24" class="menu-icon"><circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M3 19c0-3 3-5 6-5s6 2 6 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /><circle cx="17" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M15.5 14.2c2.4.3 4.5 2 4.5 4.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /></svg>
-          <span>CREDITS</span>
-        </button>
-        <button id="btn-exit" class="menu-btn">
-          <svg viewBox="0 0 24 24" class="menu-icon"><path d="M12 4v7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /><path d="M7 6a7 7 0 105 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
-          <span>EXIT GAME</span>
-        </button>
-      </nav>
-    </div>
+				<nav class="menu-actions">
+					<button
+						id="btn-start"
+						class="menu-btn menu-btn-primary"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="menu-icon"
+						>
+							<path
+								d="M6 4l14 8-14 8V4z"
+								fill="currentColor"
+							/>
+						</svg>
+						<span>PLAY</span>
+					</button>
+					<button
+						id="btn-controls"
+						class="menu-btn"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="menu-icon"
+						>
+							<path
+								d="M6 9h2m-1-1v2m7-1h.01M17 9h.01M4 9c0-2 1.5-3 4-3h8c2.5 0 4 1 4 3l1 6c.3 2-1 3.5-2.5 2.5L16 15H8l-2.5 2.5C4 18.5 2.7 17 3 15l1-6z"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						<span>CONTROLS</span>
+					</button>
+					<button
+						id="btn-settings"
+						class="menu-btn"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="menu-icon"
+						>
+							<circle
+								cx="12"
+								cy="12"
+								r="3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+							/>
+							<path
+								d="M19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 00-2-1.2L14.2 3H9.8l-.4 2.6a7 7 0 00-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 000 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 002 1.2l.4 2.6h4.4l.4-2.6a7 7 0 002-1.2l2.3.9 2-3.4-2-1.5c.07-.4.1-.8.1-1.2z"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.3"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						<span>SETTINGS</span>
+					</button>
+					<button
+						id="btn-credits"
+						class="menu-btn"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="menu-icon"
+						>
+							<circle
+								cx="9"
+								cy="8"
+								r="3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+							/>
+							<path
+								d="M3 19c0-3 3-5 6-5s6 2 6 5"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+							/>
+							<circle
+								cx="17"
+								cy="8"
+								r="2.4"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.3"
+							/>
+							<path
+								d="M15.5 14.2c2.4.3 4.5 2 4.5 4.8"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.3"
+								stroke-linecap="round"
+							/>
+						</svg>
+						<span>CREDITS</span>
+					</button>
+					<button id="btn-exit" class="menu-btn">
+						<svg
+							viewBox="0 0 24 24"
+							class="menu-icon"
+						>
+							<path
+								d="M12 4v7"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+							/>
+							<path
+								d="M7 6a7 7 0 105 0"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+							/>
+						</svg>
+						<span>EXIT GAME</span>
+					</button>
+				</nav>
+			</div>
 
-    <aside class="menu-right">
-      <div class="journey-header"><span>THE&nbsp;JOURNEY&nbsp;AWAITS</span></div>
+			<aside class="menu-right">
+				<div class="journey-header">
+					<span>
+						THE&nbsp;JOURNEY&nbsp;AWAITS
+					</span>
+				</div>
 
-      <div class="level-card level-card-1">
-        <div class="level-thumb thumb-1"><div class="thumb-hole"></div><div class="thumb-ship"></div></div>
-        <div class="level-badge badge-cyan">01</div>
-        <div class="level-info">
-          <div class="level-title">THE SINGULARITY RUN</div>
-          <div class="level-sub sub-cyan">ESCAPE THE BLACK HOLE</div>
-        </div>
-      </div>
+				<div class="level-card level-card-1">
+					<div class="level-thumb thumb-1">
+						<div class="thumb-hole"></div>
+						<div class="thumb-ship"></div>
+					</div>
+					<div class="level-badge badge-cyan">
+						01
+					</div>
+					<div class="level-info">
+						<div class="level-title">
+							THE SINGULARITY RUN
+						</div>
+						<div class="level-sub sub-cyan">
+							ESCAPE THE BLACK HOLE
+						</div>
+					</div>
+				</div>
 
-      <div class="level-card level-card-2">
-        <div class="level-thumb thumb-2"><div class="thumb-planet"></div><div class="thumb-terrain"></div><div class="thumb-rover"></div></div>
-        <div class="level-badge badge-green">02</div>
-        <div class="level-info">
-          <div class="level-title">ALIEN PLANET EXODUS</div>
-          <div class="level-sub sub-green">SURVIVE. ADAPT. ESCAPE.</div>
-        </div>
-      </div>
+				<div class="level-card level-card-2">
+					<div class="level-thumb thumb-2">
+						<div class="thumb-planet"></div>
+						<div
+							class="thumb-terrain"
+						></div>
+						<div class="thumb-rover"></div>
+					</div>
+					<div class="level-badge badge-green">
+						02
+					</div>
+					<div class="level-info">
+						<div class="level-title">
+							ALIEN PLANET EXODUS
+						</div>
+						<div
+							class="level-sub sub-green"
+						>
+							SURVIVE. ADAPT. ESCAPE.
+						</div>
+					</div>
+				</div>
 
-      <div class="level-card level-card-3">
-        <div class="level-thumb thumb-3"><div class="thumb-void"></div><div class="thumb-figure"></div></div>
-        <div class="level-badge badge-purple">03</div>
-        <div class="level-info">
-          <div class="level-title">THE VOID OF GODS</div>
-          <div class="level-sub sub-purple">DESTROY THE DEVOURER</div>
-        </div>
-      </div>
-    </aside>
+				<div class="level-card level-card-3">
+					<div class="level-thumb thumb-3">
+						<div class="thumb-void"></div>
+						<div class="thumb-figure"></div>
+					</div>
+					<div class="level-badge badge-purple">
+						03
+					</div>
+					<div class="level-info">
+						<div class="level-title">
+							THE VOID OF GODS
+						</div>
+						<div
+							class="level-sub sub-purple"
+						>
+							DESTROY THE DEVOURER
+						</div>
+					</div>
+				</div>
+			</aside>
 
-    <footer class="menu-footer">
-      <div class="footer-social">
-        <a href="#" class="social-icon" title="Discord" aria-label="Discord">
-          <svg viewBox="0 0 24 24"><path d="M8 15s1.5 1 4 1 4-1 4-1M9 9.5c0 .8-.6 1.5-1.3 1.5S6.3 10.3 6.3 9.5 7 8 7.7 8 9 8.7 9 9.5zm8.7 0c0 .8-.6 1.5-1.3 1.5s-1.4-.7-1.4-1.5.6-1.5 1.4-1.5 1.3.7 1.3 1.5zM7 6.5C4.5 7.3 4 9 3.7 12c-.3 3 .8 5 2.8 6l1-1.6M17 6.5c2.5.8 3 2.5 3.3 5.5.3 3-.8 5-2.8 6l-1-1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </a>
-        <a href="#" class="social-icon" title="Website" aria-label="Website">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.4" /><path d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.4 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.4-3.8-8.5S9.5 5.8 12 3.5z" fill="none" stroke="currentColor" stroke-width="1.3" /></svg>
-        </a>
-        <a href="#" class="social-icon" title="X" aria-label="X">
-          <svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
-        </a>
-        <div class="news-feed">
-          <span class="news-label">NEWS FEED</span>
-          <span class="news-text" id="news-feed-text">Welcome, Explorer. The Devourer is watching.</span>
-        </div>
-      </div>
+			<footer class="menu-footer">
+				<div class="footer-social">
+					<a
+						href="#"
+						class="social-icon"
+						title="Discord"
+						aria-label="Discord"
+					>
+						<svg viewBox="0 0 24 24">
+							<path
+								d="M8 15s1.5 1 4 1 4-1 4-1M9 9.5c0 .8-.6 1.5-1.3 1.5S6.3 10.3 6.3 9.5 7 8 7.7 8 9 8.7 9 9.5zm8.7 0c0 .8-.6 1.5-1.3 1.5s-1.4-.7-1.4-1.5.6-1.5 1.4-1.5 1.3.7 1.3 1.5zM7 6.5C4.5 7.3 4 9 3.7 12c-.3 3 .8 5 2.8 6l1-1.6M17 6.5c2.5.8 3 2.5 3.3 5.5.3 3-.8 5-2.8 6l-1-1.6"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.4"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</a>
+					<a
+						href="#"
+						class="social-icon"
+						title="Website"
+						aria-label="Website"
+					>
+						<svg viewBox="0 0 24 24">
+							<circle
+								cx="12"
+								cy="12"
+								r="8.5"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.4"
+							/>
+							<path
+								d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.4 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.4-3.8-8.5S9.5 5.8 12 3.5z"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.3"
+							/>
+						</svg>
+					</a>
+					<a
+						href="#"
+						class="social-icon"
+						title="X"
+						aria-label="X"
+					>
+						<svg viewBox="0 0 24 24">
+							<path
+								d="M5 5l14 14M19 5L5 19"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+								stroke-linecap="round"
+							/>
+						</svg>
+					</a>
+					<div class="news-feed">
+						<span class="news-label">
+							NEWS FEED
+						</span>
+						<span
+							class="news-text"
+							id="news-feed-text"
+						>
+							Welcome, Explorer. The
+							Devourer is watching.
+						</span>
+					</div>
+				</div>
 
-      <div class="footer-brand">
-        <svg class="footer-logo" viewBox="0 0 40 40"><path d="M20 4l14 24H6L20 4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><circle cx="20" cy="22" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3" /></svg>
-        <div class="footer-tagline">RESEARCH.&nbsp;SURVIVE.&nbsp;ESCAPE.</div>
-      </div>
+				<div class="footer-brand">
+					<svg
+						class="footer-logo"
+						viewBox="0 0 40 40"
+					>
+						<path
+							d="M20 4l14 24H6L20 4z"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.4"
+							stroke-linejoin="round"
+						/>
+						<circle
+							cx="20"
+							cy="22"
+							r="4.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.3"
+						/>
+					</svg>
+					<div class="footer-tagline">
+						RESEARCH.&nbsp;SURVIVE.&nbsp;ESCAPE.
+					</div>
+				</div>
 
-      <div class="footer-version">v1.0.0 <span class="dot"></span></div>
-    </footer>
-  </div>
+				<div class="footer-version">
+					v1.0.0
+					<span class="dot"></span>
+				</div>
+			</footer>
+		</div>
 
-  <!-- Generic modal used for name entry / controls / settings / credits / exit-confirm -->
-  <div id="menu-modal-overlay" class="modal-overlay hidden">
-    <div class="modal-box">
-      <button id="modal-close" class="modal-close" aria-label="Close">✕</button>
-      <div id="modal-content"></div>
-    </div>
-  </div>
+		<!-- Generic modal used for name entry / controls / settings / credits / exit-confirm -->
+		<div id="menu-modal-overlay" class="modal-overlay hidden">
+			<div class="modal-box">
+				<button
+					id="modal-close"
+					class="modal-close"
+					aria-label="Close"
+				>
+					✕
+				</button>
+				<div id="modal-content"></div>
+			</div>
+		</div>
 
-  <div id="screen-placeholder" class="screen hidden">
-    <h1>STAND BY</h1>
-    <h2>Level 1 — The Singularity Run</h2>
-    <p class="lore" id="placeholder-lore">Gameplay is still being built by the rest of the crew. Check back soon, Pilot.</p>
-    <button id="btn-back-to-menu">BACK TO MENU</button>
-  </div>
+		<div id="screen-placeholder" class="screen hidden">
+			<h1>STAND BY</h1>
+			<h2>Level 1 — The Singularity Run</h2>
+			<p class="lore" id="placeholder-lore">
+				Gameplay is still being built by the rest of the
+				crew. Check back soon, Pilot.
+			</p>
+			<button id="btn-back-to-menu">BACK TO MENU</button>
+		</div>
 
-  <!-- ============ Hangar (character/ship select) ============ -->
-  <div id="screen-character-select" class="screen hangar-screen hidden">
-    <div class="hangar-header">
-      <div class="hangar-title">EVENT&nbsp;HORIZON</div>
-      <div class="hangar-subtitle">HANGAR BAY</div>
-      <div class="hangar-tabs">
-        <button id="tab-pilot" class="hangar-tab active">CHOOSE YOUR PILOT</button>
-        <button id="tab-ship" class="hangar-tab">YOUR STARFIGHTER</button>
-      </div>
-    </div>
+		<!-- ============ Hangar (character/ship select) ============ -->
+		<div
+			id="screen-character-select"
+			class="screen hangar-screen hidden"
+		>
+			<div class="hangar-header">
+				<div class="hangar-title">
+					EVENT&nbsp;HORIZON
+				</div>
+				<div class="hangar-subtitle">HANGAR BAY</div>
+				<div class="hangar-tabs">
+					<button
+						id="tab-pilot"
+						class="hangar-tab active"
+					>
+						CHOOSE YOUR PILOT
+					</button>
+					<button
+						id="tab-ship"
+						class="hangar-tab"
+					>
+						YOUR STARFIGHTER
+					</button>
+				</div>
+			</div>
 
-    <div id="pilot-panel" class="hangar-panel">
-      <div class="pilot-cards" id="pilot-cards"></div>
-      <div class="stat-comparison" id="stat-comparison"></div>
-    </div>
+			<div id="pilot-panel" class="hangar-panel">
+				<div class="pilot-cards" id="pilot-cards"></div>
+				<div
+					class="stat-comparison"
+					id="stat-comparison"
+				></div>
+			</div>
 
-    <div id="ship-panel" class="hangar-panel hidden">
-      <div class="ship-cards" id="ship-cards"></div>
-      <div class="stat-comparison" id="ship-stat-comparison"></div>
-    </div>
+			<div id="ship-panel" class="hangar-panel hidden">
+				<div class="ship-cards" id="ship-cards"></div>
+				<div
+					class="stat-comparison"
+					id="ship-stat-comparison"
+				></div>
+			</div>
 
-    <div class="hangar-footer">
-      <button id="btn-hangar-back" class="btn-secondary">BACK</button>
-      <button id="btn-hangar-continue">READY — CONTINUE TO LAUNCH BAY</button>
-    </div>
-  </div>
+			<div class="hangar-footer">
+				<button
+					id="btn-hangar-back"
+					class="btn-secondary"
+				>
+					BACK
+				</button>
+				<button id="btn-hangar-continue">
+					READY — CONTINUE TO LAUNCH BAY
+				</button>
+			</div>
+		</div>
 
-  <script type="module" src="src/main.js"></script>
-</body>
+		<script type="module" src="src/main.js"></script>
+	</body>
 </html>
