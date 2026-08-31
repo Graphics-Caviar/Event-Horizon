@@ -1,11 +1,8 @@
 import * as THREE from 'three'
-import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 
 import { Level, clearScene } from '../../core/Level.js'
-
-// set to view asteroids from a more zoomed out level with rings around the asteroids to
-// identify them easier
-const ASTEROID_FIELD_DEBUG = true
+import { AsteroidField } from './AsteroidField.js'
+import { BlackHole } from './BlackHole.js'
 
 export class Level1 extends Level {
 	constructor(game) {
@@ -18,25 +15,9 @@ export class Level1 extends Level {
 		// Adjust this to simulate a 'fast-forward'
 		this.timeScale = 50
 
-		this.blackHoleGroup = new THREE.Group()
-		this.blackHoleGroup.name = 'blackhole'
-		this.createBlackHole(10, 50)
-		this.addObject(this.blackHoleGroup)
+		this.blackHole = new BlackHole(this)
 
-		this.blackHolePosition = new THREE.Vector3(0, 0, 0)
-		this.blackHoleGravityStrength = 20000
-		this.blackHoleEventHorizonRadius = 15
-
-		this.maxAsteroidSpeed = 60
-		this.orbitSpeedFactor = 1.0
-
-		this.asteroids = new Set()
-		this.asteroidGroup = new THREE.Group()
-		this.asteroidGroup.name = 'asteroids'
-		this.populateAsteroids(1000, 5, 50, 500)
-		this.addObject(this.asteroidGroup)
-
-		this.noDestroyedAsteroids = 0
+		this.asteroidField = new AsteroidField(this, this.blackHole)
 	}
 
 	clearStartMenu() {
@@ -295,7 +276,15 @@ export class Level1 extends Level {
 
 	update(delta) {
 		super.update(delta)
-		this.updateAsteroidPhysics(delta)
-		this.updateBlackHoleDisk(delta)
+		if (this.asteroidField)
+			this.asteroidField.updateAsteroidPhysics(
+				delta,
+				this.timeScale
+			)
+		if (this.blackHole)
+			this.blackHole.updateBlackHoleDisk(
+				delta,
+				this.timeScale
+			)
 	}
 }

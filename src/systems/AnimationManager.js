@@ -6,31 +6,33 @@
  * `animationManager.update(delta)`.
  */
 export class AnimationManager {
-  constructor() {
-    this._targets = new Set();
-  }
+	constructor() {
+		this._targets = new Set()
+	}
 
-  register(target) {
-    if (typeof target.update !== 'function') {
-      throw new Error('AnimationManager.register() requires an object with an update(delta) method.');
-    }
-    this._targets.add(target);
-  }
+	register(target) {
+		if (typeof target.update !== 'function') {
+			throw new Error(
+				'AnimationManager.register() requires an object with an update(delta) method.'
+			)
+		}
+		this._targets.add(target)
+	}
 
-  unregister(target) {
-    this._targets.delete(target);
-  }
+	unregister(target) {
+		this._targets.delete(target)
+	}
 
-  /** @param delta seconds since last frame
-   *  @param extraArgs forwarded to every target's update() after delta
-   *                    (e.g. a camera reference, for billboarded VFX) */
-  update(delta, ...extraArgs) {
-    for (const target of this._targets) {
-      target.update(delta, ...extraArgs);
-    }
-  }
+	/** @param delta seconds since last frame
+	 *  @param extraArgs forwarded to every target's update() after delta
+	 *                    (e.g. a camera reference, for billboarded VFX) */
+	update(delta, ...extraArgs) {
+		for (const target of this._targets) {
+			target.update(delta, ...extraArgs)
+		}
+	}
 
-  clear() {
-    this._targets.clear();
-  }
+	clear() {
+		this._targets.clear()
+	}
 }

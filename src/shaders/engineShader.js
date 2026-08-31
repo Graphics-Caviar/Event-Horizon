@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three'
 
 // Live version of engineVertex.glsl / engineFragment.glsl. Kept truly
 // byte-for-byte identical (comments included) to the .glsl reference
@@ -30,7 +30,7 @@ void main() {
 
   gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
 }
-`;
+`
 
 export const engineFragmentShader = /* glsl */ `
 uniform float uTime;
@@ -66,7 +66,7 @@ void main() {
   vec3 finalColor = core + rim;
   gl_FragColor = vec4(finalColor, 1.0);
 }
-`;
+`
 
 /**
  * Creates a ShaderMaterial for an engine core. `uIntensity` should be
@@ -74,14 +74,14 @@ void main() {
  * material — see Spaceship.js's update() for the pattern.
  */
 export function createEngineCoreMaterial(color = 0x4de3ff) {
-  return new THREE.ShaderMaterial({
-    vertexShader: engineVertexShader,
-    fragmentShader: engineFragmentShader,
-    uniforms: {
-      uTime: { value: 0 },
-      uColor: { value: new THREE.Color(color) },
-      uIntensity: { value: 1.0 },
-    },
-    transparent: false,
-  });
+	return new THREE.ShaderMaterial({
+		vertexShader: engineVertexShader,
+		fragmentShader: engineFragmentShader,
+		uniforms: {
+			uTime: { value: 0 },
+			uColor: { value: new THREE.Color(color) },
+			uIntensity: { value: 1.0 },
+		},
+		transparent: false,
+	})
 }

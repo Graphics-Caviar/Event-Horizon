@@ -26,24 +26,24 @@ A browser-based 3D action game built with **Three.js** and **Vite**, developed f
 - **Core loop:** Survive escalating hazards → collect Nitrogen energy → progress through the level → face a set-piece finale
 - **Objective:** Escape the black hole's gravitational pull across 3 levels and destroy The Devourer
 
-| Level | Name | Setting | Signature Mechanic |
-|-------|------|---------|--------------------|
-| 1 | The Singularity Run | Damaged spaceship in an asteroid field near the black hole | Black hole gravity pull that strengthens over time |
-| 2 | Alien Planet Exodus | Hostile alien planet (on foot → rover) | Gravity manipulation that **remaps player controls** |
-| 3 | The Void of Gods | Inside the mind of The Devourer | **Reality Shift** — switching between Matter/Energy/Void dimensions |
+| Level | Name                | Setting                                                    | Signature Mechanic                                                  |
+| ----- | ------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1     | The Singularity Run | Damaged spaceship in an asteroid field near the black hole | Black hole gravity pull that strengthens over time                  |
+| 2     | Alien Planet Exodus | Hostile alien planet (on foot → rover)                     | Gravity manipulation that **remaps player controls**                |
+| 3     | The Void of Gods    | Inside the mind of The Devourer                            | **Reality Shift** — switching between Matter/Energy/Void dimensions |
 
 ---
 
 ## Tech Stack
 
-| Concern | Choice | Notes |
-|---------|--------|-------|
-| Rendering | [Three.js](https://threejs.org/) (ES modules) | WebGL renderer, scene graph, materials, lighting |
-| Build tooling | [Vite](https://vitejs.dev/) | Dev server with hot reload; `npm run dev`, `npm run build` |
-| Language | Vanilla JavaScript (ES2020+ modules) | No framework required |
-| Physics | Custom (`src/physics/`) | Lightweight, purpose-built forces/collisions — no heavy physics engine needed |
-| Audio | Web Audio API via `AudioManager.js` | SFX + ambient loops |
-| Assets | `public/assets/` | GLTF models, textures, sounds loaded by `AssetManager.js` |
+| Concern       | Choice                                        | Notes                                                                         |
+| ------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Rendering     | [Three.js](https://threejs.org/) (ES modules) | WebGL renderer, scene graph, materials, lighting                              |
+| Build tooling | [Vite](https://vitejs.dev/)                   | Dev server with hot reload; `npm run dev`, `npm run build`                    |
+| Language      | Vanilla JavaScript (ES2020+ modules)          | No framework required                                                         |
+| Physics       | Custom (`src/physics/`)                       | Lightweight, purpose-built forces/collisions — no heavy physics engine needed |
+| Audio         | Web Audio API via `AudioManager.js`           | SFX + ambient loops                                                           |
+| Assets        | `public/assets/`                              | GLTF models, textures, sounds loaded by `AssetManager.js`                     |
 
 ---
 
@@ -124,12 +124,12 @@ Event-Horizon/
 
 **Mechanics**
 
-| System | Behaviour |
-|--------|-----------|
-| Ship controls | `W/↑` accelerate · `S/↓` decelerate · `A/←` turn left · `D/→` turn right |
-| Black hole gravity | Constant backward pull; **scales up over time**; ship pulled into the hole = game over |
+| System             | Behaviour                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| Ship controls      | `W/↑` accelerate · `S/↓` decelerate · `A/←` turn left · `D/→` turn right                  |
+| Black hole gravity | Constant backward pull; **scales up over time**; ship pulled into the hole = game over    |
 | Nitrogen canisters | Temporary speed boost · increased manoeuvrability · reduced gravity pull · score increase |
-| Hazards | Moving asteroids · rotating asteroid belts · gravity waves · debris storms |
+| Hazards            | Moving asteroids · rotating asteroid belts · gravity waves · debris storms                |
 
 **Completion:** Cross the asteroid field threshold → scripted loss-of-control → crash onto the alien planet (transition to Level 2).
 
@@ -137,19 +137,19 @@ Event-Horizon/
 
 **Description:** The spaceship crashes and explodes. The player exits the wreckage onto a hostile alien world whose creatures begin hunting them.
 
-| Phase | Gameplay |
-|-------|----------|
-| **Phase 1 — On Foot** | Third-person character controller · sprint & jump · avoid alien attacks · navigate terrain obstacles |
-| **Phase 2 — Rover Escape** | Reach the abandoned rover and drive across the planet while pursued |
+| Phase                      | Gameplay                                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Phase 1 — On Foot**      | Third-person character controller · sprint & jump · avoid alien attacks · navigate terrain obstacles |
+| **Phase 2 — Rover Escape** | Reach the abandoned rover and drive across the planet while pursued                                  |
 
 **Gravity Manipulation (signature mechanic):** An alien planetary defense system destabilises gravity and **corrupts the control mappings**:
 
-| Normal | Gravity-shifted |
-|--------|-----------------|
-| `W` = Forward | `S` = Forward |
-| `S` = Backward | `W` = Backward |
-| `A` = Left | `D` = Left |
-| `D` = Right | `A` = Right |
+| Normal         | Gravity-shifted |
+| -------------- | --------------- |
+| `W` = Forward  | `S` = Forward   |
+| `S` = Backward | `W` = Backward  |
+| `A` = Left     | `D` = Left      |
+| `D` = Right    | `A` = Right     |
 
 **Extreme gravity events:** camera rotation · temporary zero-gravity · floating terrain · upside-down driving sections.
 
@@ -163,21 +163,21 @@ Event-Horizon/
 
 **Reality Shift** — the player can switch between three dimensions at any time:
 
-| Dimension | Properties |
-|-----------|------------|
-| **Matter** | Normal physics · standard environment |
+| Dimension  | Properties                                                                             |
+| ---------- | -------------------------------------------------------------------------------------- |
+| **Matter** | Normal physics · standard environment                                                  |
 | **Energy** | Hidden pathways appear · energy bridges become visible · new enemy weaknesses revealed |
-| **Void** | Reduced gravity · temporary flight · access to hidden areas |
+| **Void**   | Reduced gravity · temporary flight · access to hidden areas                            |
 
 Progression requires constantly switching between dimensions.
 
 **Final Boss — The Devourer**
 
-| Stage | Challenge |
-|-------|-----------|
-| 1 | Navigate collapsing space while avoiding attacks |
-| 2 | Destroy the gravitational anchors protecting the boss |
-| 3 | Enter the creature's core and destroy its energy source |
+| Stage | Challenge                                               |
+| ----- | ------------------------------------------------------- |
+| 1     | Navigate collapsing space while avoiding attacks        |
+| 2     | Destroy the gravitational anchors protecting the boss   |
+| 3     | Enter the creature's core and destroy its energy source |
 
 **Ultimate Ability — Quantum Overdrive:** collected Nitrogen energy evolves into a final power: slow-motion gameplay · increased speed · enhanced mobility · temporary immunity to gravitational attacks.
 
@@ -188,16 +188,19 @@ Progression requires constantly switching between dimensions.
 Implementation is phased so each milestone produces a runnable build.
 
 ### Phase 0 — Bootstrap
+
 - Scaffold `index.html`, `package.json` (Three.js + Vite scripts), canvas + HUD overlay containers.
 - `main.js`: instantiate `Game`; `Game.js`: WebGLRenderer, resize handling, fixed-timestep update loop calling the active scene's `update(dt)`.
 
 ### Phase 1 — Core Systems
+
 - `SceneManager.js`: register level scenes; handle load/unload and transitions (L1→L2 crash cinematic, L2→L3 portal).
 - `GameState.js`: `MENU | PLAYING | PAUSED | GAME_OVER | VICTORY` with event emission for UI/audio hooks.
 - `AssetManager.js`: promise-based GLTF/texture/audio loading with progress reporting.
 - `PlayerController.js`: central key-state map so bindings can be **swapped at runtime** (required by Level 2).
 
 ### Phase 2 — Level 1: The Singularity Run
+
 - `Gravity.js`: radial force toward black-hole origin, magnitude increasing with elapsed time; kill condition inside event horizon radius.
 - `Spaceship.js` + `Movement.js`: thrust/deceleration along facing vector, yaw/pitch turning, drag.
 - `AsteroidField.js` + `Collision.js`: instanced asteroid meshes orbiting on belts; sphere collision vs. ship hull.
@@ -206,6 +209,7 @@ Implementation is phased so each milestone produces a runnable build.
 - `HUD.js`: speed, distance-from-black-hole meter, boost status, score.
 
 ### Phase 3 — Level 2: Alien Planet Exodus
+
 - `Character.js`: third-person movement, sprint, jump; `CameraController.js` follows behind the player.
 - `Alien.js`: simple pursue-and-attack steering behaviour; damage on contact.
 - `Rover.js`: arcade driving model over terrain heightfield.
@@ -213,30 +217,32 @@ Implementation is phased so each milestone produces a runnable build.
 - Completion: proximity trigger at the alien structure opens the portal.
 
 ### Phase 4 — Level 3: The Void of Gods
+
 - `Dimensions.js`: dimension enum applying global modifiers — Matter (default), Energy (reveal bridge/pathway meshes, expose enemy weak points), Void (gravity ×0.25, hold-to-fly).
 - `Devourer.js`: staged state machine — Stage 1 dodging patterns in collapsing geometry; Stage 2 `GravityAnchors.js` destructibles that must be cleared; Stage 3 interior run to destroy the core.
 - `QuantumOverdrive.js`: charged by Nitrogen score; activates time-scale slowdown, speed/mobility multipliers, and gravitational-damage immunity for a short window.
 
 ### Phase 5 — Polish & Flow
+
 - `Menu.js` main menu/pause/game-over/victory screens; `AudioManager.js` wiring for all events; particle effects (black hole accretion, debris, portal); performance pass (instancing, draw-call budget); final playtest of difficulty ramp.
 
 ---
 
 ## Controls
 
-| Input | Action (Normal) | Action (Gravity Shift, L2) |
-|-------|-----------------|----------------------------|
-| `W` / `↑` | Accelerate / Forward | Backward |
-| `S` / `↓` | Decelerate / Backward | Forward |
-| `A` / `←` | Turn left / Left | Right |
-| `D` / `→` | Turn right / Right | Left |
-| `Shift` | Sprint (on foot) | Sprint |
-| `Space` | Jump / Boost | Jump / Boost |
-| `Q`/`E` or `1–3` | Switch dimension (L3) | Switch dimension |
-| `F` | Quantum Overdrive (charged) | Quantum Overdrive |
-| `Esc` | Pause | Pause |
+| Input            | Action (Normal)             | Action (Gravity Shift, L2) |
+| ---------------- | --------------------------- | -------------------------- |
+| `W` / `↑`        | Accelerate / Forward        | Backward                   |
+| `S` / `↓`        | Decelerate / Backward       | Forward                    |
+| `A` / `←`        | Turn left / Left            | Right                      |
+| `D` / `→`        | Turn right / Right          | Left                       |
+| `Shift`          | Sprint (on foot)            | Sprint                     |
+| `Space`          | Jump / Boost                | Jump / Boost               |
+| `Q`/`E` or `1–3` | Switch dimension (L3)       | Switch dimension           |
+| `F`              | Quantum Overdrive (charged) | Quantum Overdrive          |
+| `Esc`            | Pause                       | Pause                      |
 
-*(Exact ability keys finalised during Phases 2–4.)*
+_(Exact ability keys finalised during Phases 2–4.)_
 
 ---
 
