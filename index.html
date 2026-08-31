@@ -420,46 +420,118 @@
 		</div>
 
 		<!-- ============ Hangar (character/ship select) ============ -->
-		<div id="screen-character-select" class="screen hangar-screen hidden">
+		<div
+			id="screen-character-select"
+			class="screen hangar-screen hidden"
+		>
 			<div class="hangar-scrim"></div>
 			<div class="hangar-layout">
 				<aside class="hangar-left">
 					<div class="hangar-header">
-						<div class="hangar-title">EVENT&nbsp;HORIZON</div>
-						<div class="hangar-subtitle">HANGAR BAY — PILOT &amp; SHIP SELECTION</div>
+						<div class="hangar-title">
+							EVENT&nbsp;HORIZON
+						</div>
+						<div class="hangar-subtitle">
+							HANGAR BAY — PILOT &amp;
+							SHIP SELECTION
+						</div>
 						<div class="hangar-tabs">
-							<button id="tab-pilot" class="hangar-tab active">CHOOSE YOUR PILOT</button>
-							<button id="tab-ship" class="hangar-tab">YOUR STARFIGHTER</button>
+							<button
+								id="tab-pilot"
+								class="hangar-tab active"
+							>
+								CHOOSE YOUR
+								PILOT
+							</button>
+							<button
+								id="tab-ship"
+								class="hangar-tab"
+							>
+								YOUR STARFIGHTER
+							</button>
 						</div>
 					</div>
 
-					<div id="pilot-panel" class="hangar-panel">
-						<div class="pilot-cards" id="pilot-cards"></div>
-						<div class="stat-comparison-wrapper">
-							<div class="stat-comparison-title">PILOT SPEC COMPARISON</div>
-							<div class="stat-comparison" id="stat-comparison"></div>
+					<div
+						id="pilot-panel"
+						class="hangar-panel"
+					>
+						<div
+							class="pilot-cards"
+							id="pilot-cards"
+						></div>
+						<div
+							class="stat-comparison-wrapper"
+						>
+							<div
+								class="stat-comparison-title"
+							>
+								PILOT SPEC
+								COMPARISON
+							</div>
+							<div
+								class="stat-comparison"
+								id="stat-comparison"
+							></div>
 						</div>
 					</div>
 
-					<div id="ship-panel" class="hangar-panel hidden">
-						<div class="ship-cards" id="ship-cards"></div>
-						<div class="stat-comparison-wrapper">
-							<div class="stat-comparison-title">STARFIGHTER SPEC COMPARISON</div>
-							<div class="stat-comparison" id="ship-stat-comparison"></div>
+					<div
+						id="ship-panel"
+						class="hangar-panel hidden"
+					>
+						<div
+							class="ship-cards"
+							id="ship-cards"
+						></div>
+						<div
+							class="stat-comparison-wrapper"
+						>
+							<div
+								class="stat-comparison-title"
+							>
+								STARFIGHTER SPEC
+								COMPARISON
+							</div>
+							<div
+								class="stat-comparison"
+								id="ship-stat-comparison"
+							></div>
 						</div>
 					</div>
 
 					<div class="hangar-footer">
-						<button id="btn-hangar-back" class="btn-secondary">BACK</button>
-						<button id="btn-hangar-preview-landing" class="btn-secondary">LANDING SCENE</button>
-						<button id="btn-hangar-continue">READY — LAUNCH</button>
+						<button
+							id="btn-hangar-back"
+							class="btn-secondary"
+						>
+							BACK
+						</button>
+						<button
+							id="btn-hangar-preview-landing"
+							class="btn-secondary"
+						>
+							LANDING SCENE
+						</button>
+						<button
+							id="btn-hangar-continue"
+						>
+							READY — LAUNCH
+						</button>
 					</div>
 				</aside>
 
 				<div class="hangar-preview-stage">
-					<div class="preview-badge" id="hangar-preview-badge">
-						<span class="preview-dot"></span>
-						<span class="preview-label">3D HOLO PREVIEW</span>
+					<div
+						class="preview-badge"
+						id="hangar-preview-badge"
+					>
+						<span
+							class="preview-dot"
+						></span>
+						<span class="preview-label">
+							3D HOLO PREVIEW
+						</span>
 					</div>
 				</div>
 			</div>
@@ -467,40 +539,94 @@
 
 		<!-- ============ End of Stage: Planetary Landing ============ -->
 		<div id="screen-landing" class="screen landing-screen hidden">
-			<button id="btn-landing-skip" class="landing-skip-btn">SKIP CINEMATIC ⏭</button>
+			<button id="btn-landing-skip" class="landing-skip-btn">
+				SKIP CINEMATIC ⏭
+			</button>
 
-			<div id="landing-debrief-panel" class="landing-debrief-panel hidden">
+			<div
+				id="landing-debrief-panel"
+				class="landing-debrief-panel hidden"
+			>
 				<div class="landing-badge">
 					<span class="landing-pulse-dot"></span>
-					<span>MISSION TELEMETRY: TOUCHDOWN CONFIRMED</span>
+					<span>
+						MISSION TELEMETRY: TOUCHDOWN
+						CONFIRMED
+					</span>
 				</div>
 
 				<h1 class="landing-title">STAGE 1 CLEAR</h1>
-				<div class="landing-subtitle">THE SINGULARITY RUN — ESCAPE SUCCESSFUL</div>
+				<div class="landing-subtitle">
+					THE SINGULARITY RUN — ESCAPE SUCCESSFUL
+				</div>
 
 				<div class="landing-card">
 					<div class="landing-row">
-						<span class="landing-label">PILOT CALLSIGN:</span>
-						<span id="landing-callsign" class="landing-val cyan">Explorer</span>
+						<span class="landing-label">
+							PILOT CALLSIGN:
+						</span>
+						<span
+							id="landing-callsign"
+							class="landing-val cyan"
+						>
+							Explorer
+						</span>
 					</div>
 					<div class="landing-row">
-						<span class="landing-label">ASSIGNED PILOT:</span>
-						<span id="landing-pilot-name" class="landing-val green">Zara Voss</span>
+						<span class="landing-label">
+							ASSIGNED PILOT:
+						</span>
+						<span
+							id="landing-pilot-name"
+							class="landing-val green"
+						>
+							Zara Voss
+						</span>
 					</div>
 					<div class="landing-row">
-						<span class="landing-label">DEPLOYED VESSEL:</span>
-						<span id="landing-vessel-name" class="landing-val gold">Orbital Raven MK VII</span>
+						<span class="landing-label">
+							DEPLOYED VESSEL:
+						</span>
+						<span
+							id="landing-vessel-name"
+							class="landing-val gold"
+						>
+							Orbital Raven MK VII
+						</span>
 					</div>
 					<div class="landing-row">
-						<span class="landing-label">TOUCHDOWN LOCATION:</span>
-						<span class="landing-val purple">Alien Sector 7 — Xenon Outpost</span>
+						<span class="landing-label">
+							TOUCHDOWN LOCATION:
+						</span>
+						<span
+							class="landing-val purple"
+						>
+							Alien Sector 7 — Xenon
+							Outpost
+						</span>
 					</div>
 				</div>
 
 				<div class="landing-actions">
-					<button id="btn-landing-continue" class="menu-btn-primary">CONTINUE TO LEVEL 2: ALIEN PLANET</button>
-					<button id="btn-landing-replay" class="btn-secondary">REPLAY DESCENT</button>
-					<button id="btn-landing-menu" class="btn-secondary">RETURN TO MENU</button>
+					<button
+						id="btn-landing-continue"
+						class="menu-btn-primary"
+					>
+						CONTINUE TO LEVEL 2: ALIEN
+						PLANET
+					</button>
+					<button
+						id="btn-landing-replay"
+						class="btn-secondary"
+					>
+						REPLAY DESCENT
+					</button>
+					<button
+						id="btn-landing-menu"
+						class="btn-secondary"
+					>
+						RETURN TO MENU
+					</button>
 				</div>
 			</div>
 		</div>
