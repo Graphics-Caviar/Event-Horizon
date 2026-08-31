@@ -9,10 +9,12 @@ import { MenuBackground } from './MenuBackground.js';
 import storage from '../services/StorageService.js';
 import { HangarScene } from './HangarScene.js';
 import { CharacterSelect } from '../ui/CharacterSelect.js';
+import { LandingScene } from './LandingScene.js';
+import { LandingUI } from '../ui/LandingUI.js';
 
-// Menu -> Hangar (character/ship select) -> Level 1. Level 1 gameplay
-// (src/levels/Level1/**, src/player/**, src/physics/**, src/ui/HUD.js)
-// is wired up via _level1() below — see README.md for per-level status.
+// Menu -> Hangar (character/ship select) -> Level 1 -> LandingScene (End of Stage) -> Level 2.
+// Level 1 gameplay (src/levels/Level1/**, src/player/**, src/physics/**, src/ui/HUD.js)
+// transitions into LandingScene upon singularity escape / stage victory.
 
 export class Game {
   constructor() {
@@ -37,11 +39,21 @@ export class Game {
 
     this.hangarScene = null;
     this.characterSelect = null;
+    this.landingScene = null;
+    this.landingUI = null;
 
     this.clock = new THREE.Clock();
     this.menuBackground = new MenuBackground(this.sceneManager, this.assetManager);
 
     this.menu.showStart();
+
+    // Hotkey: Press 'V' anytime to preview/trigger the Landing Scene & Stage Victory
+    window.addEventListener('keydown', (e) => {
+      if ((e.key === 'v' || e.key === 'V') && !e.target.matches('input, textarea')) {
+        this.showLandingScene(this.gameState.selectedShip, this.gameState.selectedCharacter);
+      }
+    });
+
     this._loop();
   }
 
@@ -54,10 +66,7 @@ export class Game {
     this.gameState.selectedShip = profile.selectedShip || this.gameState.selectedShip || 'raven';
     this.menu.hideAll();
 
-    if (this.menuBackground) {
-      this.menuBackground.dispose();
-      this.menuBackground = null;
-    }
+    this._cleanupAllScenes();
 
     this.hangarScene = new HangarScene(this.sceneManager, this.assetManager);
     this.hangarScene.showCharacter(this.gameState.selectedCharacter);
@@ -81,13 +90,18 @@ export class Game {
         }
       },
       onContinue: (pilotKey, shipKey) => this._level1(this.gameState.playerName, pilotKey, shipKey),
+      onPreviewLanding: (pilotKey, shipKey) => this.showLandingScene(shipKey, pilotKey),
       onBack: () => this._backToMenu(),
       storageService: storage,
     });
     this.characterSelect.show();
   }
 
-  _backToMenu() {
+  _cleanupAllScenes() {
+    if (this.menuBackground) {
+      this.menuBackground.dispose();
+      this.menuBackground = null;
+    }
     if (this.characterSelect) {
       this.characterSelect.hide();
       this.characterSelect = null;
@@ -96,6 +110,22 @@ export class Game {
       this.hangarScene.dispose();
       this.hangarScene = null;
     }
+    if (this.landingUI) {
+      this.landingUI.hide();
+      this.landingUI = null;
+    }
+    if (this.landingScene) {
+      this.landingScene.dispose();
+      this.landingScene = null;
+    }
+    if (this.currentLevel) {
+      this.currentLevel.dispose?.();
+      this.currentLevel = null;
+    }
+  }
+
+  _backToMenu() {
+    this._cleanupAllScenes();
     this.menuBackground = new MenuBackground(this.sceneManager, this.assetManager);
     this.menu.showStart();
   }
@@ -115,17 +145,70 @@ export class Game {
       `LAUNCH pressed for "${this.gameState.playerName}" flying as "${this.gameState.selectedCharacter}" in spaceship "${this.gameState.selectedShip}".`
     );
 
-    if (this.characterSelect) {
-      this.characterSelect.hide();
-      this.characterSelect = null;
-    }
-    if (this.hangarScene) {
-      this.hangarScene.dispose();
-      this.hangarScene = null;
-    }
-
-    this.currentLevel?.dispose();
+    this._cleanupAllScenes();
     this.currentLevel = new Level1(this);
+  }
+
+  /** Shows the planetary landing cinematic for the selected starfighter */
+  showLandingScene(shipKey, pilotKey) {
+    const activeShipKey = shipKey || this.gameState.selectedShip || 'raven';
+    const activePilotKey = pilotKey || this.gameState.selectedCharacter || 'zara';
+
+    this._cleanupAllScenes();
+
+    this.landingScene = new LandingScene(this.sceneManager, this.assetManager, {
+      shipKey: activeShipKey,
+      pilotKey: activePilotKey,
+      onComplete: () => {
+        if (this.landingUI) {
+          this.landingUI.showDebrief();
+        }
+      },
+    });
+
+    this.landingUI = new LandingUI({
+      playerName: this.gameState.playerName,
+      pilotKey: activePilotKey,
+      shipKey: activeShipKey,
+      onContinue: () => {
+        // Continue to Level 2
+        this._showPlaceholderLevel2();
+      },
+      onReplay: () => {
+        if (this.landingScene) {
+          this.landingScene.restart();
+        }
+      },
+      onMenu: () => {
+        this._backToMenu();
+      },
+      onSkip: () => {
+        if (this.landingScene) {
+          this.landingScene.skip();
+        }
+      },
+    });
+
+    this.landingUI.show();
+  }
+
+  _showPlaceholderLevel2() {
+    this._cleanupAllScenes();
+    const placeholder = document.getElementById('screen-placeholder');
+    if (placeholder) {
+      placeholder.querySelector('h1').textContent = 'STAGE 2';
+      placeholder.querySelector('h2').textContent = 'Level 2 — Alien Planet Exodus';
+      placeholder.querySelector('#placeholder-lore').textContent =
+        'Touchdown confirmed on the alien surface. Atmospheric rover and exploration mechanics are preparing for launch.';
+      placeholder.classList.remove('hidden');
+      const backBtn = document.getElementById('btn-back-to-menu');
+      if (backBtn) {
+        backBtn.onclick = () => {
+          placeholder.classList.add('hidden');
+          this._backToMenu();
+        };
+      }
+    }
   }
 
   _loop() {
@@ -136,6 +219,9 @@ export class Game {
     }
     if (this.hangarScene) {
       this.hangarScene.update(delta);
+    }
+    if (this.landingScene) {
+      this.landingScene.update(delta);
     }
     this.currentLevel?.update?.(delta);
     this.sceneManager.render();

@@ -28,6 +28,7 @@ export class CharacterSelect {
     onTabChange,
     onContinue,
     onBack,
+    onPreviewLanding,
     storageService = storage,
   }) {
     this.storage = storageService;
@@ -36,6 +37,7 @@ export class CharacterSelect {
     this.onTabChange = onTabChange || (() => {});
     this.onContinue = onContinue || (() => {});
     this.onBack = onBack || (() => {});
+    this.onPreviewLanding = onPreviewLanding || (() => {});
 
     this.selectedPilotKey = initialPilot || this.storage.getSelectedPilot() || 'zara';
     this.selectedShipKey = initialShip || this.storage.getSelectedShip() || 'raven';
@@ -60,6 +62,9 @@ export class CharacterSelect {
     document.getElementById('btn-hangar-continue').addEventListener('click', () => {
       this.onContinue(this.selectedPilotKey, this.selectedShipKey);
     });
+    document.getElementById('btn-hangar-preview-landing')?.addEventListener('click', () => {
+      this.onPreviewLanding(this.selectedPilotKey, this.selectedShipKey);
+    });
     document.getElementById('btn-hangar-back').addEventListener('click', () => this.onBack());
   }
 
@@ -72,25 +77,34 @@ export class CharacterSelect {
   }
 
   _renderPilotCards() {
-    this.pilotCardsEl.innerHTML = Object.values(CHARACTERS).map((c) => `
-      <div class="pilot-card ${ACCENT_CLASS[c.key]} ${c.key === this.selectedPilotKey ? 'selected' : ''}">
-        <div class="pilot-card-name">${c.name}</div>
-        <div class="pilot-card-role">${c.role}</div>
-        <p class="pilot-card-desc">${c.description}</p>
-        <div class="pilot-card-abilities">
-          ${c.abilities.map((a) => `
-            <div class="ability-row">
-              <span class="ability-name">${a.name}</span>
-              <span class="ability-desc">${a.description}</span>
+    this.pilotCardsEl.innerHTML = Object.values(CHARACTERS).map((c) => {
+      const isSelected = c.key === this.selectedPilotKey;
+      return `
+        <div class="pilot-card ${ACCENT_CLASS[c.key]} ${isSelected ? 'selected' : ''}" data-key="${c.key}">
+          <div class="pilot-card-header">
+            <div class="pilot-card-title-group">
+              <div class="pilot-card-name">${c.name}</div>
+              <div class="pilot-card-role">${c.role}</div>
             </div>
-          `).join('')}
+            <div class="pilot-card-badge ${isSelected ? 'badge-selected' : ''}">
+              ${isSelected ? 'ACTIVE' : 'SELECT'}
+            </div>
+          </div>
+          <p class="pilot-card-desc">${c.description}</p>
+          <div class="pilot-card-abilities">
+            ${c.abilities.map((a) => `
+              <div class="ability-row">
+                <span class="ability-name">${a.name}:</span>
+                <span class="ability-desc">${a.description}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
-        <button class="pilot-select-btn" data-key="${c.key}">${c.key === this.selectedPilotKey ? 'SELECTED' : 'SELECT'}</button>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
-    this.pilotCardsEl.querySelectorAll('.pilot-select-btn').forEach((btn) => {
-      btn.addEventListener('click', () => this._selectPilot(btn.dataset.key));
+    this.pilotCardsEl.querySelectorAll('.pilot-card').forEach((card) => {
+      card.addEventListener('click', () => this._selectPilot(card.dataset.key));
     });
   }
 
@@ -107,7 +121,7 @@ export class CharacterSelect {
       <div class="stat-compare-row">
         <span class="stat-compare-label">${stat.toUpperCase()}</span>
         ${Object.values(CHARACTERS).map((c) => `
-          <div class="stat-bar-track ${ACCENT_CLASS[c.key]}">
+          <div class="stat-bar-track ${ACCENT_CLASS[c.key]}" title="${c.name}: ${c.stats[stat]} / 10">
             <div class="stat-bar-fill" style="width:${c.stats[stat] * 10}%"></div>
           </div>
         `).join('')}
@@ -117,26 +131,35 @@ export class CharacterSelect {
 
   _renderShipCards() {
     if (!this.shipCardsEl) return;
-    this.shipCardsEl.innerHTML = Object.values(SHIPS).map((s) => `
-      <div class="ship-card ${s.accentClass} ${s.key === this.selectedShipKey ? 'selected' : ''}">
-        <div class="ship-card-name">${s.name} <span class="ship-card-mark">${s.mark}</span></div>
-        <div class="ship-card-role">${s.role}</div>
-        <div class="ship-card-tagline">${s.tagline}</div>
-        <p class="ship-card-desc">${s.description}</p>
-        <div class="ship-card-specs">
-          ${s.specs.map((spec) => `
-            <div class="spec-mini-row">
-              <span>${spec.label}</span>
-              <span>${spec.value}</span>
+    this.shipCardsEl.innerHTML = Object.values(SHIPS).map((s) => {
+      const isSelected = s.key === this.selectedShipKey;
+      return `
+        <div class="ship-card ${s.accentClass} ${isSelected ? 'selected' : ''}" data-key="${s.key}">
+          <div class="ship-card-header">
+            <div class="ship-card-title-group">
+              <div class="ship-card-name">${s.name} <span class="ship-card-mark">${s.mark}</span></div>
+              <div class="ship-card-role">${s.role}</div>
             </div>
-          `).join('')}
+            <div class="ship-card-badge ${isSelected ? 'badge-selected' : ''}">
+              ${isSelected ? 'ACTIVE' : 'SELECT'}
+            </div>
+          </div>
+          <div class="ship-card-tagline">${s.tagline}</div>
+          <p class="ship-card-desc">${s.description}</p>
+          <div class="ship-card-specs">
+            ${s.specs.map((spec) => `
+              <div class="spec-mini-row">
+                <span>${spec.label}</span>
+                <span>${spec.value}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
-        <button class="ship-select-btn" data-key="${s.key}">${s.key === this.selectedShipKey ? 'SELECTED' : 'SELECT'}</button>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
-    this.shipCardsEl.querySelectorAll('.ship-select-btn').forEach((btn) => {
-      btn.addEventListener('click', () => this._selectShip(btn.dataset.key));
+    this.shipCardsEl.querySelectorAll('.ship-card').forEach((card) => {
+      card.addEventListener('click', () => this._selectShip(card.dataset.key));
     });
   }
 
@@ -154,7 +177,7 @@ export class CharacterSelect {
       <div class="stat-compare-row">
         <span class="stat-compare-label">${stat.toUpperCase()}</span>
         ${Object.values(SHIPS).map((s) => `
-          <div class="stat-bar-track ${s.accentClass}">
+          <div class="stat-bar-track ${s.accentClass}" title="${s.name}: ${s.stats[stat]} / 10">
             <div class="stat-bar-fill" style="width:${s.stats[stat] * 10}%"></div>
           </div>
         `).join('')}

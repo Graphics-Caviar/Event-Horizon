@@ -41,7 +41,7 @@ export class Menu {
   _openNameModal() {
     this._openModal(`
       <h3>PILOT CALLSIGN</h3>
-      <p class="modal-desc">Enter a name before you launch — the Devourer likes to know who it's hunting</p>
+      <p class="modal-desc">Enter your name before you launch — the Devourer likes to know who it's hunting</p>
       <input id="player-name-input" class="modal-input" type="text" maxlength="16" placeholder="Enter your name" autocomplete="off" spellcheck="false" />
       <div id="modal-name-error" class="modal-error hidden">Name is required</div>
       <div class="modal-actions">

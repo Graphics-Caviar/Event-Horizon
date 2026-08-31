@@ -26,7 +26,7 @@ export class HangarScene {
       color: 0x11151f, metalness: 0.6, roughness: 0.4, emissive: 0x0b3a44, emissiveIntensity: 0.4,
     });
     this.podium = new THREE.Mesh(podiumGeo, podiumMat);
-    this.podium.position.y = -0.15;
+    this.podium.position.set(0.75, -0.15, 0);
     this.group.add(this.podium);
 
     // CharacterManager only needs something with .add() — a Group works
@@ -49,8 +49,9 @@ export class HangarScene {
       this._currentShipKey = null;
     }
     const model = this.characterManager.select(key);
-    model.root.position.set(0, 0, 0);
+    model.root.position.set(0.75, 0, 0);
     model.setState('idle');
+    this.podium.position.set(0.75, -0.15, 0);
     this.podium.visible = true;
     return model;
   }
@@ -72,7 +73,8 @@ export class HangarScene {
     const shipConfig = SHIPS[shipKey] || SHIPS.raven;
     this._currentShipKey = shipKey;
     this.ship = new Spaceship(this.group, { colors: shipConfig.colors });
-    this.ship.group.scale.setScalar(0.5);
+    this.ship.group.scale.setScalar(0.55);
+    this.ship.group.position.set(1.1, 0.2, 0);
   }
 
   update(delta) {
@@ -82,8 +84,12 @@ export class HangarScene {
       const model = this.characterManager.currentModel;
       model.update(delta, { camera: this.camera });
       model.root.rotation.y = this._time * 0.4; // slow turntable spin
-      this.camera.position.set(Math.sin(this._time * 0.15) * 0.4, 1.6, 3.2);
-      this.camera.lookAt(0, 1, 0);
+      this.camera.position.set(
+        Math.sin(this._time * 0.15) * 0.3,
+        1.45,
+        2.9
+      );
+      this.camera.lookAt(0.75, 0.9, 0);
     } else if (this._mode === 'ship' && this.ship) {
       // Gentle auto-idle motion so the ship isn't a static prop — small
       // simulated throttle/turn oscillation, not real input.
@@ -92,8 +98,12 @@ export class HangarScene {
         turnInput: Math.sin(this._time * 0.4),
       });
       this.ship.group.rotation.y = this._time * 0.25;
-      this.camera.position.set(0, 2, 8);
-      this.camera.lookAt(0, 0.5, 0);
+      this.camera.position.set(
+        Math.sin(this._time * 0.1) * 0.3,
+        1.5,
+        6.8
+      );
+      this.camera.lookAt(1.1, 0.2, 0);
     }
   }
 

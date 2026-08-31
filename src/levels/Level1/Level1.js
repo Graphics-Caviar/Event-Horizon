@@ -289,6 +289,10 @@ export class Level1 extends Level {
 		}
 	}
 
+	completeLevel() {
+		this.game.showLandingScene(this.game.gameState.selectedShip, this.game.gameState.selectedCharacter);
+	}
+
 	update(delta) {
 		super.update(delta)
 		this.updateAsteroidPhysics(delta)

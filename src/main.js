@@ -1,7 +1,7 @@
 import { Game } from './core/Game.js';
 
 function boot() {
-  new Game();
+  window.game = new Game();
 }
 
 if (document.readyState === 'loading') {
