@@ -6,12 +6,13 @@ export class BlackHole {
 
 		this.blackHoleGroup = new THREE.Group()
 		this.blackHoleGroup.name = 'blackhole'
-		this.createBlackHole(10, 50)
+		this.createBlackHole(100, 500)
 		this.addObject(this.blackHoleGroup)
 
-		this.blackHolePosition = new THREE.Vector3(0, 0, 0)
-		this.blackHoleGravityStrength = 20000
-		this.blackHoleEventHorizonRadius = 15
+		this.planePosition = new THREE.Vector3(0, 0, 0)
+		this.planeNormal = new THREE.Vector3(0, 0, 1).normalize()
+		this.gravityStrength = 60
+		this.captureDistance = -20
 	}
 
 	addObject(object) {
@@ -22,17 +23,15 @@ export class BlackHole {
 		this.level.own(resource)
 	}
 
-	getPosition() {
-		return this.blackHolePosition
+	getSignedDistance(position) {
+		return position.clone().sub(this.planePosition).dot(this.planeNormal)
+	}
+	isBeyondEventHorizon(position) {
+		return this.getSignedDistance(position) < this.captureDistance
 	}
 
-	getGravityStrength() {
-		return this.blackHoleGravityStrength
-	}
-
-	getEventHorizonRadius() {
-		return this.blackHoleEventHorizonRadius
-	}
+	getGravityDirection() { return this.planeNormal.clone().negate() }
+	getGravityStrength() { return this.gravityStrength }
 
 	createBlackHole(singularityRadius, diskRadius) {
 		const singularityGeo = new THREE.SphereGeometry(
@@ -71,6 +70,10 @@ export class BlackHole {
 		this.blackHoleGroup.add(this.blackHoleDisk)
 
 		console.log(this.blackHoleGroup)
+	}
+
+	rampDifficulty(elapsedPlayTime, rampRate = 4) {
+		this.gravityStrength = 60 + rampRate * elapsedPlayTime
 	}
 
 	updateBlackHoleDisk(delta, timeScale) {
