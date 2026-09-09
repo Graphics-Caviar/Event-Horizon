@@ -1288,3 +1288,341 @@ button:hover {
 		grid-template-columns: 70px repeat(3, 1fr);
 	}
 }
+
+/* ==================================================================
+   Cinematic pilot selection redesign
+   ================================================================== */
+.pilot-select-panel {
+	position: relative;
+	overflow: hidden;
+}
+
+.pilot-overview {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.pilot-overview.hidden,
+.pilot-detail.hidden {
+	display: none;
+}
+
+.pilot-overview-heading {
+	position: absolute;
+	top: 3px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	z-index: 5;
+	pointer-events: none;
+}
+
+.pilot-overview-heading > span {
+	font-size: 11px;
+	letter-spacing: 4px;
+	color: rgba(225, 238, 250, 0.8);
+}
+
+.pilot-overview-heading small {
+	margin-top: 6px;
+	font-size: 9px;
+	letter-spacing: 1.6px;
+	color: rgba(180, 203, 226, 0.42);
+}
+
+.pilot-lineup {
+	position: absolute;
+	left: 50%;
+	bottom: 30px;
+	transform: translateX(-50%);
+	width: min(760px, 76vw);
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 32px;
+	z-index: 6;
+}
+
+.pilot-lineup-choice {
+	position: relative;
+	margin: 0;
+	padding: 62px 10px 12px;
+	border: 0;
+	border-top: 1px solid rgba(255, 255, 255, 0.12);
+	background: linear-gradient(180deg, transparent, rgba(5, 8, 16, 0.76));
+	color: rgba(235, 244, 255, 0.82);
+	text-align: center;
+	box-shadow: none;
+	clip-path: none;
+	transition:
+		transform 180ms ease,
+		border-color 180ms ease,
+		background 180ms ease;
+}
+
+.pilot-lineup-choice:hover,
+.pilot-lineup-choice.selected {
+	transform: translateY(-4px);
+	background: linear-gradient(180deg, transparent, rgba(7, 12, 22, 0.95));
+	border-top-color: currentColor;
+	box-shadow: 0 -10px 24px -22px currentColor;
+}
+
+.pilot-lineup-choice.accent-cyan {
+	color: var(--cyan);
+}
+.pilot-lineup-choice.accent-green {
+	color: #7dffa0;
+}
+.pilot-lineup-choice.accent-purple {
+	color: var(--purple);
+}
+
+.pilot-lineup-marker {
+	display: block;
+	margin-bottom: 7px;
+	font-size: 8px;
+	letter-spacing: 2px;
+	opacity: 0;
+	transition: opacity 180ms ease;
+}
+
+.pilot-lineup-choice:hover .pilot-lineup-marker,
+.pilot-lineup-choice.selected .pilot-lineup-marker {
+	opacity: 0.65;
+}
+
+.pilot-lineup-name {
+	display: block;
+	font-size: 14px;
+	letter-spacing: 2.5px;
+	color: #eff7ff;
+}
+
+.pilot-lineup-role {
+	display: block;
+	margin-top: 5px;
+	font-size: 9px;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	color: currentColor;
+	opacity: 0.8;
+}
+
+.pilot-detail {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+
+.pilot-overview-back {
+	position: absolute;
+	left: 4px;
+	top: 12px;
+	z-index: 8;
+	margin: 0;
+	padding: 9px 12px;
+	font-size: 9px;
+	letter-spacing: 2px;
+	background: rgba(4, 7, 13, 0.55);
+	border: 1px solid rgba(175, 202, 230, 0.18);
+	color: rgba(214, 229, 244, 0.66);
+}
+
+.pilot-detail-card {
+	position: absolute;
+	right: clamp(24px, 7vw, 120px);
+	top: 50%;
+	transform: translateY(-50%);
+	width: min(310px, 29vw);
+	padding: 24px 24px 20px;
+	background: linear-gradient(
+		150deg,
+		rgba(5, 8, 16, 0.95),
+		rgba(7, 12, 22, 0.78)
+	);
+	border: 1px solid currentColor;
+	box-shadow:
+		0 18px 55px rgba(0, 0, 0, 0.42),
+		0 0 32px -24px currentColor;
+	backdrop-filter: blur(12px);
+	color: var(--cyan);
+}
+
+.pilot-detail-card.accent-cyan {
+	color: var(--cyan);
+}
+.pilot-detail-card.accent-green {
+	color: #7dffa0;
+}
+.pilot-detail-card.accent-purple {
+	color: var(--purple);
+}
+
+.pilot-detail-card::before {
+	content: '';
+	position: absolute;
+	left: -44px;
+	top: 38px;
+	width: 44px;
+	height: 1px;
+	background: currentColor;
+	opacity: 0.55;
+}
+
+.pilot-detail-eyebrow {
+	font-size: 8px;
+	letter-spacing: 3px;
+	opacity: 0.62;
+	margin-bottom: 8px;
+}
+
+.pilot-detail-card h2 {
+	margin: 0;
+	font-size: 24px;
+	letter-spacing: 3px;
+	color: #f4f9ff;
+}
+
+.pilot-detail-role {
+	margin-top: 4px;
+	font-size: 10px;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	color: currentColor;
+}
+
+.pilot-detail-card > p {
+	margin: 15px 0 18px;
+	font-size: 10px;
+	line-height: 1.65;
+	color: rgba(217, 231, 244, 0.63);
+}
+
+.pilot-detail-stats {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	padding: 14px 0;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pilot-detail-stat {
+	display: grid;
+	grid-template-columns: 48px 1fr 18px;
+	align-items: center;
+	gap: 9px;
+	font-size: 8px;
+	letter-spacing: 1.5px;
+	color: rgba(226, 237, 248, 0.64);
+}
+
+.pilot-detail-stat strong {
+	font-size: 9px;
+	font-weight: 500;
+	color: currentColor;
+	text-align: right;
+}
+
+.pilot-detail-track {
+	height: 4px;
+	background: rgba(255, 255, 255, 0.08);
+	overflow: hidden;
+}
+
+.pilot-detail-track i {
+	display: block;
+	height: 100%;
+	background: currentColor;
+	box-shadow: 0 0 10px currentColor;
+}
+
+.pilot-detail-abilities-title {
+	margin: 16px 0 9px;
+	font-size: 8px;
+	letter-spacing: 2.4px;
+	color: rgba(225, 236, 247, 0.56);
+}
+
+.pilot-detail-abilities {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.pilot-detail-ability {
+	display: grid;
+	grid-template-columns: 22px 1fr;
+	gap: 8px;
+	align-items: start;
+}
+
+.pilot-detail-ability-icon {
+	font-size: 13px;
+	color: currentColor;
+	text-align: center;
+}
+
+.pilot-detail-ability b,
+.pilot-detail-ability small {
+	display: block;
+}
+
+.pilot-detail-ability b {
+	font-size: 9px;
+	font-weight: 500;
+	letter-spacing: 1.4px;
+	color: #eaf3fc;
+}
+
+.pilot-detail-ability small {
+	margin-top: 2px;
+	font-size: 8px;
+	line-height: 1.45;
+	color: rgba(207, 224, 239, 0.47);
+}
+
+.pilot-confirm-btn {
+	width: 100%;
+	margin-top: 18px;
+	padding: 11px 12px;
+	font-size: 9px;
+	letter-spacing: 2px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid currentColor;
+	color: currentColor;
+}
+
+.pilot-confirm-btn:hover {
+	background: currentColor;
+	color: #04060c;
+	box-shadow: 0 0 24px -10px currentColor;
+}
+
+.pilot-detail-footer-hidden {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+@media (max-width: 880px) {
+	.pilot-lineup {
+		width: 92vw;
+		gap: 8px;
+	}
+	.pilot-lineup-choice {
+		padding-left: 4px;
+		padding-right: 4px;
+	}
+	.pilot-lineup-name {
+		font-size: 11px;
+	}
+	.pilot-detail-card {
+		right: 18px;
+		width: min(280px, 42vw);
+	}
+}
