@@ -7,20 +7,13 @@ import { Menu } from '../ui/Menu.js'
 import { AudioManager } from '../audio/AudioManager.js'
 import { MenuBackground } from './MenuBackground.js'
 import storage from '../services/StorageService.js'
-import { CharacterSelectFlow } from '../launchbay/CharacterSelectFlow.js'
-import { LaunchBayScene } from '../launchbay/LaunchBayScene.js'
-import { getCharacterById } from '../launchbay/data/characters.js'
+import { HangarScene } from './HangarScene.js'
+import { CharacterSelect } from '../ui/CharacterSelect.js'
+import { SHIPS } from '../systems/ShipManager.js'
 
-// Menu -> character select (src/launchbay/CharacterSelectFlow.js, its own
-// canvas/HUD) -> Launch Bay (src/launchbay/LaunchBayScene.js, ship pick +
-// LAUNCH, drawn on the shared canvas) -> Level 1. Level 1 gameplay
+// Menu -> Hangar (character/ship select) -> Level 1. Level 1 gameplay
 // (src/levels/Level1/**, src/player/**, src/physics/**, src/ui/HUD.js)
 // is wired up via _level1() below — see README.md for per-level status.
-//
-// This replaces the old Menu -> HangarScene + CharacterSelect.js flow.
-// CharacterSelectFlow's pilot roster (Zara/Kai/Nyx) is the same three
-// pilots as before by id, so gameState.selectedCharacter / StorageService
-// stay compatible with what Level1/HUD already expect.
 
 export class Game {
 	constructor() {
@@ -38,13 +31,13 @@ export class Game {
 		this.audio.setMuted(profile.settings.muted)
 
 		this.menu = new Menu({
-			onLaunch: (name) => this._showCharacterSelect(name),
+			onLaunch: (name) => this._showHangar(name),
 			audioManager: this.audio,
 			storage,
 		})
 
-		this.characterSelectFlow = null
-		this.launchBayScene = null
+		this.hangarScene = null
+		this.characterSelect = null
 
 		this.clock = new THREE.Clock()
 		this.menuBackground = new MenuBackground(
@@ -56,9 +49,9 @@ export class Game {
 		this._loop()
 	}
 
-	/** PLAY -> callsign entered -> here. Shows the character-select screen
-	 * (pick a pilot) before the Launch Bay (pick a ship) and then a level. */
-	_showCharacterSelect(name) {
+	/** PLAY -> callsign entered -> here. Shows the hangar (pick a pilot,
+	 * look over the ship) before actually launching into a level. */
+	_showHangar(name) {
 		const profile = storage.load()
 		this.gameState.playerName =
 			name || profile.playerName || this.gameState.playerName
@@ -66,10 +59,8 @@ export class Game {
 			profile.selectedCharacter ||
 			this.gameState.selectedCharacter ||
 			'zara'
-		this.gameState.selectedShip =
-			profile.selectedShip ||
-			this.gameState.selectedShip ||
-			'raven'
+		const savedShip = profile.selectedShip || this.gameState.selectedShip
+		this.gameState.selectedShip = SHIPS[savedShip] ? savedShip : 'starfighter'
 		this.menu.hideAll()
 
 		if (this.menuBackground) {
@@ -77,58 +68,55 @@ export class Game {
 			this.menuBackground = null
 		}
 
-		this.characterSelectFlow = new CharacterSelectFlow({
-			initialPilot: this.gameState.selectedCharacter,
-			playerName: this.gameState.playerName,
-			onReady: (pilotKey) => {
-				this.gameState.selectedCharacter = pilotKey
-				this._showLaunchBay()
-			},
-			onBack: () => this._backToMenu(),
-		})
-	}
-
-	/** Pilot chosen -> here. Shows the ship the pilot is about to fly
-	 * (real spaceship.glb, see LaunchBayScene) before actually launching. */
-	_showLaunchBay() {
-		if (this.characterSelectFlow) {
-			this.characterSelectFlow.dispose()
-			this.characterSelectFlow = null
-		}
-
-		const pilot = getCharacterById(this.gameState.selectedCharacter)
-
-		this.launchBayScene = new LaunchBayScene(
+		this.hangarScene = new HangarScene(
 			this.sceneManager,
-			this.assetManager,
-			{
-				initialShip: this.gameState.selectedShip,
-				pilotName:
-					pilot?.name ||
-					this.gameState.playerName,
-				onLaunch: (shipKey) =>
-					this._level1(
-						this.gameState.playerName,
-						this.gameState
-							.selectedCharacter,
-						shipKey
-					),
-				onBack: () =>
-					this._showCharacterSelect(
-						this.gameState.playerName
-					),
-			}
+			this.assetManager
 		)
+		this.hangarScene.showCharacterOverview()
+
+		this.characterSelect = new CharacterSelect({
+			initialPilot: this.gameState.selectedCharacter,
+			initialShip: this.gameState.selectedShip,
+			onSelectPilot: (key) => {
+				this.gameState.selectedCharacter = key
+				this.hangarScene.showCharacter(key)
+			},
+			onPilotOverview: () => {
+				this.hangarScene.showCharacterOverview()
+			},
+			onSelectShip: (key) => {
+				this.gameState.selectedShip = key
+				this.hangarScene.showShip(key)
+			},
+			onTabChange: (tab) => {
+				if (tab === 'ship') {
+					this.hangarScene.showShip(
+						this.characterSelect.getSelectedShipKey()
+					)
+				} else {
+					this.hangarScene.showCharacterOverview()
+				}
+			},
+			onContinue: (pilotKey, shipKey) =>
+				this._level1(
+					this.gameState.playerName,
+					pilotKey,
+					shipKey
+				),
+			onBack: () => this._backToMenu(),
+			storageService: storage,
+		})
+		this.characterSelect.show()
 	}
 
 	_backToMenu() {
-		if (this.characterSelectFlow) {
-			this.characterSelectFlow.dispose()
-			this.characterSelectFlow = null
+		if (this.characterSelect) {
+			this.characterSelect.hide()
+			this.characterSelect = null
 		}
-		if (this.launchBayScene) {
-			this.launchBayScene.dispose()
-			this.launchBayScene = null
+		if (this.hangarScene) {
+			this.hangarScene.dispose()
+			this.hangarScene = null
 		}
 		this.menuBackground = new MenuBackground(
 			this.sceneManager,
@@ -144,7 +132,7 @@ export class Game {
 			this.gameState.selectedCharacter ||
 			'zara'
 		this.gameState.selectedShip =
-			shipKey || this.gameState.selectedShip || 'raven'
+			shipKey || this.gameState.selectedShip || 'starfighter'
 
 		storage.save({
 			playerName: this.gameState.playerName,
@@ -156,13 +144,13 @@ export class Game {
 			`LAUNCH pressed for "${this.gameState.playerName}" flying as "${this.gameState.selectedCharacter}" in spaceship "${this.gameState.selectedShip}".`
 		)
 
-		if (this.characterSelectFlow) {
-			this.characterSelectFlow.dispose()
-			this.characterSelectFlow = null
+		if (this.characterSelect) {
+			this.characterSelect.hide()
+			this.characterSelect = null
 		}
-		if (this.launchBayScene) {
-			this.launchBayScene.dispose()
-			this.launchBayScene = null
+		if (this.hangarScene) {
+			this.hangarScene.dispose()
+			this.hangarScene = null
 		}
 
 		this.currentLevel?.dispose()
@@ -175,8 +163,8 @@ export class Game {
 		if (this.menuBackground) {
 			this.menuBackground.update(delta)
 		}
-		if (this.launchBayScene) {
-			this.launchBayScene.update(delta)
+		if (this.hangarScene) {
+			this.hangarScene.update(delta)
 		}
 		this.currentLevel?.update?.(delta)
 		this.sceneManager.render()

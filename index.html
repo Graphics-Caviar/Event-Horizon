@@ -445,12 +445,19 @@
 				</div>
 			</div>
 
-			<div id="pilot-panel" class="hangar-panel">
-				<div class="pilot-cards" id="pilot-cards"></div>
-				<div
-					class="stat-comparison"
-					id="stat-comparison"
-				></div>
+			<div id="pilot-panel" class="hangar-panel pilot-select-panel">
+				<div id="pilot-overview" class="pilot-overview">
+					<div class="pilot-overview-heading">
+						<span>CHOOSE YOUR SURVIVOR</span>
+						<small>Select a pilot to inspect their abilities</small>
+					</div>
+					<div class="pilot-lineup" id="pilot-cards"></div>
+				</div>
+
+				<div id="pilot-detail" class="pilot-detail hidden">
+					<button id="btn-pilot-overview" class="pilot-overview-back">← ALL PILOTS</button>
+					<aside id="pilot-detail-card" class="pilot-detail-card"></aside>
+				</div>
 			</div>
 
 			<div id="ship-panel" class="hangar-panel hidden">

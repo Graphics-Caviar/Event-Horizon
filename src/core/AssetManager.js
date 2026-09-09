@@ -1,52 +1,45 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
-// The public/assets folders mostly still contain placeholder .txt files, so
-// most of this build is procedural THREE geometry/materials. This file
-// centralises that so we don't duplicate geometry/material setup across
-// levels. loadModel() below is the "once real assets land" helper the old
-// TODO here asked for — public/assets/models/spaceship/spaceship.glb is the
-// first real asset using it (see src/launchbay/LaunchBayScene.js).
+// The public/assets folders only contain placeholder .txt files right now
+// (no models/textures have been added to the repo yet), so everything in
+// this build is procedural THREE geometry/materials. This file centralises
+// that so we don't duplicate geometry/material setup across levels, and
+// so swapping in real GLTF models later only means editing this file.
+//
+// TODO (once real assets land in public/assets/...): add a loadModel(path)
+// helper here using THREE.GLTFLoader and have Spaceship/Rover/Character
+// prefer a loaded model over the procedural fallback.
 
 export class AssetManager {
 	constructor() {
 		this._starfieldTexture = null
-		this._gltfLoader = new GLTFLoader()
-		this._modelCache = new Map() // path -> in-flight/resolved Promise<THREE.Object3D>
+		this.gltfLoader = new GLTFLoader()
+		this._modelCache = new Map()
 	}
 
-	/**
-	 * Loads a GLB/GLTF file and resolves with its scene root (an
-	 * un-normalized THREE.Object3D — callers scale/ground it themselves,
-	 * since assets aren't guaranteed to share a common export scale).
-	 * Identical paths share one load/cache entry; callers that need an
-	 * independent instance (e.g. to tint per-ship) should `.clone(true)`
-	 * the result rather than mutate it directly.
-	 * @param {string} path
-	 * @returns {Promise<THREE.Object3D>}
-	 */
-	loadModel(path) {
-		if (this._modelCache.has(path))
-			return this._modelCache.get(path)
+	async loadModel(pathOrPaths) {
+		const paths = Array.isArray(pathOrPaths) ? pathOrPaths : [pathOrPaths]
+		let lastError = null
 
-		const promise = new Promise((resolve, reject) => {
-			this._gltfLoader.load(
-				path,
-				(gltf) => resolve(gltf.scene),
-				undefined,
-				(err) => {
-					this._modelCache.delete(path)
-					reject(
-						new Error(
-							`Failed to load model "${path}": ${err?.message || err}`
-						)
+		for (const path of paths) {
+			try {
+				if (!this._modelCache.has(path)) {
+					this._modelCache.set(
+						path,
+						this.gltfLoader.loadAsync(path).then((gltf) => gltf.scene)
 					)
 				}
-			)
-		})
+				const source = await this._modelCache.get(path)
+				return source.clone(true)
+			} catch (error) {
+				lastError = error
+				this._modelCache.delete(path)
+				console.warn(`Model load failed from ${path}; trying fallback if available.`)
+			}
+		}
 
-		this._modelCache.set(path, promise)
-		return promise
+		throw lastError || new Error('No model path supplied')
 	}
 
 	createAsteroidGeometry(seed = Math.random()) {
