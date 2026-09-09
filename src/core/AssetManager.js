@@ -19,7 +19,9 @@ export class AssetManager {
 	}
 
 	async loadModel(pathOrPaths) {
-		const paths = Array.isArray(pathOrPaths) ? pathOrPaths : [pathOrPaths]
+		const paths = Array.isArray(pathOrPaths)
+			? pathOrPaths
+			: [pathOrPaths]
 		let lastError = null
 
 		for (const path of paths) {
@@ -27,7 +29,12 @@ export class AssetManager {
 				if (!this._modelCache.has(path)) {
 					this._modelCache.set(
 						path,
-						this.gltfLoader.loadAsync(path).then((gltf) => gltf.scene)
+						this.gltfLoader
+							.loadAsync(path)
+							.then(
+								(gltf) =>
+									gltf.scene
+							)
 					)
 				}
 				const source = await this._modelCache.get(path)
@@ -35,7 +42,9 @@ export class AssetManager {
 			} catch (error) {
 				lastError = error
 				this._modelCache.delete(path)
-				console.warn(`Model load failed from ${path}; trying fallback if available.`)
+				console.warn(
+					`Model load failed from ${path}; trying fallback if available.`
+				)
 			}
 		}
 

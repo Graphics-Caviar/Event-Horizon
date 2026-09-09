@@ -10,8 +10,15 @@ export const SHIPS = {
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/spaceship/spaceship.glb',
 		],
 		tagline: '"Ready for anything."',
-		description: 'A balanced multi-role spacecraft combining reliable speed, protection and handling for unpredictable missions.',
-		stats: { speed: 8, firepower: 8, durability: 7, shields: 7, agility: 8 },
+		description:
+			'A balanced multi-role spacecraft combining reliable speed, protection and handling for unpredictable missions.',
+		stats: {
+			speed: 8,
+			firepower: 8,
+			durability: 7,
+			shields: 7,
+			agility: 8,
+		},
 		specs: [
 			{ label: 'Engine', value: 'Vector Fusion Drive' },
 			{ label: 'Hull', value: 'Composite Battleframe' },
@@ -27,8 +34,15 @@ export const SHIPS = {
 		role: 'High-Speed Interceptor',
 		model: '/assets/models/spaceship/starfighter.glb',
 		tagline: '"Speed is survival."',
-		description: 'A lightweight interceptor designed for rapid acceleration, tight manoeuvres and escaping extreme gravitational fields.',
-		stats: { speed: 10, firepower: 7, durability: 5, shields: 6, agility: 10 },
+		description:
+			'A lightweight interceptor designed for rapid acceleration, tight manoeuvres and escaping extreme gravitational fields.',
+		stats: {
+			speed: 10,
+			firepower: 7,
+			durability: 5,
+			shields: 6,
+			agility: 10,
+		},
 		specs: [
 			{ label: 'Engine', value: 'Twin Plasma Drives' },
 			{ label: 'Hull', value: 'Light Carbon Composite' },
@@ -44,8 +58,15 @@ export const SHIPS = {
 		role: 'Heavy Explorer',
 		model: '/assets/models/spaceship/aegis.glb',
 		tagline: '"Built to survive the impossible."',
-		description: 'A heavily reinforced exploration vessel designed to endure asteroid impacts, gravitational instability and deep-space missions.',
-		stats: { speed: 6, firepower: 8, durability: 10, shields: 9, agility: 5 },
+		description:
+			'A heavily reinforced exploration vessel designed to endure asteroid impacts, gravitational instability and deep-space missions.',
+		stats: {
+			speed: 6,
+			firepower: 8,
+			durability: 10,
+			shields: 9,
+			agility: 5,
+		},
 		specs: [
 			{ label: 'Engine', value: 'Dual Ion Reactors' },
 			{ label: 'Hull', value: 'Reinforced Titanium Armour' },

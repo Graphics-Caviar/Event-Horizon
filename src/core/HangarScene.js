@@ -29,7 +29,10 @@ export class HangarScene {
 		this.podium.position.y = -0.15
 		this.group.add(this.podium)
 
-		this.characterManager = new CharacterManager(this.group, assetManager)
+		this.characterManager = new CharacterManager(
+			this.group,
+			assetManager
+		)
 		this.overviewCharacters = new Map()
 		this.ship = null
 		this._currentCharacterKey = null
@@ -57,9 +60,16 @@ export class HangarScene {
 
 		try {
 			const models = await Promise.all(
-				configs.map((config) => this.assetManager.loadModel(config.model))
+				configs.map((config) =>
+					this.assetManager.loadModel(
+						config.model
+					)
+				)
 			)
-			if (requestId !== this._overviewRequestId || this._mode !== 'character-overview') {
+			if (
+				requestId !== this._overviewRequestId ||
+				this._mode !== 'character-overview'
+			) {
 				return
 			}
 
@@ -67,9 +77,17 @@ export class HangarScene {
 				this._prepareCharacter(model, 2.55)
 				model.position.x = positions[index]
 				model.position.z = index === 1 ? 0.05 : 0
-				model.rotation.y = index === 0 ? 0.06 : index === 2 ? -0.06 : 0
+				model.rotation.y =
+					index === 0
+						? 0.06
+						: index === 2
+							? -0.06
+							: 0
 				this.group.add(model)
-				this.overviewCharacters.set(configs[index].key, model)
+				this.overviewCharacters.set(
+					configs[index].key,
+					model
+				)
 			})
 		} catch (error) {
 			console.error('Unable to display pilot lineup:', error)
@@ -88,7 +106,10 @@ export class HangarScene {
 		this._currentCharacterKey = key
 		try {
 			const model = await this.characterManager.select(key)
-			if (requestId !== this._characterRequestId || this._mode !== 'character-detail') {
+			if (
+				requestId !== this._characterRequestId ||
+				this._mode !== 'character-detail'
+			) {
 				if (model?.parent) model.parent.remove(model)
 				return
 			}
@@ -115,13 +136,22 @@ export class HangarScene {
 		this._removeShip()
 
 		try {
-			const model = await this.assetManager.loadModel(config.model)
-			if (requestId !== this._shipRequestId || this._mode !== 'ship') return
+			const model = await this.assetManager.loadModel(
+				config.model
+			)
+			if (
+				requestId !== this._shipRequestId ||
+				this._mode !== 'ship'
+			)
+				return
 			this._prepareShip(model)
 			this.group.add(model)
 			this.ship = model
 		} catch (error) {
-			console.error(`Unable to display ${config.name}:`, error)
+			console.error(
+				`Unable to display ${config.name}:`,
+				error
+			)
 		}
 	}
 
@@ -154,7 +184,8 @@ export class HangarScene {
 		box = new THREE.Box3().setFromObject(model)
 		const size = box.getSize(new THREE.Vector3())
 		const largestDimension = Math.max(size.x, size.y, size.z)
-		if (largestDimension > 0) model.scale.setScalar(targetSize / largestDimension)
+		if (largestDimension > 0)
+			model.scale.setScalar(targetSize / largestDimension)
 		box = new THREE.Box3().setFromObject(model)
 		const newCenter = box.getCenter(new THREE.Vector3())
 		model.position.x -= newCenter.x
@@ -176,15 +207,23 @@ export class HangarScene {
 
 	update(delta) {
 		this._time += delta
-		if (this._mode === 'character-overview' && this.overviewCharacters.size) {
+		if (
+			this._mode === 'character-overview' &&
+			this.overviewCharacters.size
+		) {
 			let i = 0
 			for (const model of this.overviewCharacters.values()) {
-				model.position.y += Math.sin(this._time * 1.15 + i * 1.8) * 0.0007
+				model.position.y +=
+					Math.sin(this._time * 1.15 + i * 1.8) *
+					0.0007
 				i++
 			}
 			this.camera.position.set(0, 1.55, 6.7)
 			this.camera.lookAt(0, 1.18, 0)
-		} else if (this._mode === 'character-detail' && this.characterManager.currentModel) {
+		} else if (
+			this._mode === 'character-detail' &&
+			this.characterManager.currentModel
+		) {
 			const model = this.characterManager.currentModel
 			model.rotation.y = Math.sin(this._time * 0.45) * 0.08
 			this.camera.position.set(-0.25, 1.6, 4.35)

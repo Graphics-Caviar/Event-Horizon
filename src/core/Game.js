@@ -59,8 +59,11 @@ export class Game {
 			profile.selectedCharacter ||
 			this.gameState.selectedCharacter ||
 			'zara'
-		const savedShip = profile.selectedShip || this.gameState.selectedShip
-		this.gameState.selectedShip = SHIPS[savedShip] ? savedShip : 'starfighter'
+		const savedShip =
+			profile.selectedShip || this.gameState.selectedShip
+		this.gameState.selectedShip = SHIPS[savedShip]
+			? savedShip
+			: 'starfighter'
 		this.menu.hideAll()
 
 		if (this.menuBackground) {

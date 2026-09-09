@@ -53,9 +53,13 @@ export class CharacterSelect {
 		this.onBack = onBack || (() => {})
 
 		this.selectedPilotKey =
-			initialPilot || this.storage.getSelectedPilot() || 'zara'
+			initialPilot ||
+			this.storage.getSelectedPilot() ||
+			'zara'
 		const savedShip = initialShip || this.storage.getSelectedShip()
-		this.selectedShipKey = SHIPS[savedShip] ? savedShip : 'starfighter'
+		this.selectedShipKey = SHIPS[savedShip]
+			? savedShip
+			: 'starfighter'
 		this.pilotView = 'overview'
 		this.activeTab = 'pilot'
 
@@ -63,31 +67,44 @@ export class CharacterSelect {
 		this.pilotCardsEl = document.getElementById('pilot-cards')
 		this.pilotOverviewEl = document.getElementById('pilot-overview')
 		this.pilotDetailEl = document.getElementById('pilot-detail')
-		this.pilotDetailCardEl = document.getElementById('pilot-detail-card')
+		this.pilotDetailCardEl =
+			document.getElementById('pilot-detail-card')
 		this.pilotPanel = document.getElementById('pilot-panel')
 		this.shipCardsEl = document.getElementById('ship-cards')
-		this.shipStatComparisonEl = document.getElementById('ship-stat-comparison')
+		this.shipStatComparisonEl = document.getElementById(
+			'ship-stat-comparison'
+		)
 		this.shipPanel = document.getElementById('ship-panel')
 		this.tabPilotBtn = document.getElementById('tab-pilot')
 		this.tabShipBtn = document.getElementById('tab-ship')
-		this.continueBtn = document.getElementById('btn-hangar-continue')
+		this.continueBtn = document.getElementById(
+			'btn-hangar-continue'
+		)
 		this.backBtn = document.getElementById('btn-hangar-back')
 
 		this._renderPilotLineup()
 		this._renderShipCards()
 		this._renderShipStatComparison()
 
-		this.tabPilotBtn.addEventListener('click', () => this._setTab('pilot'))
-		this.tabShipBtn.addEventListener('click', () => this._setTab('ship'))
-		document.getElementById('btn-pilot-overview').addEventListener('click', () =>
-			this._showPilotOverview()
+		this.tabPilotBtn.addEventListener('click', () =>
+			this._setTab('pilot')
+		)
+		this.tabShipBtn.addEventListener('click', () =>
+			this._setTab('ship')
+		)
+		document.getElementById('btn-pilot-overview').addEventListener(
+			'click',
+			() => this._showPilotOverview()
 		)
 		this.continueBtn.addEventListener('click', () => {
 			if (this.activeTab === 'pilot') {
 				this._setTab('ship')
 				return
 			}
-			this.onContinue(this.selectedPilotKey, this.selectedShipKey)
+			this.onContinue(
+				this.selectedPilotKey,
+				this.selectedShipKey
+			)
 		})
 		this.backBtn.addEventListener('click', () => {
 			if (this.activeTab === 'ship') {
@@ -110,7 +127,8 @@ export class CharacterSelect {
 		this.shipPanel.classList.toggle('hidden', tab !== 'ship')
 		this.continueBtn.textContent =
 			tab === 'pilot' ? 'READY → SHIP SELECT' : 'LAUNCH →'
-		this.backBtn.textContent = tab === 'pilot' ? '← BACK' : '← PILOT'
+		this.backBtn.textContent =
+			tab === 'pilot' ? '← BACK' : '← PILOT'
 
 		if (tab === 'pilot') {
 			this._showPilotOverview(false)
@@ -136,7 +154,9 @@ export class CharacterSelect {
 		this.pilotCardsEl
 			.querySelectorAll('.pilot-lineup-choice')
 			.forEach((btn) => {
-				btn.addEventListener('click', () => this._inspectPilot(btn.dataset.key))
+				btn.addEventListener('click', () =>
+					this._inspectPilot(btn.dataset.key)
+				)
 			})
 	}
 
@@ -174,21 +194,30 @@ export class CharacterSelect {
 
 			<div class="pilot-detail-abilities-title">ABILITIES</div>
 			<div class="pilot-detail-abilities">
-				${c.abilities.map((a, index) => `
+				${c.abilities
+					.map(
+						(a, index) => `
 					<div class="pilot-detail-ability">
 						<span class="pilot-detail-ability-icon">${ABILITY_ICONS[index] || '◇'}</span>
 						<span><b>${a.name}</b><small>${a.description}</small></span>
-					</div>`).join('')}
+					</div>`
+					)
+					.join('')}
 			</div>
 
 			<button id="btn-confirm-pilot" class="pilot-confirm-btn">SELECT ${c.name.toUpperCase()}</button>
 		`
 
-		document.getElementById('btn-confirm-pilot').addEventListener('click', () => {
-			this.storage.setSelectedPilot(this.selectedPilotKey)
-			this._renderPilotLineup()
-			this._setTab('ship')
-		})
+		document.getElementById('btn-confirm-pilot').addEventListener(
+			'click',
+			() => {
+				this.storage.setSelectedPilot(
+					this.selectedPilotKey
+				)
+				this._renderPilotLineup()
+				this._setTab('ship')
+			}
+		)
 	}
 
 	_showPilotOverview(notifyScene = true) {
@@ -228,9 +257,13 @@ export class CharacterSelect {
 			)
 			.join('')
 
-		this.shipCardsEl.querySelectorAll('.ship-select-btn').forEach((btn) => {
-			btn.addEventListener('click', () => this._selectShip(btn.dataset.key))
-		})
+		this.shipCardsEl
+			.querySelectorAll('.ship-select-btn')
+			.forEach((btn) => {
+				btn.addEventListener('click', () =>
+					this._selectShip(btn.dataset.key)
+				)
+			})
 	}
 
 	_selectShip(key) {
@@ -248,14 +281,14 @@ export class CharacterSelect {
       <div class="stat-compare-row">
         <span class="stat-compare-label">${stat.toUpperCase()}</span>
         ${Object.values(SHIPS)
-			.map(
-				(s) => `
+		.map(
+			(s) => `
           <div class="stat-bar-track ${s.accentClass}">
             <div class="stat-bar-fill" style="width:${s.stats[stat] * 10}%"></div>
           </div>
         `
-			)
-			.join('')}
+		)
+		.join('')}
       </div>
     `
 		).join('')
