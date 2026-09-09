@@ -1,0 +1,765 @@
+/* ==========================================================================
+   EVENT HORIZON — design tokens
+   Established in Stage 1 so every component built in later stages (cards,
+   HUD, stats bars) derives from the same palette/type scale instead of
+   inventing ad-hoc values.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+:root {
+	/* --- Space / surface --- */
+	--color-void: #05070a; /* base background, near-black */
+	--color-void-deep: #020304; /* deepest background layer, behind nebula */
+	--color-panel: rgba(12, 17, 24, 0.55);
+	--color-panel-strong: rgba(12, 17, 24, 0.8);
+	--color-panel-border: rgba(255, 255, 255, 0.08);
+	--color-panel-border-strong: rgba(255, 255, 255, 0.18);
+
+	/* --- Text --- */
+	--color-text-primary: #e9f2f8;
+	--color-text-dim: #7d8a99;
+	--color-text-faint: #4a5560;
+
+	/* --- Pilot theme colors (drive per-card accenting) --- */
+	--color-zara: #00bfff;
+	--color-zara-dim: #0a3a52;
+	--color-kai: #3ddc84;
+	--color-kai-dim: #123b26;
+	--color-nyx: #9b5cff;
+	--color-nyx-dim: #2c1a4d;
+
+	/* --- Status --- */
+	--color-danger: #ff4d5e;
+	--color-warning: #ffb020;
+
+	/* --- Type --- */
+	--font-display:
+		'Orbitron', 'Segoe UI', sans-serif; /* titles, names, headers — angular, wide */
+	--font-body:
+		'Rajdhani', 'Segoe UI', sans-serif; /* descriptions, ability text — technical, condensed */
+	--font-mono:
+		'Share Tech Mono', monospace; /* stat numbers, HUD readouts, level/id tags */
+
+	/* --- Motion --- */
+	--ease-hud: cubic-bezier(0.16, 1, 0.3, 1);
+	--duration-fast: 150ms;
+	--duration-medium: 350ms;
+	--duration-slow: 650ms;
+}
+
+/* ==========================================================================
+   Reset
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	height: 100%;
+	background: var(--color-void);
+	color: var(--color-text-primary);
+	font-family: var(--font-body);
+	overflow: hidden;
+	-webkit-font-smoothing: antialiased;
+}
+
+button {
+	font-family: inherit;
+	cursor: pointer;
+}
+
+/* ==========================================================================
+   Mount points
+   ========================================================================== */
+
+#scene-root {
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+}
+
+#scene-root canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+#ui-root {
+	position: fixed;
+	inset: 0;
+	z-index: 10;
+	pointer-events: none; /* individual HUD panels opt back in via .interactive */
+}
+
+#ui-root .interactive {
+	pointer-events: auto;
+}
+
+/* ==========================================================================
+   Loading screen (visible from Stage 1; scene/asset progress wired in later)
+   ========================================================================== */
+
+#loading-screen {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: radial-gradient(
+		ellipse at center,
+		#0b1016 0%,
+		var(--color-void-deep) 100%
+	);
+	transition:
+		opacity var(--duration-slow) var(--ease-hud),
+		visibility var(--duration-slow);
+}
+
+#loading-screen.is-hidden {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.loading-inner {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1.5rem;
+	width: min(420px, 80vw);
+}
+
+.loading-title {
+	font-family: var(--font-display);
+	font-weight: 900;
+	font-size: clamp(1.5rem, 4vw, 2.25rem);
+	letter-spacing: 0.35em;
+	color: var(--color-text-primary);
+	text-indent: 0.35em; /* compensate for trailing letter-spacing so it looks centered */
+}
+
+.loading-bar {
+	width: 100%;
+	height: 2px;
+	background: var(--color-panel-border);
+	position: relative;
+	overflow: hidden;
+}
+
+.loading-bar-fill {
+	position: absolute;
+	inset: 0;
+	width: 30%;
+	background: linear-gradient(
+		90deg,
+		transparent,
+		var(--color-zara),
+		transparent
+	);
+	animation: loading-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-sweep {
+	0% {
+		transform: translateX(-120%);
+	}
+	100% {
+		transform: translateX(420%);
+	}
+}
+
+.loading-status {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	letter-spacing: 0.2em;
+	color: var(--color-text-dim);
+}
+
+/* ==========================================================================
+   Character grid + cards (Stage 3)
+   Full HUD chrome (top bar, stats panel, pilot-info copy, bottom bar) is
+   layered around this in Stage 6 — this block only owns the three cards.
+   ========================================================================== */
+
+.character-grid {
+	display: flex;
+	gap: 2.75rem;
+	align-items: flex-end;
+	width: min(1180px, 94vw);
+	justify-content: center;
+	/* Deliberately no background anywhere in this row — it sits directly
+     over the space where the pilots' 3D models stand in the WebGL scene
+     behind it, and unlike the old design, nothing here is meant to occupy
+     the same screen region as a model. Full detail lives in
+     PilotInfoPanel, positioned clear of this column entirely — see the
+     note at the top of CharacterCard.js. */
+}
+
+.character-card {
+	--card-color: #ffffff;
+	--card-color-dim: rgba(255, 255, 255, 0.15);
+
+	position: relative;
+	flex: 1 1 0;
+	min-width: 160px;
+	max-width: 260px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	color: var(--color-text-primary);
+	outline: none;
+	cursor: pointer;
+	transition:
+		transform var(--duration-medium) var(--ease-hud),
+		opacity var(--duration-medium) var(--ease-hud),
+		filter var(--duration-medium) var(--ease-hud);
+}
+
+.character-card.is-hovered {
+	transform: translateY(-4px);
+}
+
+.character-card.is-selected {
+	transform: translateY(-4px);
+}
+
+.character-card.is-dimmed {
+	opacity: 0.45;
+	filter: saturate(0.6);
+	transform: none;
+}
+
+/* Once a pilot is picked, the other two labels step fully out of the
+   way rather than lingering dimmed — matches the fact their models
+   are no longer part of the featured camera shot either. */
+.character-grid.has-selection .character-card:not(.is-selected) {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.character-card__label {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.5rem 1rem;
+	text-align: center;
+	border-bottom: 1px solid transparent;
+	transition: border-color var(--duration-medium) var(--ease-hud);
+}
+
+.character-card:focus-visible .character-card__label,
+.character-card.is-hovered .character-card__label,
+.character-card.is-selected .character-card__label {
+	border-bottom-color: var(--card-color);
+}
+
+.character-card__name {
+	margin: 0;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 1.15rem;
+	letter-spacing: 0.06em;
+	color: var(--color-text-primary);
+}
+
+.character-card__role {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	letter-spacing: 0.16em;
+	color: var(--card-color);
+}
+
+.ability-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.ability-list__item {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.6rem;
+}
+
+.ability-list__icon {
+	flex: 0 0 auto;
+	width: 1.5rem;
+	height: 1.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--card-color);
+}
+
+.ability-list__text {
+	display: flex;
+	flex-direction: column;
+	line-height: 1.25;
+}
+
+.ability-list__name {
+	font-family: var(--font-body);
+	font-weight: 700;
+	font-size: 0.78rem;
+	letter-spacing: 0.04em;
+	color: var(--color-text-primary);
+}
+
+.ability-list__desc {
+	font-size: 0.75rem;
+	color: var(--color-text-dim);
+}
+
+/* ==========================================================================
+   PilotInfoPanel
+   Full pilot detail, shown once a pilot is selected. Positioned as a
+   floating card on the right side of the screen — deliberately clear
+   of the character-grid column above, where the 3D models stand, so it
+   never shares screen space with a model the way the old
+   character-card__panel did.
+   ========================================================================== */
+
+.pilot-info-panel {
+	--card-color: #ffffff;
+	--card-color-dim: rgba(255, 255, 255, 0.15);
+
+	position: absolute;
+	top: 50%;
+	right: 2.5rem;
+	transform: translate(24px, -50%);
+	width: min(340px, 88vw);
+	max-height: min(600px, 78vh);
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 0.85rem;
+	padding: 1.25rem 1.4rem 1.5rem;
+	color: var(--color-text-primary);
+	background: var(--color-panel-strong);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border: 1px solid var(--card-color);
+	box-shadow:
+		0 0 42px -4px var(--card-color),
+		0 0 0 1px var(--card-color) inset;
+	clip-path: polygon(
+		0 0,
+		calc(100% - 22px) 0,
+		100% 22px,
+		100% 100%,
+		22px 100%,
+		0 calc(100% - 22px)
+	);
+	opacity: 0;
+	pointer-events: none;
+	visibility: hidden;
+	transition:
+		opacity var(--duration-medium) var(--ease-hud),
+		transform var(--duration-medium) var(--ease-hud),
+		visibility var(--duration-medium);
+}
+
+.pilot-info-panel.is-visible {
+	opacity: 1;
+	transform: translate(0, -50%);
+	pointer-events: auto;
+	visibility: visible;
+}
+
+.pilot-info-panel__name {
+	margin: 0;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 1.3rem;
+	letter-spacing: 0.06em;
+}
+
+.pilot-info-panel__role {
+	margin: 0.15rem 0 0;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	letter-spacing: 0.16em;
+	color: var(--card-color);
+}
+
+.pilot-info-panel__description {
+	margin: 0;
+	font-size: 0.85rem;
+	line-height: 1.4;
+	color: var(--color-text-dim);
+	font-weight: 500;
+}
+
+.pilot-info-panel__stats {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.pilot-info-panel__stat-row {
+	display: grid;
+	grid-template-columns: 5.5rem 1fr;
+	align-items: center;
+	gap: 0.6rem;
+}
+
+.pilot-info-panel__stat-label {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	letter-spacing: 0.1em;
+	color: var(--color-text-dim);
+}
+
+.pilot-info-panel__stat-track {
+	height: 5px;
+	background: rgba(255, 255, 255, 0.08);
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.pilot-info-panel__stat-fill {
+	height: 100%;
+	background: var(--card-color);
+	border-radius: 2px;
+}
+
+.pilot-info-panel__select-btn {
+	margin-top: 0.25rem;
+	padding: 0.6rem 1rem;
+	background: var(--card-color);
+	color: var(--color-void);
+	border: 1px solid var(--card-color);
+	font-family: var(--font-display);
+	font-size: 0.75rem;
+	letter-spacing: 0.14em;
+}
+
+.pilot-info-panel__select-label-active {
+	display: inline;
+}
+
+.pilot-info-panel__select-label-idle {
+	display: none;
+}
+
+/* Basic responsiveness now; full pass across all HUD elements in Stage 6. */
+@media (max-width: 880px) {
+	.character-grid {
+		flex-direction: column;
+		align-items: center;
+	}
+
+	.character-card {
+		max-width: 420px;
+		width: 90vw;
+	}
+
+	.hud-center {
+		overflow-y: auto;
+		max-height: 100%;
+	}
+
+	.pilot-info-panel {
+		top: auto;
+		bottom: 5.5rem;
+		right: 50%;
+		transform: translate(50%, 24px);
+		width: min(360px, 92vw);
+		max-height: 46vh;
+	}
+
+	.pilot-info-panel.is-visible {
+		transform: translate(50%, 0);
+	}
+}
+
+/* ==========================================================================
+   HUD shell (Stage 6)
+   Top bar (title/tagline, header, profile) + bottom bar (back/settings,
+   pilot info, ready) wrapped around whatever mounts into .hud-center
+   (just the character grid, now that StatsPanel has been retired).
+   ========================================================================== */
+
+.hud-shell {
+	--hud-accent: var(--color-text-primary);
+
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	padding: 1.5rem 2rem;
+	gap: 1rem;
+}
+
+.hud-topbar {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.hud-topbar__title {
+	font-family: var(--font-display);
+	font-weight: 900;
+	font-size: 1.1rem;
+	letter-spacing: 0.3em;
+	color: var(--color-text-primary);
+}
+
+.hud-topbar__tagline {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	letter-spacing: 0.18em;
+	color: var(--color-text-dim);
+	margin-top: 0.2rem;
+}
+
+.hud-topbar__header {
+	text-align: center;
+}
+
+.hud-topbar__header-main {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 1rem;
+	letter-spacing: 0.22em;
+	color: var(--color-text-primary);
+}
+
+.hud-topbar__header-sub {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	letter-spacing: 0.16em;
+	color: var(--hud-accent);
+	margin-top: 0.2rem;
+	transition: color var(--duration-medium) var(--ease-hud);
+}
+
+.hud-topbar__profile {
+	text-align: right;
+}
+
+.hud-topbar__profile-name {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 0.85rem;
+	letter-spacing: 0.1em;
+	color: var(--color-text-primary);
+}
+
+.hud-topbar__profile-level {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	letter-spacing: 0.14em;
+	color: var(--color-text-dim);
+	margin-top: 0.2rem;
+}
+
+.hud-center {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 1rem;
+	min-height: 0;
+}
+
+.hud-bottombar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1.5rem;
+	flex-wrap: wrap;
+}
+
+.hud-bottombar__left {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	flex: 0 0 auto;
+}
+
+.hud-bottombar__info {
+	flex: 1 1 320px;
+	max-width: 480px;
+	margin: 0 auto;
+	font-size: 0.75rem;
+	line-height: 1.4;
+	color: var(--color-text-dim);
+	text-align: center;
+}
+
+.hud-bottombar__info-title {
+	display: block;
+	font-family: var(--font-display);
+	font-size: 0.7rem;
+	letter-spacing: 0.2em;
+	color: var(--color-text-primary);
+	margin-bottom: 0.3rem;
+}
+
+.hud-bottombar__right {
+	flex: 0 0 auto;
+}
+
+/* --- Buttons --- */
+
+.hud-btn {
+	font-family: var(--font-display);
+	border: 1px solid var(--color-panel-border-strong);
+	background: var(--color-panel);
+	color: var(--color-text-primary);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	transition:
+		border-color var(--duration-fast) var(--ease-hud),
+		background var(--duration-fast) var(--ease-hud),
+		color var(--duration-fast) var(--ease-hud),
+		opacity var(--duration-fast) var(--ease-hud);
+}
+
+.hud-btn--ghost {
+	padding: 0.6rem 1.3rem;
+	font-size: 0.7rem;
+	letter-spacing: 0.16em;
+	clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
+}
+
+.hud-btn--ghost:hover {
+	border-color: var(--color-text-primary);
+}
+
+.hud-btn--icon {
+	width: 2.4rem;
+	height: 2.4rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border-radius: 50%;
+}
+
+.hud-btn--icon:hover {
+	border-color: var(--color-text-primary);
+	color: var(--color-text-primary);
+}
+
+.hud-btn--ready {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 0.7rem 1.8rem;
+	border-color: var(--hud-accent);
+	color: var(--hud-accent);
+	clip-path: polygon(
+		0 0,
+		calc(100% - 12px) 0,
+		100% 12px,
+		100% 100%,
+		12px 100%,
+		0 100%
+	);
+}
+
+.hud-btn--ready-label {
+	font-size: 0.85rem;
+	font-weight: 700;
+	letter-spacing: 0.2em;
+}
+
+.hud-btn--ready-sub {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.08em;
+	color: var(--color-text-dim);
+	margin-top: 0.15rem;
+}
+
+.hud-btn--ready:not(:disabled):hover {
+	background: var(--hud-accent);
+	color: var(--color-void);
+}
+
+.hud-btn--ready:not(:disabled):hover .hud-btn--ready-sub {
+	color: var(--color-void);
+	opacity: 0.8;
+}
+
+.hud-btn:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+/* --- Responsiveness (full pass across the HUD) --- */
+
+@media (max-width: 980px) {
+	.hud-topbar__tagline,
+	.hud-bottombar__info {
+		display: none;
+	}
+}
+
+@media (max-width: 880px) {
+	.hud-shell {
+		padding: 1rem 1.25rem;
+	}
+
+	.hud-topbar {
+		justify-content: space-between;
+	}
+
+	.hud-topbar__header {
+		order: 3;
+		flex-basis: 100%;
+		text-align: center;
+	}
+
+	.hud-bottombar {
+		justify-content: center;
+	}
+
+	.hud-bottombar__right {
+		order: -1;
+		flex-basis: 100%;
+		display: flex;
+		justify-content: center;
+	}
+}
+
+@media (max-width: 480px) {
+	.hud-topbar__title {
+		font-size: 0.9rem;
+		letter-spacing: 0.2em;
+	}
+
+	.hud-topbar__profile-name {
+		font-size: 0.7rem;
+	}
+}
+
+/* ==========================================================================
+   Reduced motion
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+	* {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}
