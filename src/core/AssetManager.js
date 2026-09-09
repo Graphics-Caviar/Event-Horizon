@@ -77,4 +77,59 @@ export class AssetManager {
 		})
 		return new THREE.Points(geo, mat)
 	}
+  createNitrogenGeometry(radius = 1, height = 2, segments = 32, hollow) {
+    let geo = 1
+    if(hollow){
+      geo = new THREE.CylinderGeometry(
+        radius,
+        radius,
+        height,
+        segments,
+        1,
+        true
+      );
+    } else {
+      geo = new THREE.CylinderGeometry(
+        radius,
+        radius,
+        height,
+        segments
+      );
+    }
+    
+
+    geo.computeVertexNormals();
+
+    return geo;
+}
+
+  createNitrogenMaterial(color) {
+    return new THREE.MeshStandardMaterial({
+      color: color, 
+      roughness: 0.35, 
+      metalness: 0.7
+    });
+  }
+
+  createNitrogenMiddleMaterial(color) {
+    return new THREE.MeshStandardMaterial({
+      color: color, 
+      roughness: 0.35, 
+      metalness: 0.7,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+  }
+
+  createNitrogenLiquidMaterial(color) {
+    return new THREE.MeshStandardMaterial({
+      color: color, 
+      transparent: true,
+      opacity: 0.9
+    });
+  }
+
+  
 }
