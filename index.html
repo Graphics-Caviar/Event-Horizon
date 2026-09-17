@@ -94,6 +94,31 @@
 					<strong>SURVIVE. ADAPT. ESCAPE.</strong>
 				</p>
 
+				<div
+					id="menu-account"
+					class="menu-account hidden"
+				>
+					<span class="menu-account-label">
+						WELCOME
+					</span>
+					<span
+						id="menu-account-name"
+						class="menu-account-name"
+					></span>
+					<span
+						id="menu-account-guest"
+						class="menu-account-guest hidden"
+					>
+						GUEST
+					</span>
+					<button
+						id="btn-sign-out"
+						class="auth-link"
+					>
+						SIGN OUT
+					</button>
+				</div>
+
 				<nav class="menu-actions">
 					<button
 						id="btn-start"
@@ -109,6 +134,24 @@
 							/>
 						</svg>
 						<span>PLAY</span>
+					</button>
+					<button
+						id="btn-leaderboard"
+						class="menu-btn"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="menu-icon"
+						>
+							<path
+								d="M5 20h4V10H5v10zm5 0h4V4h-4v16zm5 0h4v-7h-4v7z"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						<span>LEADERBOARD</span>
 					</button>
 					<button
 						id="btn-controls"
@@ -500,6 +543,177 @@
 				<button id="btn-hangar-continue">
 					READY — CONTINUE TO LAUNCH BAY
 				</button>
+			</div>
+		</div>
+
+		<!-- ============ Pilot registry (sign in / create account) ============ -->
+		<div id="screen-auth" class="screen auth-screen hidden">
+			<div class="auth-panel">
+				<div class="auth-brand">EVENT&nbsp;HORIZON</div>
+				<div class="auth-sub">PILOT REGISTRY</div>
+
+				<div class="auth-tabs">
+					<button
+						id="auth-tab-signin"
+						class="auth-tab active"
+						type="button"
+					>
+						SIGN IN
+					</button>
+					<button
+						id="auth-tab-signup"
+						class="auth-tab"
+						type="button"
+					>
+						NEW PILOT
+					</button>
+				</div>
+
+				<form id="auth-form" novalidate>
+					<label
+						class="auth-label"
+						for="auth-username"
+					>
+						CALLSIGN
+					</label>
+					<input
+						id="auth-username"
+						class="modal-input"
+						type="text"
+						maxlength="16"
+						placeholder="e.g. Nova_7"
+						autocomplete="username"
+						spellcheck="false"
+					/>
+
+					<label
+						class="auth-label"
+						for="auth-password"
+					>
+						PASSWORD
+					</label>
+					<input
+						id="auth-password"
+						class="modal-input"
+						type="password"
+						maxlength="128"
+						placeholder="At least 8 characters"
+						autocomplete="current-password"
+					/>
+
+					<div
+						id="auth-confirm-row"
+						class="hidden"
+					>
+						<label
+							class="auth-label"
+							for="auth-confirm"
+						>
+							CONFIRM PASSWORD
+						</label>
+						<input
+							id="auth-confirm"
+							class="modal-input"
+							type="password"
+							maxlength="128"
+							placeholder="Re-enter password"
+							autocomplete="new-password"
+						/>
+					</div>
+
+					<div
+						id="auth-error"
+						class="modal-error hidden"
+					></div>
+
+					<button
+						id="auth-submit"
+						class="auth-submit"
+						type="submit"
+					>
+						SIGN IN
+					</button>
+				</form>
+
+				<div class="auth-alt">
+					<button
+						id="auth-guest"
+						class="auth-link"
+						type="button"
+					>
+						Continue as guest
+					</button>
+					<button
+						id="auth-back"
+						class="auth-link"
+						type="button"
+					>
+						Back to menu
+					</button>
+				</div>
+
+				<div
+					id="auth-notice"
+					class="auth-notice hidden"
+				></div>
+			</div>
+		</div>
+
+		<!-- ============ Leaderboard ============ -->
+		<div
+			id="screen-leaderboard"
+			class="screen leaderboard-screen hidden"
+		>
+			<div class="lb-panel">
+				<div class="lb-header">
+					<div class="lb-heading">
+						<div class="lb-title">
+							LEADERBOARD
+						</div>
+						<div class="lb-sub">
+							TOP PILOTS OF THE
+							SINGULARITY
+						</div>
+					</div>
+					<button
+						id="lb-refresh"
+						class="btn-secondary lb-refresh"
+					>
+						REFRESH
+					</button>
+				</div>
+
+				<div class="lb-tabs" id="lb-tabs"></div>
+
+				<div class="lb-table">
+					<div class="lb-row lb-row-head">
+						<span class="lb-rank">#</span>
+						<span class="lb-pilot">
+							PILOT
+						</span>
+						<span class="lb-score">
+							SCORE
+						</span>
+						<span class="lb-time">
+							TIME
+						</span>
+						<span class="lb-nitro">N2</span>
+					</div>
+					<div id="lb-rows" class="lb-rows"></div>
+					<div
+						id="lb-message"
+						class="lb-message"
+					></div>
+				</div>
+
+				<div class="lb-footer">
+					<button
+						id="lb-back"
+						class="btn-secondary"
+					>
+						BACK TO MENU
+					</button>
+				</div>
 			</div>
 		</div>
 

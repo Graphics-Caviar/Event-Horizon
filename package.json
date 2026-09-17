@@ -16,7 +16,8 @@
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"preview": "vite preview",
-		"seed": "node scripts/seedFirestore.js"
+		"seed": "node scripts/seedFirestore.js",
+		"test:backend": "node scripts/testBackend.js"
 	},
 	"type": "module",
 	"version": "1.0.0"

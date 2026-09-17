@@ -1,14 +1,36 @@
 export class Menu {
-	constructor({ onLaunch, audioManager, storage }) {
-		this.onLaunch = onLaunch
+	constructor({
+		onPlay,
+		onLeaderboard,
+		onSignOut,
+		audioManager,
+		storage,
+	}) {
+		// PLAY no longer collects a callsign here — the pilot registry
+		// (AuthScreen) owns identity now, so Menu just reports the click.
+		this.onPlay = onPlay || (() => {})
+		this.onLeaderboard = onLeaderboard || (() => {})
+		this.onSignOut = onSignOut || (() => {})
 		this.audio = audioManager
 		this.storage = storage
 
+		// AuthScreen and LeaderboardScreen own their own show/hide, but they
+		// are registered here too so showStart()/hideAll() can never leave
+		// one of them stranded on top of the menu.
 		this.screens = {
 			start: document.getElementById('screen-start'),
 			placeholder:
 				document.getElementById('screen-placeholder'),
+			auth: document.getElementById('screen-auth'),
+			leaderboard:
+				document.getElementById('screen-leaderboard'),
 		}
+
+		this.accountEl = document.getElementById('menu-account')
+		this.accountGuestEl =
+			document.getElementById('menu-account-guest')
+		this.accountNameEl =
+			document.getElementById('menu-account-name')
 
 		this.overlay = document.getElementById('menu-modal-overlay')
 		this.modalContent = document.getElementById('modal-content')
@@ -22,7 +44,15 @@ export class Menu {
 
 		document.getElementById('btn-start').addEventListener(
 			'click',
-			() => this._openNameModal()
+			() => this.onPlay()
+		)
+		document.getElementById('btn-leaderboard').addEventListener(
+			'click',
+			() => this.onLeaderboard()
+		)
+		document.getElementById('btn-sign-out').addEventListener(
+			'click',
+			() => this.onSignOut()
 		)
 		document.getElementById('btn-controls').addEventListener(
 			'click',
@@ -58,57 +88,33 @@ export class Menu {
 		this.modalContent.innerHTML = ''
 	}
 
-	// ---------------- individual modals ----------------
+	// ---------------- account badge ----------------
 
-	_openNameModal() {
-		this._openModal(`
-      <h3>PILOT CALLSIGN</h3>
-      <p class="modal-desc">Enter a name before you launch — the Devourer likes to know who it's hunting</p>
-      <input id="player-name-input" class="modal-input" type="text" maxlength="16" placeholder="Enter your name" autocomplete="off" spellcheck="false" />
-      <div id="modal-name-error" class="modal-error hidden">Name is required</div>
-      <div class="modal-actions">
-        <button id="modal-name-cancel" class="btn-secondary">CANCEL</button>
-        <button id="modal-launch-btn">Enter</button>
-      </div>
-    `)
-
-		const input = document.getElementById('player-name-input')
-		const errorEl = document.getElementById('modal-name-error')
-		const cancelBtn = document.getElementById('modal-name-cancel')
-		const confirmBtn = document.getElementById('modal-launch-btn')
-
-		input.value = ''
-		input.focus()
-
-		const clearError = () => {
-			errorEl.classList.add('hidden')
-			input.classList.remove('input-error')
+	/**
+	 * Greet whoever is playing, above the menu buttons: "WELCOME <callsign>".
+	 *
+	 * @param {string|null} name the callsign to greet, or null to hide the
+	 *        greeting entirely (nobody signed in and no cached name).
+	 * @param {{isGuest?: boolean}} options isGuest tags the greeting so a
+	 *        guest or offline session is not mistaken for a real account.
+	 */
+	setAccount(name, { isGuest = false } = {}) {
+		if (!this.accountEl) return
+		if (name) {
+			this.accountNameEl.textContent = name
+			this.accountGuestEl?.classList.toggle(
+				'hidden',
+				!isGuest
+			)
+			this.accountEl.classList.remove('hidden')
+		} else {
+			this.accountNameEl.textContent = ''
+			this.accountGuestEl?.classList.add('hidden')
+			this.accountEl.classList.add('hidden')
 		}
-
-		input.addEventListener('input', clearError)
-
-		const submit = () => {
-			const raw = input.value.trim()
-			if (!raw) {
-				errorEl.classList.remove('hidden')
-				input.classList.add('input-error')
-				input.focus()
-				return
-			}
-
-			this.storage.setPlayerName(raw)
-			this._closeModal()
-			this.hideAll()
-			this.onLaunch(raw)
-		}
-
-		confirmBtn.addEventListener('click', submit)
-		cancelBtn.addEventListener('click', () => this._closeModal())
-		input.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter') submit()
-			if (e.key === 'Escape') this._closeModal()
-		})
 	}
+
+	// ---------------- individual modals ----------------
 
 	_openControlsModal() {
 		this._openModal(`

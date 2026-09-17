@@ -1626,3 +1626,351 @@ button:hover {
 		width: min(280px, 42vw);
 	}
 }
+
+/* ================= Pilot registry (sign in / sign up) ================= */
+.auth-screen {
+	z-index: 30;
+}
+
+.auth-panel {
+	width: 100%;
+	max-width: 420px;
+	padding: 30px 34px 26px;
+	background: rgba(6, 10, 20, 0.92);
+	border: 1px solid rgba(77, 227, 255, 0.28);
+	border-radius: 8px;
+	box-shadow:
+		0 0 40px rgba(77, 227, 255, 0.12),
+		inset 0 0 60px rgba(77, 227, 255, 0.03);
+	text-align: left;
+}
+
+.auth-brand {
+	font-size: 22px;
+	letter-spacing: 7px;
+	color: var(--cyan);
+	text-align: center;
+	text-shadow: 0 0 18px rgba(77, 227, 255, 0.7);
+}
+
+.auth-sub {
+	font-size: 10.5px;
+	letter-spacing: 4px;
+	color: rgba(220, 232, 245, 0.5);
+	text-align: center;
+	margin-top: 6px;
+}
+
+.auth-tabs {
+	display: flex;
+	gap: 8px;
+	margin: 22px 0 20px;
+}
+
+.auth-tab {
+	flex: 1;
+	padding: 9px 0;
+	font-family: inherit;
+	font-size: 11.5px;
+	letter-spacing: 2px;
+	background: transparent;
+	border: 1px solid rgba(120, 160, 220, 0.3);
+	border-radius: 4px;
+	color: rgba(220, 232, 245, 0.6);
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+.auth-tab:hover {
+	border-color: rgba(77, 227, 255, 0.6);
+	color: #e8f6ff;
+}
+.auth-tab.active {
+	border-color: var(--cyan);
+	background: rgba(77, 227, 255, 0.1);
+	color: var(--cyan);
+	box-shadow: 0 0 12px rgba(77, 227, 255, 0.25);
+}
+
+.auth-label {
+	display: block;
+	font-size: 10px;
+	letter-spacing: 2.5px;
+	color: rgba(220, 232, 245, 0.55);
+	margin-bottom: 6px;
+}
+
+.auth-screen .modal-input {
+	text-align: left;
+	margin-bottom: 14px;
+}
+
+.auth-submit {
+	width: 100%;
+	margin-top: 4px;
+	padding: 12px 0;
+	font-family: inherit;
+	font-size: 13px;
+	letter-spacing: 3px;
+	background: rgba(77, 227, 255, 0.12);
+	border: 1px solid var(--cyan);
+	border-radius: 4px;
+	color: var(--cyan);
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+.auth-submit:hover:not(:disabled) {
+	background: rgba(77, 227, 255, 0.22);
+	box-shadow: 0 0 18px rgba(77, 227, 255, 0.45);
+	color: #fff;
+}
+.auth-submit:disabled {
+	opacity: 0.5;
+	cursor: wait;
+}
+
+.auth-alt {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 18px;
+}
+
+.auth-link {
+	background: none;
+	border: none;
+	padding: 0;
+	font-family: inherit;
+	font-size: 11px;
+	letter-spacing: 1.2px;
+	color: rgba(168, 107, 255, 0.85);
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	transition: color 0.2s ease;
+}
+.auth-link:hover {
+	color: var(--purple);
+}
+
+.auth-notice {
+	margin-top: 16px;
+	padding: 10px 12px;
+	font-size: 11px;
+	line-height: 1.6;
+	letter-spacing: 0.6px;
+	color: rgba(255, 210, 130, 0.9);
+	background: rgba(255, 170, 60, 0.08);
+	border: 1px solid rgba(255, 170, 60, 0.3);
+	border-radius: 4px;
+}
+
+/* Signed-in badge on the main menu */
+.menu-account {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin-bottom: 14px;
+	font-size: 11px;
+	letter-spacing: 1.5px;
+}
+.menu-account-label {
+	color: rgba(220, 232, 245, 0.45);
+}
+.menu-account-name {
+	color: var(--cyan);
+	text-shadow: 0 0 10px rgba(77, 227, 255, 0.5);
+}
+.menu-account-guest {
+	padding: 1px 6px;
+	font-size: 9px;
+	letter-spacing: 1.5px;
+	color: rgba(255, 210, 130, 0.9);
+	border: 1px solid rgba(255, 170, 60, 0.45);
+	border-radius: 3px;
+}
+
+/* ================= Leaderboard ================= */
+.leaderboard-screen {
+	z-index: 30;
+}
+
+.lb-panel {
+	width: 100%;
+	max-width: 720px;
+	padding: 26px 28px 22px;
+	background: rgba(6, 10, 20, 0.93);
+	border: 1px solid rgba(168, 107, 255, 0.3);
+	border-radius: 8px;
+	box-shadow: 0 0 44px rgba(168, 107, 255, 0.14);
+	text-align: left;
+}
+
+.lb-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.lb-title {
+	font-size: 22px;
+	letter-spacing: 6px;
+	color: var(--purple);
+	text-shadow: 0 0 18px rgba(168, 107, 255, 0.6);
+}
+
+.lb-sub {
+	font-size: 10px;
+	letter-spacing: 3px;
+	color: rgba(220, 232, 245, 0.45);
+	margin-top: 5px;
+}
+
+.lb-refresh {
+	padding: 7px 14px;
+	font-family: inherit;
+	font-size: 10.5px;
+	letter-spacing: 2px;
+	border: 1px solid rgba(120, 160, 220, 0.4);
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.lb-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 20px 0 14px;
+}
+
+.lb-tab {
+	padding: 7px 14px;
+	font-family: inherit;
+	font-size: 10.5px;
+	letter-spacing: 2px;
+	background: transparent;
+	border: 1px solid rgba(120, 160, 220, 0.28);
+	border-radius: 4px;
+	color: rgba(220, 232, 245, 0.6);
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+.lb-tab:hover {
+	border-color: rgba(168, 107, 255, 0.6);
+	color: #e8f6ff;
+}
+.lb-tab.active {
+	border-color: var(--purple);
+	background: rgba(168, 107, 255, 0.12);
+	color: var(--purple);
+	box-shadow: 0 0 12px rgba(168, 107, 255, 0.25);
+}
+
+.lb-table {
+	border-top: 1px solid rgba(120, 160, 220, 0.18);
+}
+
+.lb-row {
+	display: grid;
+	grid-template-columns: 46px 1fr 110px 92px 62px;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 6px;
+	font-size: 12.5px;
+	border-bottom: 1px solid rgba(120, 160, 220, 0.1);
+}
+
+.lb-row-head {
+	font-size: 9.5px;
+	letter-spacing: 2.5px;
+	color: rgba(220, 232, 245, 0.4);
+	border-bottom-color: rgba(120, 160, 220, 0.25);
+}
+
+.lb-rows {
+	max-height: 46vh;
+	overflow-y: auto;
+}
+
+.lb-rank {
+	color: rgba(220, 232, 245, 0.5);
+}
+.lb-row-1 .lb-rank {
+	color: #ffd36b;
+	text-shadow: 0 0 10px rgba(255, 211, 107, 0.6);
+}
+.lb-row-2 .lb-rank {
+	color: #d4dde8;
+}
+.lb-row-3 .lb-rank {
+	color: #e0a878;
+}
+
+.lb-pilot {
+	color: #e8f6ff;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.lb-score {
+	color: var(--cyan);
+	text-align: right;
+}
+.lb-time,
+.lb-nitro {
+	color: rgba(220, 232, 245, 0.7);
+	text-align: right;
+}
+
+/* The signed-in player's own runs */
+.lb-row-self {
+	background: rgba(77, 227, 255, 0.07);
+	border-left: 2px solid var(--cyan);
+}
+.lb-row-self .lb-pilot::after {
+	content: ' — YOU';
+	font-size: 9.5px;
+	letter-spacing: 2px;
+	color: var(--cyan);
+	opacity: 0.8;
+}
+
+.lb-message {
+	padding: 26px 6px;
+	font-size: 12px;
+	line-height: 1.7;
+	letter-spacing: 1px;
+	color: rgba(220, 232, 245, 0.55);
+	text-align: center;
+}
+.lb-message.lb-message-error {
+	color: rgba(255, 170, 60, 0.9);
+}
+
+.lb-footer {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 18px;
+}
+
+@media (max-width: 620px) {
+	.lb-row {
+		grid-template-columns: 34px 1fr 82px 66px;
+	}
+	/* space-between pushed REFRESH past the panel edge at phone width */
+	.lb-header {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 12px;
+	}
+	.lb-refresh {
+		align-self: flex-start;
+	}
+	.lb-nitro {
+		display: none;
+	}
+	.auth-panel {
+		padding: 24px 20px 20px;
+	}
+}
