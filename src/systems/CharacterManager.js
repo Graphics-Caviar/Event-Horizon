@@ -1,13 +1,7 @@
-import { Zara } from '../models/Zara.js'
-import { Kai } from '../models/Kai.js'
-import { Nyx } from '../models/Nyx.js'
-
 /**
- * Character configuration data. Each entry is deliberately data, not
- * behaviour — the actual 3D model class lives in `modelClass` and gets
- * instantiated on demand by CharacterManager, so this object is safe to
- * use directly for UI (a character-select screen) without touching
- * three.js at all.
+ * Character configuration for the pilot selection screen.
+ * Each character points to the real GLB in the repo. A remote fallback is
+ * included so older ZIP snapshots still work while the assets are on main.
  */
 export const CHARACTERS = {
 	zara: {
@@ -16,6 +10,10 @@ export const CHARACTERS = {
 		role: 'The Ace Pilot',
 		description:
 			'A former military pilot with unmatched skills in high-speed maneuvers and survival.',
+		model: [
+			'/assets/models/pilots/zara-voss.glb',
+			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/pilots/zara-voss.glb',
+		],
 		stats: {
 			speed: 9,
 			firepower: 6,
@@ -41,7 +39,6 @@ export const CHARACTERS = {
 			},
 		],
 		colorTheme: 0x4de3ff,
-		modelClass: Zara,
 	},
 	kai: {
 		key: 'kai',
@@ -49,6 +46,10 @@ export const CHARACTERS = {
 		role: 'The Scavenger',
 		description:
 			'A resourceful engineer who can make the most out of any situation.',
+		model: [
+			'/assets/models/pilots/kai-ryder.glb',
+			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/pilots/kai-ryder.glb',
+		],
 		stats: {
 			speed: 6,
 			firepower: 5,
@@ -76,7 +77,6 @@ export const CHARACTERS = {
 			},
 		],
 		colorTheme: 0x7dffa0,
-		modelClass: Kai,
 	},
 	nyx: {
 		key: 'nyx',
@@ -84,6 +84,10 @@ export const CHARACTERS = {
 		role: 'The Void Walker',
 		description:
 			'A mysterious figure with the ability to manipulate gravity and phase through danger.',
+		model: [
+			'/assets/models/pilots/nyx.glb',
+			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/pilots/nyx.glb',
+		],
 		stats: {
 			speed: 8,
 			firepower: 4,
@@ -112,20 +116,13 @@ export const CHARACTERS = {
 			},
 		],
 		colorTheme: 0xa86bff,
-		modelClass: Nyx,
 	},
 }
 
-/**
- * CharacterManager — owns the "which character is selected" state and
- * the lifecycle of the currently-instantiated 3D model. Only ever one
- * model is alive at a time; switching characters disposes the old one
- * before creating the new one, so GPU resources never pile up as the
- * player browses the select screen.
- */
 export class CharacterManager {
-	constructor(scene) {
+	constructor(scene, assetManager) {
 		this.scene = scene
+		this.assetManager = assetManager
 		this.selectedKey = null
 		this.currentModel = null
 	}
@@ -140,19 +137,20 @@ export class CharacterManager {
 		return Object.values(CHARACTERS)
 	}
 
-	/** Selects a character by key, disposing whichever model was
-	 * previously active, and returns the newly-created model instance. */
-	select(key) {
+	async select(key) {
 		const config = this.getConfig(key)
-
-		if (this.currentModel) {
-			this.currentModel.dispose()
-			this.currentModel = null
-		}
-
-		this.currentModel = new config.modelClass(this.scene)
+		this.removeCurrent()
+		const model = await this.assetManager.loadModel(config.model)
+		this.currentModel = model
 		this.selectedKey = key
-		return this.currentModel
+		this.scene.add(model)
+		return model
+	}
+
+	removeCurrent() {
+		if (this.currentModel?.parent)
+			this.currentModel.parent.remove(this.currentModel)
+		this.currentModel = null
 	}
 
 	getSelectedConfig() {
@@ -162,10 +160,7 @@ export class CharacterManager {
 	}
 
 	dispose() {
-		if (this.currentModel) {
-			this.currentModel.dispose()
-			this.currentModel = null
-		}
+		this.removeCurrent()
 		this.selectedKey = null
 	}
 }

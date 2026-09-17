@@ -1,101 +1,78 @@
-/**
- * ShipManager.js
- * Configuration data and manager for player spaceships.
- * Keeps data cleanly decoupled from Three.js rendering.
- */
-
+/** Ship configuration used by the ship-selection UI and 3D hangar preview. */
 export const SHIPS = {
-	raven: {
-		key: 'raven',
-		name: 'Orbital Raven',
-		mark: 'MK VII',
-		role: 'Strike Fighter',
-		tagline: '"Built for the impossible."',
+	vanguard: {
+		key: 'vanguard',
+		name: 'Vanguard',
+		mark: 'VG-07',
+		role: 'Balanced Assault Craft',
+		model: [
+			'/assets/models/spaceship/spaceship.glb',
+			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/spaceship/spaceship.glb',
+		],
+		tagline: '"Ready for anything."',
 		description:
-			'A versatile vanguard fighter built for rapid atmospheric exit and high-G combat maneuvers near gravity hazards.',
+			'A balanced multi-role spacecraft combining reliable speed, protection and handling for unpredictable missions.',
 		stats: {
 			speed: 8,
-			firepower: 7,
+			firepower: 8,
 			durability: 7,
-			shields: 8,
-			agility: 9,
+			shields: 7,
+			agility: 8,
 		},
 		specs: [
-			{ label: 'Engine', value: 'Twin Ion Thrusters' },
-			{ label: 'Hull', value: 'Titanium Composite' },
-			{ label: 'Shielding', value: 'Quantum Energy Shield' },
-			{ label: 'Specialty', value: 'Balanced Vectoring' },
+			{ label: 'Engine', value: 'Vector Fusion Drive' },
+			{ label: 'Hull', value: 'Composite Battleframe' },
+			{ label: 'Shielding', value: 'Adaptive Barrier' },
+			{ label: 'Specialty', value: 'Balanced Performance' },
 		],
-		colors: {
-			hull: 0xd7dde4,
-			panel: 0x565f6b,
-			cockpit: 0x08131c,
-			engineHousing: 0x2b2f36,
-			engineGlow: 0x4de3ff,
-			gearMetal: 0x3a3f47,
-		},
-		accentClass: 'accent-cyan',
+		accentClass: 'accent-green',
 	},
-	phantom: {
-		key: 'phantom',
-		name: 'Solar Phantom',
-		mark: 'EX-04',
-		role: 'Stealth Interceptor',
-		tagline: '"Strike like lightning, vanish like dust."',
+	starfighter: {
+		key: 'starfighter',
+		name: 'Starfighter',
+		mark: 'SF-01',
+		role: 'High-Speed Interceptor',
+		model: '/assets/models/spaceship/starfighter.glb',
+		tagline: '"Speed is survival."',
 		description:
-			'Equipped with radar-dampening carbon weave and supercharged plasma burners for extreme escape velocity.',
+			'A lightweight interceptor designed for rapid acceleration, tight manoeuvres and escaping extreme gravitational fields.',
 		stats: {
 			speed: 10,
-			firepower: 6,
+			firepower: 7,
 			durability: 5,
 			shields: 6,
 			agility: 10,
 		},
 		specs: [
-			{ label: 'Engine', value: 'Hyper-Plasma Burners' },
-			{ label: 'Hull', value: 'Carbon Weave Armor' },
+			{ label: 'Engine', value: 'Twin Plasma Drives' },
+			{ label: 'Hull', value: 'Light Carbon Composite' },
 			{ label: 'Shielding', value: 'Phase Barrier' },
-			{ label: 'Specialty', value: 'Extreme Overdrive' },
+			{ label: 'Specialty', value: 'Extreme Agility' },
 		],
-		colors: {
-			hull: 0x22262d,
-			panel: 0xd49b38,
-			cockpit: 0x1f1708,
-			engineHousing: 0x181c22,
-			engineGlow: 0xffaa33,
-			gearMetal: 0x2e2f33,
-		},
-		accentClass: 'accent-gold',
+		accentClass: 'accent-cyan',
 	},
-	interceptor: {
-		key: 'interceptor',
-		name: 'Void Reaper',
-		mark: 'V-PROTOTYPE',
-		role: 'Heavy Assault',
-		tagline: '"Forged in the dark between stars."',
+	aegis: {
+		key: 'aegis',
+		name: 'Aegis',
+		mark: 'AE-09',
+		role: 'Heavy Explorer',
+		model: '/assets/models/spaceship/aegis.glb',
+		tagline: '"Built to survive the impossible."',
 		description:
-			'Reinforced heavy combat frame harnessing dark energy singularity siphons and obsidian reactive plating.',
+			'A heavily reinforced exploration vessel designed to endure asteroid impacts, gravitational instability and deep-space missions.',
 		stats: {
 			speed: 6,
-			firepower: 10,
-			durability: 9,
+			firepower: 8,
+			durability: 10,
 			shields: 9,
-			agility: 6,
+			agility: 5,
 		},
 		specs: [
-			{ label: 'Engine', value: 'Dark Energy Siphon' },
-			{ label: 'Hull', value: 'Obsidian Reactive Plates' },
+			{ label: 'Engine', value: 'Dual Ion Reactors' },
+			{ label: 'Hull', value: 'Reinforced Titanium Armour' },
 			{ label: 'Shielding', value: 'Graviton Aegis' },
-			{ label: 'Specialty', value: 'Singularity Resistance' },
+			{ label: 'Specialty', value: 'Impact Resistance' },
 		],
-		colors: {
-			hull: 0x181522,
-			panel: 0x6e3ba7,
-			cockpit: 0x150924,
-			engineHousing: 0x1d142b,
-			engineGlow: 0xa86bff,
-			gearMetal: 0x272036,
-		},
 		accentClass: 'accent-purple',
 	},
 }
@@ -106,13 +83,11 @@ export class ShipManager {
 		this.selectedKey = null
 		this.currentModel = null
 	}
-
 	getConfig(key) {
 		const config = SHIPS[key]
 		if (!config) throw new Error(`Unknown spaceship key: "${key}"`)
 		return config
 	}
-
 	getAllConfigs() {
 		return Object.values(SHIPS)
 	}

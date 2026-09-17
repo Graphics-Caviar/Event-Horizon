@@ -9,6 +9,7 @@ import { MenuBackground } from './MenuBackground.js'
 import storage from '../services/StorageService.js'
 import { HangarScene } from './HangarScene.js'
 import { CharacterSelect } from '../ui/CharacterSelect.js'
+import { SHIPS } from '../systems/ShipManager.js'
 
 // Menu -> Hangar (character/ship select) -> Level 1. Level 1 gameplay
 // (src/levels/Level1/**, src/player/**, src/physics/**, src/ui/HUD.js)
@@ -58,10 +59,11 @@ export class Game {
 			profile.selectedCharacter ||
 			this.gameState.selectedCharacter ||
 			'zara'
-		this.gameState.selectedShip =
-			profile.selectedShip ||
-			this.gameState.selectedShip ||
-			'raven'
+		const savedShip =
+			profile.selectedShip || this.gameState.selectedShip
+		this.gameState.selectedShip = SHIPS[savedShip]
+			? savedShip
+			: 'starfighter'
 		this.menu.hideAll()
 
 		if (this.menuBackground) {
@@ -73,7 +75,7 @@ export class Game {
 			this.sceneManager,
 			this.assetManager
 		)
-		this.hangarScene.showCharacter(this.gameState.selectedCharacter)
+		this.hangarScene.showCharacterOverview()
 
 		this.characterSelect = new CharacterSelect({
 			initialPilot: this.gameState.selectedCharacter,
@@ -81,6 +83,9 @@ export class Game {
 			onSelectPilot: (key) => {
 				this.gameState.selectedCharacter = key
 				this.hangarScene.showCharacter(key)
+			},
+			onPilotOverview: () => {
+				this.hangarScene.showCharacterOverview()
 			},
 			onSelectShip: (key) => {
 				this.gameState.selectedShip = key
@@ -92,9 +97,7 @@ export class Game {
 						this.characterSelect.getSelectedShipKey()
 					)
 				} else {
-					this.hangarScene.showCharacter(
-						this.characterSelect.getSelectedPilotKey()
-					)
+					this.hangarScene.showCharacterOverview()
 				}
 			},
 			onContinue: (pilotKey, shipKey) =>
@@ -132,7 +135,7 @@ export class Game {
 			this.gameState.selectedCharacter ||
 			'zara'
 		this.gameState.selectedShip =
-			shipKey || this.gameState.selectedShip || 'raven'
+			shipKey || this.gameState.selectedShip || 'starfighter'
 
 		storage.save({
 			playerName: this.gameState.playerName,
