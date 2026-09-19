@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 // The public/assets folders only contain placeholder .txt files right now
 // (no models/textures have been added to the repo yet), so everything in
@@ -13,6 +14,41 @@ import * as THREE from 'three'
 export class AssetManager {
 	constructor() {
 		this._starfieldTexture = null
+		this.gltfLoader = new GLTFLoader()
+		this._modelCache = new Map()
+	}
+
+	async loadModel(pathOrPaths) {
+		const paths = Array.isArray(pathOrPaths)
+			? pathOrPaths
+			: [pathOrPaths]
+		let lastError = null
+
+		for (const path of paths) {
+			try {
+				if (!this._modelCache.has(path)) {
+					this._modelCache.set(
+						path,
+						this.gltfLoader
+							.loadAsync(path)
+							.then(
+								(gltf) =>
+									gltf.scene
+							)
+					)
+				}
+				const source = await this._modelCache.get(path)
+				return source.clone(true)
+			} catch (error) {
+				lastError = error
+				this._modelCache.delete(path)
+				console.warn(
+					`Model load failed from ${path}; trying fallback if available.`
+				)
+			}
+		}
+
+		throw lastError || new Error('No model path supplied')
 	}
 
 	createAsteroidGeometry(seed = Math.random()) {
