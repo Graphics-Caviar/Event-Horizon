@@ -24,14 +24,21 @@ export class BlackHole {
 	}
 
 	getSignedDistance(position) {
-		return position.clone().sub(this.planePosition).dot(this.planeNormal)
+		return position
+			.clone()
+			.sub(this.planePosition)
+			.dot(this.planeNormal)
 	}
 	isBeyondEventHorizon(position) {
 		return this.getSignedDistance(position) < this.captureDistance
 	}
 
-	getGravityDirection() { return this.planeNormal.clone().negate() }
-	getGravityStrength() { return this.gravityStrength }
+	getGravityDirection() {
+		return this.planeNormal.clone().negate()
+	}
+	getGravityStrength() {
+		return this.gravityStrength
+	}
 
 	createBlackHole(singularityRadius, diskRadius) {
 		const singularityGeo = new THREE.SphereGeometry(
