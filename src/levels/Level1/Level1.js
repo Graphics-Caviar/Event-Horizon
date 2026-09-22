@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { Level, clearScene } from '../../core/Level.js'
 import { AsteroidField } from './AsteroidField.js'
 import { BlackHole } from './BlackHole.js'
+import { Spaceship } from './Spaceship.js'
 
 export class Level1 extends Level {
 	constructor(game) {
@@ -12,12 +13,15 @@ export class Level1 extends Level {
 		this.addLights()
 
 		this.sceneManager.camera.position.set(0, 0, 800)
-		// Adjust this to simulate a 'fast-forward'
-		this.timeScale = 50
+		this.timeScale = 1
+		this.elapsedPlayTime = 0
 
 		this.blackHole = new BlackHole(this)
-
+		this.spaceship = new Spaceship(this, this.blackHole)
 		this.asteroidField = new AsteroidField(this, this.blackHole)
+		this.spaceship.onAsteroidCollision = (asteroid) => {
+			console.log('collision')
+		}
 	}
 
 	clearStartMenu() {
@@ -53,5 +57,18 @@ export class Level1 extends Level {
 				delta,
 				this.timeScale
 			)
+		if (this.spaceship) {
+			this.spaceship.updatePhysics(delta, this.timeScale)
+			this.spaceship.updateCamera(delta, this.timeScale)
+			const hitAsteroid =
+				this.asteroidField.checkShipCollision(
+					this.spaceship
+				)
+			if (hitAsteroid)
+				this.spaceship.onAsteroidCollision?.(
+					hitAsteroid
+				)
+		}
+		this.elapsedPlayTime += delta
 	}
 }

@@ -1,171 +1,172 @@
 import * as THREE from 'three'
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 
-import { generateUniqueVertices, orbitLikeVelocity } from './Helpers.js'
-
-// set to view asteroids from a more zoomed out level with rings around the asteroids to
-// identify them easier
-const ASTEROID_FIELD_DEBUG = true
-
 export class AsteroidField {
 	constructor(level, blackHole) {
 		this.level = level
-
 		this.blackHole = blackHole
+		this.spawnRadius = 1000 // lateral spread, perpendicular to the gravity axis
+		this.spawnJitter = 500 // spread along the travel axis when (re)spawning near the front
+		this.spawnDistance = 1000 // how far out along +normal asteroids start
+		this.recycleDistance = -20 // once past the plane by this much, respawn far side
+		this.baseSpeed = 200
+		this.speedVariance = 100
 
-		this.maxAsteroidSpeed = 60
-		this.orbitSpeedFactor = 1.0
-
-		this.asteroids = new Set()
-		this.asteroidGroup = new THREE.Group()
-		this.asteroidGroup.name = 'asteroids'
-		this.populateAsteroids(1000, 5, 50, 500)
-		this.addObject(this.asteroidGroup)
-
-		this.noDestroyedAsteroids = 0
+		this.asteroids = []
+		this.createAsteroids(2000)
 	}
 
-	addObject(object) {
-		this.level.addObject(object)
+	getBasis(normal) {
+		const arbitrary =
+			Math.abs(normal.y) < 0.99
+				? new THREE.Vector3(0, 1, 0)
+				: new THREE.Vector3(1, 0, 0)
+		const tangent = new THREE.Vector3()
+			.crossVectors(arbitrary, normal)
+			.normalize()
+		const bitangent = new THREE.Vector3()
+			.crossVectors(normal, tangent)
+			.normalize()
+		return { tangent, bitangent }
 	}
 
-	own(resource) {
-		this.level.own(resource)
-	}
-
-	populateAsteroids(no, radius, minOrbitRadius, maxOrbitRadius) {
-		const asteroidPositions = generateUniqueVertices(
-			no,
-			minOrbitRadius,
-			maxOrbitRadius
-		)
-		const asteroidMaterial = this.createBasicAsteroidMaterial()
-		this.own(asteroidMaterial)
-
-		var diskMat
-		if (ASTEROID_FIELD_DEBUG) {
-			diskMat = new THREE.MeshBasicMaterial({
-				color: 0xffcc66,
-				side: THREE.DoubleSide,
-				transparent: true,
-				opacity: 0.8,
-				blending: THREE.AdditiveBlending,
-			})
-			this.own(diskMat)
-		}
-
-		for (let i = 0; i < no; i++) {
-			const asteroidGeometry =
-				this.createBasicAsteroidGeometry(radius, 4)
-			const asteroid = new THREE.Mesh(
-				asteroidGeometry,
-				asteroidMaterial
-			)
-			const position = asteroidPositions[i]
-			asteroid.position.set(
-				position.x,
-				position.y,
-				position.z
-			)
-			asteroid.velocity = orbitLikeVelocity(
-				this.blackHole.getGravityStrength(),
-				this.orbitSpeedFactor,
-				position
-			)
-
-			this.own(asteroidGeometry)
-			this.asteroids.add(asteroid)
-			this.asteroidGroup.add(asteroid)
-
-			// Change the below if statement to true to see what is actually going on.
-			if (ASTEROID_FIELD_DEBUG) {
-				const diskGeo = new THREE.RingGeometry(
-					radius + radius * 0.1,
-					radius,
-					64
-				)
-				this.own(diskGeo)
-				const disk = new THREE.Mesh(diskGeo, diskMat)
-				asteroid.add(disk)
-			}
-		}
-		console.log(this.asteroids)
-		console.log(this.asteroidGroup)
-	}
-
-	createBasicAsteroidMaterial() {
-		return new THREE.MeshStandardMaterial({
-			color: 0x555555,
-			roughness: 0.6,
-			metalness: 0.4,
+	createAsteroids(count = 2000) {
+		const geo = new THREE.IcosahedronGeometry(6, 0)
+		geo.computeBoundingSphere()
+		this.baseCollisionRadius = geo.boundingSphere.radius
+		this.level.own(geo)
+		const mat = new THREE.MeshStandardMaterial({
+			color: 0x8a8a8a,
 			flatShading: true,
 		})
-	}
+		this.level.own(mat)
 
-	createBasicAsteroidGeometry(radius, detail = 0, seed = 1001) {
-		const perlin = new ImprovedNoise()
-		const geometry = new THREE.IcosahedronGeometry(radius, detail)
-		const pos = geometry.attributes.position
-		const vertex = new THREE.Vector3()
-		for (let i = 0; i < pos.count; i++) {
-			vertex.fromBufferAttribute(pos, i)
-			const noiseScale = 0.5
-			const noiseImpact = 0.4
-			const noise = perlin.noise(
-				vertex.x * noiseScale,
-				vertex.y * noiseScale,
-				vertex.z * noiseScale
+		this.instancedMesh = new THREE.InstancedMesh(geo, mat, count)
+		this.instancedMesh.name = 'asteroidField'
+		this.level.addObject(this.instancedMesh)
+
+		const { tangent, bitangent } = this.getBasis(
+			this.blackHole.planeNormal
+		)
+		for (let i = 0; i < count; i++) {
+			this.asteroids.push(
+				this.spawnAsteroid(tangent, bitangent, true)
 			)
-			vertex.addScaledVector(
-				vertex.clone().normalize(),
-				noise * noiseImpact
-			)
-			pos.setXYZ(i, vertex.x, vertex.y, vertex.z)
 		}
-		geometry.computeVertexNormals()
-		return geometry
+		this.updateInstanceMatrices()
 	}
 
-	updateAsteroidPhysics(delta, timeScale = 1) {
-		const dt = delta * timeScale
-		for (const asteroid of this.asteroids) {
-			const direction = new THREE.Vector3().subVectors(
-				this.blackHole.getPosition(),
-				asteroid.position
-			)
-			const distance = direction.length()
-			// Close enough to the black hole that we may as well consider
-			// it having fallen in.
-			if (distance < this.blackHole.getEventHorizonRadius()) {
-				this.destroyAsteroid(asteroid)
-				continue
-			}
-			direction.normalize()
-
-			const force =
-				this.blackHole.getGravityStrength() /
-				(distance * distance)
-
-			asteroid.velocity.addScaledVector(direction, force * dt)
+	checkShipCollision(ship) {
+		const shipPos = ship.position
+		const shipRadius = ship.collisionRadius
+		for (const a of this.asteroids) {
+			const combinedRadius =
+				this.baseCollisionRadius * a.scale + shipRadius
 			if (
-				asteroid.velocity.length() >
-				this.maxAsteroidSpeed
+				a.position.distanceToSquared(shipPos) <
+				combinedRadius * combinedRadius
 			) {
-				asteroid.velocity
-					.normalize()
-					.multiplyScalar(this.maxAsteroidSpeed)
+				return a
 			}
-			asteroid.position.addScaledVector(asteroid.velocity, dt)
+		}
+		return null
+	}
+
+	spawnAsteroid(tangent, bitangent, fillVolume = false) {
+		const angle = Math.random() * Math.PI * 2
+		const radius = Math.sqrt(Math.random()) * this.spawnRadius
+		const offset = tangent
+			.clone()
+			.multiplyScalar(Math.cos(angle) * radius)
+			.add(
+				bitangent
+					.clone()
+					.multiplyScalar(
+						Math.sin(angle) * radius
+					)
+			)
+
+		const depth = fillVolume
+			? THREE.MathUtils.lerp(
+					this.recycleDistance,
+					this.spawnDistance,
+					Math.random()
+				)
+			: this.spawnDistance +
+				(Math.random() - 0.5) * this.spawnJitter
+
+		const shipPos = this.level.spaceship.position
+		const position = shipPos
+			.clone()
+			.addScaledVector(this.blackHole.planeNormal, depth)
+			.add(offset)
+
+		const speed =
+			this.baseSpeed + Math.random() * this.speedVariance
+		const jitter = tangent
+			.clone()
+			.multiplyScalar((Math.random() - 0.5) * 10)
+			.add(
+				bitangent
+					.clone()
+					.multiplyScalar(
+						(Math.random() - 0.5) * 10
+					)
+			)
+		const velocity = this.blackHole.planeNormal
+			.clone()
+			.multiplyScalar(-speed)
+			.add(jitter)
+
+		return {
+			position,
+			velocity,
+			scale: 0.6 + Math.random() * 1.8,
+			rotationAxis: new THREE.Vector3(
+				Math.random(),
+				Math.random(),
+				Math.random()
+			).normalize(),
+			rotationSpeed: (Math.random() - 0.5) * 2,
+			rotation: 0,
 		}
 	}
 
-	destroyAsteroid(asteroid) {
-		// For the laughs
-		this.noDestroyedAsteroids++
-		console.log(`${this.noDestroyedAsteroids} mississipi`)
-		this.asteroids.delete(asteroid)
-		this.asteroidGroup.remove(asteroid)
-		this.resources.remove(asteroid.geometry)
-		asteroid.geometry.dispose()
+	updateAsteroidPhysics(delta, timeScale) {
+		const dt = delta * timeScale
+		const { tangent, bitangent } = this.getBasis(
+			this.blackHole.planeNormal
+		)
+
+		for (const a of this.asteroids) {
+			a.position.addScaledVector(a.velocity, dt)
+			a.rotation += a.rotationSpeed * dt
+			if (
+				this.blackHole.getSignedDistance(a.position) <
+				this.recycleDistance
+			) {
+				Object.assign(
+					a,
+					this.spawnAsteroid(tangent, bitangent)
+				)
+			}
+		}
+		this.updateInstanceMatrices()
+	}
+
+	updateInstanceMatrices() {
+		const matrix = new THREE.Matrix4()
+		const quat = new THREE.Quaternion()
+		for (let i = 0; i < this.asteroids.length; i++) {
+			const a = this.asteroids[i]
+			quat.setFromAxisAngle(a.rotationAxis, a.rotation)
+			matrix.compose(
+				a.position,
+				quat,
+				new THREE.Vector3(a.scale, a.scale, a.scale)
+			)
+			this.instancedMesh.setMatrixAt(i, matrix)
+		}
+		this.instancedMesh.instanceMatrix.needsUpdate = true
 	}
 }
