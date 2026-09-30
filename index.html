@@ -40,12 +40,21 @@
 						class="bar-fill distance"
 					></div>
 				</div>
+				<div
+					id="hud-distance"
+					class="hud-readout"
+				></div>
 			</div>
 
 			<div id="hud-top-right">
 				<div class="hud-label">SCORE</div>
 				<div id="score-value">0</div>
-				<div class="hud-label">
+				<div id="hud-timer" class="hud-readout">
+					0:00
+				</div>
+				<!-- Nitrogen canisters are not implemented yet (Nitrogen.js is
+				     empty); HUD.js hides this row rather than show a dead 0. -->
+				<div id="hud-nitrogen" class="hud-label">
 					NITROGEN
 					<span id="nitrogen-count">0</span>
 				</div>
@@ -62,7 +71,107 @@
 				</div>
 				<div id="controls-hint">
 					W/↑ Thrust &nbsp;·&nbsp; S/↓ Brake
-					&nbsp;·&nbsp; A/D or ←/→ Turn
+					&nbsp;·&nbsp; A/D Turn &nbsp;·&nbsp;
+					Space/Shift Up/Down &nbsp;·&nbsp; Q/E
+					Pitch &nbsp;·&nbsp; Esc Pause
+				</div>
+			</div>
+		</div>
+
+		<!-- ============ In-level overlays (pause / results) ============ -->
+		<div id="screen-pause" class="screen level-overlay hidden">
+			<div class="level-panel">
+				<div class="level-panel-kicker">
+					LEVEL 1 · THE SINGULARITY RUN
+				</div>
+				<h2 class="level-panel-title">PAUSED</h2>
+				<p class="level-panel-sub">
+					The singularity waits. It is patient.
+				</p>
+				<div class="level-panel-actions">
+					<button
+						id="btn-pause-quit"
+						class="btn-secondary"
+						type="button"
+					>
+						MAIN MENU
+					</button>
+					<button
+						id="btn-pause-restart"
+						class="btn-secondary"
+						type="button"
+					>
+						RESTART
+					</button>
+					<button
+						id="btn-pause-resume"
+						type="button"
+					>
+						RESUME
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="screen-results" class="screen level-overlay hidden">
+			<div class="level-panel">
+				<div class="level-panel-kicker">
+					LEVEL 1 · THE SINGULARITY RUN
+				</div>
+				<h2
+					id="results-title"
+					class="level-panel-title"
+				></h2>
+				<p
+					id="results-subtitle"
+					class="level-panel-sub"
+				></p>
+				<div class="results-stats">
+					<div class="results-stat">
+						<span>SCORE</span>
+						<strong id="results-score">
+							0
+						</strong>
+					</div>
+					<div class="results-stat">
+						<span>TIME</span>
+						<strong id="results-time">
+							0:00
+						</strong>
+					</div>
+					<div class="results-stat">
+						<span>HULL</span>
+						<strong id="results-hull">
+							100%
+						</strong>
+					</div>
+					<div class="results-stat">
+						<span>DISTANCE</span>
+						<strong id="results-distance">
+							0%
+						</strong>
+					</div>
+				</div>
+				<div
+					id="results-note"
+					class="results-note"
+					role="status"
+					aria-live="polite"
+				></div>
+				<div class="level-panel-actions">
+					<button
+						id="btn-results-menu"
+						class="btn-secondary"
+						type="button"
+					>
+						MAIN MENU
+					</button>
+					<button
+						id="btn-results-retry"
+						type="button"
+					>
+						FLY AGAIN
+					</button>
 				</div>
 			</div>
 		</div>
@@ -271,7 +380,15 @@
 					</span>
 				</div>
 
-				<div class="level-card level-card-1">
+				<!--
+					Levels 2 and 3 ship with .is-locked so there is no flash of
+					unlocked levels before the profile loads. Menu.setUnlockedLevel()
+					removes locks as the player's progress allows.
+				-->
+				<div
+					class="level-card level-card-1"
+					data-level="1"
+				>
 					<div class="level-thumb thumb-1">
 						<div class="thumb-hole"></div>
 						<div class="thumb-ship"></div>
@@ -289,13 +406,49 @@
 					</div>
 				</div>
 
-				<div class="level-card level-card-2">
+				<div
+					class="level-card level-card-2 is-locked"
+					data-level="2"
+				>
 					<div class="level-thumb thumb-2">
 						<div class="thumb-planet"></div>
 						<div
 							class="thumb-terrain"
 						></div>
 						<div class="thumb-rover"></div>
+					</div>
+					<div
+						class="level-lock"
+						aria-hidden="true"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="lock-icon"
+						>
+							<rect
+								x="5"
+								y="10.5"
+								width="14"
+								height="10"
+								rx="2"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+							/>
+							<path
+								d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+								stroke-linecap="round"
+							/>
+							<path
+								d="M12 14.6v2.6"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
 					</div>
 					<div class="level-badge badge-green">
 						02
@@ -309,13 +462,77 @@
 						>
 							SURVIVE. ADAPT. ESCAPE.
 						</div>
+						<div class="level-status">
+							<svg
+								viewBox="0 0 24 24"
+								aria-hidden="true"
+							>
+								<rect
+									x="5"
+									y="10.5"
+									width="14"
+									height="10"
+									rx="2"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								/>
+								<path
+									d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+								/>
+							</svg>
+							<span>
+								LOCKED · CLEAR
+								LEVEL 1
+							</span>
+						</div>
 					</div>
 				</div>
 
-				<div class="level-card level-card-3">
+				<div
+					class="level-card level-card-3 is-locked"
+					data-level="3"
+				>
 					<div class="level-thumb thumb-3">
 						<div class="thumb-void"></div>
 						<div class="thumb-figure"></div>
+					</div>
+					<div
+						class="level-lock"
+						aria-hidden="true"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="lock-icon"
+						>
+							<rect
+								x="5"
+								y="10.5"
+								width="14"
+								height="10"
+								rx="2"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+							/>
+							<path
+								d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+								stroke-linecap="round"
+							/>
+							<path
+								d="M12 14.6v2.6"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
 					</div>
 					<div class="level-badge badge-purple">
 						03
@@ -328,6 +545,34 @@
 							class="level-sub sub-purple"
 						>
 							DESTROY THE DEVOURER
+						</div>
+						<div class="level-status">
+							<svg
+								viewBox="0 0 24 24"
+								aria-hidden="true"
+							>
+								<rect
+									x="5"
+									y="10.5"
+									width="14"
+									height="10"
+									rx="2"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								/>
+								<path
+									d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+								/>
+							</svg>
+							<span>
+								LOCKED · CLEAR
+								LEVEL 2
+							</span>
 						</div>
 					</div>
 				</div>
@@ -525,11 +770,35 @@
 				</div>
 			</div>
 
-			<div id="ship-panel" class="hangar-panel hidden">
-				<div class="ship-cards" id="ship-cards"></div>
+			<div
+				id="ship-panel"
+				class="hangar-panel ship-panel hidden"
+			>
+				<!-- Text lives in a left sidebar so the ship has the right
+				     side of the screen to itself. -->
+				<div class="ship-sidebar">
+					<div
+						class="ship-list"
+						id="ship-cards"
+						role="radiogroup"
+						aria-label="Choose your starfighter"
+					></div>
+					<div
+						class="ship-detail"
+						id="ship-detail"
+					></div>
+					<div
+						class="ship-stats"
+						id="ship-stat-comparison"
+					></div>
+				</div>
+				<!-- Deliberately empty. HangarScene measures this box every
+				     frame and frames the 3D ship inside it, so the ship
+				     follows the layout at any screen size. -->
 				<div
-					class="stat-comparison"
-					id="ship-stat-comparison"
+					id="ship-stage"
+					class="ship-stage"
+					aria-hidden="true"
 				></div>
 			</div>
 

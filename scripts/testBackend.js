@@ -182,6 +182,34 @@ check(
 )
 check('highestUnlockedLevel advanced', counted.highestUnlockedLevel === 2)
 
+console.log('\n=== 9b. level progress never moves backwards ===')
+// Completing Level 2 unlocks Level 3...
+await backend.submitRun({ ...gameState, currentLevel: 2 }, { completed: true })
+await wait(600)
+const afterL2 = (await getDoc(doc(db, 'users', uid))).data()
+check('completing level 2 unlocks level 3', afterL2.highestUnlockedLevel === 3)
+check(
+	'cached profile updated without a re-sync',
+	backend.profile.profile?.highestUnlockedLevel === 3
+)
+// ...and replaying Level 1 afterwards must NOT re-lock it. Before the guard,
+// this wrote highestUnlockedLevel = 2 and Level 3 re-locked on the menu.
+await backend.submitRun({ ...gameState, currentLevel: 1 }, { completed: true })
+await wait(600)
+const afterReplay = (await getDoc(doc(db, 'users', uid))).data()
+check(
+	'replaying level 1 does not re-lock level 3',
+	afterReplay.highestUnlockedLevel === 3,
+	`got ${afterReplay.highestUnlockedLevel}`
+)
+// A failed (not completed) run never advances progress.
+await backend.submitRun({ ...gameState, currentLevel: 3 }, { completed: false })
+await wait(600)
+check(
+	'a failed run does not advance progress',
+	(await getDoc(doc(db, 'users', uid))).data().highestUnlockedLevel === 3
+)
+
 console.log('\n=== 10. achievements ===')
 check(
 	'unlock() records against the profile',

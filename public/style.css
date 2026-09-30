@@ -237,7 +237,10 @@ button:hover {
 
 .screen.menu-screen {
 	display: grid;
-	grid-template-columns: 1fr 340px;
+	grid-template-columns: minmax(0, 1fr) 340px;
+	/* Row 1 stretches to fill spare height but can never be squeezed below
+	   its content (see .menu-left) — on short screens the page grows and
+	   scrolls instead of stacking the menu on top of the footer. */
 	grid-template-rows: 1fr auto;
 	grid-template-areas: 'left right' 'footer footer';
 	align-items: start;
@@ -245,6 +248,8 @@ button:hover {
 	text-align: left;
 	padding: 52px 56px 26px;
 	gap: 20px 32px;
+	overflow-x: hidden;
+	overflow-y: auto;
 	background: transparent; /* the three.js MenuBackground shows through */
 }
 
@@ -271,7 +276,9 @@ button:hover {
 	flex-direction: column;
 	justify-content: center;
 	max-width: 620px;
-	min-height: 0;
+	/* No min-height:0 here. It used to let the grid row shrink below this
+	   column's content, so the buttons overflowed into the footer at
+	   1366x768 and below, and onto the level cards on phones. */
 }
 
 .brand-title {
@@ -466,6 +473,7 @@ button:hover {
 }
 
 .level-card {
+	--thumb-h: 104px;
 	position: relative;
 	border: 1px solid rgba(120, 160, 220, 0.25);
 	border-radius: 8px;
@@ -498,8 +506,9 @@ button:hover {
 
 .level-thumb {
 	position: relative;
-	height: 104px;
+	height: var(--thumb-h);
 	overflow: hidden;
+	transition: filter 0.3s ease;
 }
 
 .thumb-1 {
@@ -948,18 +957,24 @@ button:hover {
 /* Narrower viewports: stack the sidebar under the hero content */
 @media (max-width: 880px) {
 	.screen.menu-screen {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
+		/* Three content-sized rows. The desktop '1fr auto' was being
+		   inherited here with a third implicit row, which is part of why
+		   the menu landed on top of the level cards on phones. */
+		grid-template-rows: auto auto auto;
 		grid-template-areas: 'left' 'right' 'footer';
 		padding: 32px 24px 20px;
-		overflow-y: auto;
 	}
+	/* A grid rather than the old sideways-scrolling strip: that hid level 3
+	   off-screen, and with locks on levels 2 and 3 every player needs to
+	   see the whole path at a glance. */
 	.menu-right {
-		flex-direction: row;
-		overflow-x: auto;
-		padding-bottom: 4px;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 12px;
 	}
-	.level-card {
-		min-width: 220px;
+	.journey-header {
+		grid-column: 1 / -1;
 	}
 	.menu-footer {
 		flex-wrap: wrap;
@@ -1340,10 +1355,13 @@ button:hover {
 	left: 50%;
 	bottom: 30px;
 	transform: translateX(-50%);
-	width: min(760px, 76vw);
+	/* Wider row and gap = more space between pilots (~35% at desktop
+	   sizes). This is the ONLY place pilot spacing is set: HangarScene
+	   places each 3D pilot above its card, so the models follow. */
+	width: min(1000px, 84vw);
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
-	gap: 32px;
+	gap: clamp(32px, 4vw, 64px);
 	z-index: 6;
 }
 
@@ -1611,7 +1629,10 @@ button:hover {
 
 @media (max-width: 880px) {
 	.pilot-lineup {
-		width: 92vw;
+		/* Fill the panel, not the viewport: 92vw was wider than the panel
+		   (the hangar has side padding and the panel clips its overflow),
+		   so the outer name cards were cut off on tablets and phones. */
+		width: 100%;
 		gap: 8px;
 	}
 	.pilot-lineup-choice {
@@ -1972,5 +1993,543 @@ button:hover {
 	}
 	.auth-panel {
 		padding: 24px 20px 20px;
+	}
+}
+
+/* ================= Home page: short laptop screens ================= */
+/* 1366x768 and 1280x720 are the most common laptop sizes, and the menu is
+   ~700px tall at full spacing. Tighten the vertical rhythm there so the
+   whole home page fits without scrolling. Width-gated so it never fights
+   the single-column phone layout below. */
+@media (max-height: 820px) and (min-width: 881px) {
+	.screen.menu-screen {
+		padding-top: 30px;
+		padding-bottom: 16px;
+		row-gap: 12px;
+	}
+	.brand-title {
+		font-size: clamp(34px, min(5.4vw, 7.4vh), 68px);
+	}
+	.brand-subtitle {
+		margin-top: 8px;
+	}
+	.brand-tagline {
+		margin: 14px 0 16px;
+		line-height: 1.6;
+	}
+	.menu-account {
+		margin-bottom: 10px;
+	}
+	.menu-actions {
+		gap: 8px;
+	}
+	.menu-btn {
+		padding: 10px 18px;
+	}
+	.menu-right {
+		gap: 12px;
+	}
+	.level-card {
+		--thumb-h: 86px;
+	}
+}
+
+/* ================= Home page: phones ================= */
+@media (max-width: 560px) {
+	/* Standard phone gutter; the desktop 48px left the pilot lineup only
+	   ~279px wide on a 375px screen. */
+	.hangar-screen {
+		padding-left: 16px;
+		padding-right: 16px;
+	}
+	.menu-right {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.level-card {
+		--thumb-h: 88px;
+	}
+	.menu-footer {
+		justify-content: center;
+		text-align: center;
+	}
+}
+
+/* ================= Level cards: locked state ================= */
+/* Levels 2 and 3 ship locked in the markup, so there is never a flash of
+   "available" levels before the profile loads; Menu.setUnlockedLevel()
+   only ever removes locks once real progress is known. */
+.level-lock {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: var(--thumb-h);
+	display: none;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	/* A sibling of .level-thumb, not a child: the thumb is dimmed with a
+	   CSS filter, and a filter on a parent would dim the lock as well. */
+}
+
+.lock-icon {
+	width: 22px;
+	height: 22px;
+	padding: 10px;
+	box-sizing: content-box;
+	color: #eaf3fb;
+	background: rgba(6, 9, 18, 0.78);
+	border: 1px solid rgba(220, 232, 245, 0.35);
+	border-radius: 50%;
+	box-shadow:
+		0 0 22px rgba(0, 0, 0, 0.7),
+		inset 0 0 10px rgba(120, 160, 220, 0.1);
+}
+
+.level-status {
+	display: none;
+	align-items: center;
+	gap: 6px;
+	margin-top: 4px;
+	font-size: 10.5px;
+	letter-spacing: 1px;
+	color: rgba(220, 232, 245, 0.55);
+}
+.level-status svg {
+	width: 11px;
+	height: 11px;
+	flex-shrink: 0;
+}
+
+.level-card.is-locked {
+	border-color: rgba(120, 160, 220, 0.16);
+	background: rgba(6, 8, 16, 0.72);
+}
+.level-card.is-locked:hover {
+	transform: none;
+	box-shadow: none;
+}
+.level-card.is-locked .level-thumb {
+	filter: grayscale(0.85) brightness(0.42);
+}
+.level-card.is-locked .level-lock {
+	display: flex;
+}
+.level-card.is-locked .level-badge {
+	opacity: 0.45;
+}
+.level-card.is-locked .level-title {
+	color: rgba(234, 243, 251, 0.55);
+}
+/* The locked status replaces the level's tagline, so the card keeps the
+   same height either way and the column never jumps on unlock. */
+.level-card.is-locked .level-sub {
+	display: none;
+}
+.level-card.is-locked .level-status {
+	display: flex;
+}
+
+/* ================= Ship select: sidebar + stage ================= */
+/* Text on the left, ship on the right. The old layout ran three wide cards
+   and a stat table across the full width, and the 3D ship rendered
+   dead-centre behind all of it. */
+.ship-panel {
+	flex-direction: row;
+	align-items: stretch;
+	gap: 32px;
+	overflow: hidden;
+}
+
+.ship-sidebar {
+	flex: 0 0 clamp(320px, 36vw, 460px);
+	/* Size to content rather than stretching: on tall screens a full-height
+	   panel left a large empty box under the stats. max-height keeps it
+	   scrollable if a very short screen ever runs out of room. */
+	align-self: flex-start;
+	max-height: 100%;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(120, 160, 220, 0.35) transparent;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 18px;
+	background: rgba(6, 8, 16, 0.78);
+	border: 1px solid rgba(120, 160, 220, 0.2);
+	border-radius: 10px;
+	backdrop-filter: blur(4px);
+}
+
+/* Only very short screens should ever need this — keep it unobtrusive. */
+.ship-sidebar::-webkit-scrollbar {
+	width: 6px;
+}
+.ship-sidebar::-webkit-scrollbar-thumb {
+	background: rgba(120, 160, 220, 0.35);
+	border-radius: 3px;
+}
+
+/* Empty on purpose — HangarScene frames the 3D ship inside this box. */
+.ship-stage {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	pointer-events: none;
+}
+
+/* ---- Ship list ---- */
+.ship-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.ship-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-areas: 'name state' 'role state';
+	align-items: center;
+	column-gap: 12px;
+	width: 100%;
+	margin: 0;
+	padding: 11px 14px;
+	text-align: left;
+	font-family: inherit;
+	background: rgba(10, 14, 26, 0.55);
+	border: 1px solid rgba(120, 160, 220, 0.2);
+	border-left: 3px solid currentColor;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+.ship-row:hover {
+	background: rgba(255, 255, 255, 0.04);
+	border-color: rgba(220, 232, 245, 0.35);
+	border-left-color: currentColor;
+	box-shadow: none;
+}
+.ship-row.selected {
+	background: rgba(255, 255, 255, 0.05);
+	border-color: currentColor;
+	box-shadow: 0 0 18px -4px currentColor;
+}
+.ship-row-name {
+	grid-area: name;
+	font-size: 14px;
+	letter-spacing: 2px;
+	color: inherit;
+}
+.ship-row-mark {
+	margin-left: 6px;
+	font-size: 10px;
+	letter-spacing: 1.5px;
+	opacity: 0.7;
+}
+.ship-row-role {
+	grid-area: role;
+	margin-top: 2px;
+	font-size: 10.5px;
+	letter-spacing: 1px;
+	color: rgba(220, 232, 245, 0.6);
+}
+.ship-row-state {
+	grid-area: state;
+	font-size: 9.5px;
+	letter-spacing: 2px;
+	color: inherit;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+.ship-row.selected .ship-row-state {
+	opacity: 1;
+}
+
+/* Accent colours. accent-green was missing entirely, which is why
+   Vanguard's name used to render in plain white. */
+.ship-row.accent-cyan,
+.ship-detail.accent-cyan,
+.ship-card.accent-cyan {
+	color: var(--cyan);
+}
+.ship-row.accent-green,
+.ship-detail.accent-green,
+.ship-card.accent-green {
+	color: #7dffa0;
+}
+.ship-row.accent-purple,
+.ship-detail.accent-purple {
+	color: var(--purple);
+}
+.ship-row.accent-gold,
+.ship-detail.accent-gold {
+	color: #ffaa33;
+}
+
+/* ---- Selected ship detail ---- */
+.ship-detail {
+	padding-top: 14px;
+	border-top: 1px solid rgba(120, 160, 220, 0.15);
+}
+.ship-detail-name {
+	font-size: 20px;
+	letter-spacing: 3px;
+	color: inherit;
+}
+.ship-detail-role {
+	margin-top: 2px;
+	font-size: 11px;
+	letter-spacing: 1.5px;
+	color: inherit;
+	opacity: 0.8;
+}
+.ship-detail .ship-card-tagline {
+	margin: 10px 0 6px;
+}
+.ship-detail .ship-card-desc {
+	margin-bottom: 12px;
+}
+.ship-detail .ship-card-specs {
+	margin-bottom: 0;
+}
+
+/* ---- Stats for the selected ship ---- */
+.ship-stats {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	padding-top: 14px;
+	border-top: 1px solid rgba(120, 160, 220, 0.15);
+}
+.ship-stat-row {
+	display: grid;
+	grid-template-columns: 84px minmax(0, 1fr) 22px;
+	align-items: center;
+	gap: 10px;
+}
+.ship-stat-row .stat-compare-label {
+	font-size: 10px;
+}
+.ship-stat-row .stat-bar-fill {
+	transition: width 0.35s ease;
+}
+.ship-stat-value {
+	font-size: 11px;
+	text-align: right;
+	color: rgba(220, 232, 245, 0.8);
+}
+
+/* Short laptop screens: keep the whole sidebar visible without scrolling. */
+@media (max-height: 820px) and (min-width: 881px) {
+	/* Reclaim header/footer spacing for the panels (helps the pilot tab
+	   too) — at 1366x768 the sidebar was 13px short of fitting. */
+	.hangar-screen {
+		padding-top: 22px;
+		padding-bottom: 18px;
+	}
+	.hangar-header {
+		margin-bottom: 12px;
+	}
+	.hangar-tabs {
+		margin-top: 12px;
+	}
+	.hangar-footer {
+		margin-top: 14px;
+	}
+	.ship-sidebar {
+		padding: 14px;
+		gap: 10px;
+	}
+	.ship-row {
+		padding: 8px 12px;
+	}
+	.ship-detail,
+	.ship-stats {
+		padding-top: 10px;
+	}
+	.ship-detail .ship-card-desc {
+		margin-bottom: 8px;
+		line-height: 1.5;
+	}
+	.ship-stats {
+		gap: 7px;
+	}
+}
+
+/* Tablets and phones: ship on top, details underneath. The stage keeps a
+   real height so the 3D ship still has somewhere to sit. */
+@media (max-width: 880px) {
+	.ship-panel {
+		flex-direction: column;
+		gap: 14px;
+		overflow-y: auto;
+	}
+	.ship-stage {
+		order: -1;
+		flex: 0 0 clamp(200px, 34vh, 320px);
+	}
+	.ship-sidebar {
+		flex: 0 0 auto;
+		overflow: visible;
+	}
+}
+
+/* ================= In-level HUD additions ================= */
+.hud-readout {
+	margin-top: 5px;
+	font-size: 11px;
+	letter-spacing: 1.5px;
+	color: rgba(220, 232, 245, 0.7);
+}
+#hud-top-right .hud-readout {
+	font-size: 13px;
+	letter-spacing: 2px;
+}
+#pilot-tag {
+	color: var(--cyan);
+	opacity: 0.9;
+}
+
+/* Red edge flash on impact (HUD.flashDamage). */
+#hud::after {
+	content: '';
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	opacity: 0;
+	box-shadow: inset 0 0 140px 30px rgba(255, 50, 70, 0.55);
+}
+#hud.hud-hit::after {
+	animation: hud-hit 0.4s ease-out;
+}
+@keyframes hud-hit {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+/* ================= Pause / results overlays ================= */
+.level-overlay {
+	z-index: 30;
+	/* Lighter than the default .screen backdrop so the frozen scene still
+	   reads behind the panel. */
+	background: radial-gradient(
+		ellipse at center,
+		rgba(10, 12, 28, 0.55) 0%,
+		rgba(2, 3, 8, 0.85) 80%
+	);
+}
+
+.level-panel {
+	width: 100%;
+	max-width: 520px;
+	padding: 30px 32px 26px;
+	background: rgba(6, 10, 20, 0.92);
+	border: 1px solid rgba(77, 227, 255, 0.28);
+	border-radius: 10px;
+	box-shadow: 0 0 50px rgba(77, 227, 255, 0.12);
+}
+
+.level-panel-kicker {
+	font-size: 10px;
+	letter-spacing: 3px;
+	color: rgba(220, 232, 245, 0.5);
+}
+
+.level-panel-title {
+	margin: 10px 0 6px;
+	font-size: clamp(24px, 4vw, 34px);
+	letter-spacing: 5px;
+	font-weight: normal;
+	color: var(--cyan);
+	text-shadow: 0 0 20px rgba(77, 227, 255, 0.55);
+}
+.level-panel-title[data-tone='good'] {
+	color: var(--green);
+	text-shadow: 0 0 20px rgba(82, 255, 168, 0.5);
+}
+.level-panel-title[data-tone='bad'] {
+	color: var(--red);
+	text-shadow: 0 0 20px rgba(255, 77, 94, 0.5);
+}
+
+.level-panel-sub {
+	margin: 0 0 22px;
+	font-size: 12px;
+	line-height: 1.6;
+	color: rgba(220, 232, 245, 0.65);
+}
+
+.results-stats {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px;
+	margin-bottom: 18px;
+}
+.results-stat {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px 6px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(120, 160, 220, 0.18);
+	border-radius: 6px;
+}
+.results-stat span {
+	font-size: 9.5px;
+	letter-spacing: 2px;
+	color: rgba(220, 232, 245, 0.5);
+}
+.results-stat strong {
+	font-size: 18px;
+	font-weight: normal;
+	color: #eaf3fb;
+}
+
+.results-note {
+	margin: 0 0 20px;
+	padding: 10px 12px;
+	font-size: 11.5px;
+	letter-spacing: 1px;
+	border-radius: 6px;
+	color: rgba(220, 232, 245, 0.7);
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(120, 160, 220, 0.18);
+}
+.results-note[data-tone='good'] {
+	color: var(--green);
+	border-color: rgba(82, 255, 168, 0.35);
+	background: rgba(82, 255, 168, 0.06);
+}
+.results-note[data-tone='warn'] {
+	color: rgba(255, 210, 130, 0.95);
+	border-color: rgba(255, 170, 60, 0.35);
+	background: rgba(255, 170, 60, 0.07);
+}
+
+.level-panel-actions {
+	display: flex;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+.level-panel-actions button {
+	margin: 0;
+	min-width: 130px;
+}
+
+@media (max-width: 560px) {
+	.level-panel {
+		padding: 24px 18px 20px;
+	}
+	.results-stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.level-panel-actions button {
+		flex: 1 1 auto;
 	}
 }

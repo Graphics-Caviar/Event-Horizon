@@ -326,8 +326,17 @@ export class ProfileService {
 			payload.quantumOverdriveCount = increment(
 				run.quantumOverdriveCount
 			)
-		if (run.reachedLevel > 0)
-			payload.highestUnlockedLevel = run.reachedLevel
+		// Progress only ever moves forward. Writing reachedLevel blindly meant
+		// replaying Level 1 after unlocking Level 3 set progress back to 2 and
+		// re-locked Level 3 on the home page. Firestore has no "max" field
+		// transform, so guard against the cached profile — safe here because
+		// only this player ever writes their own profile document.
+		const known = Number(this._profile?.highestUnlockedLevel) || 1
+		const reached = Math.min(
+			3,
+			Math.floor(Number(run.reachedLevel)) || 0
+		)
+		if (reached > known) payload.highestUnlockedLevel = reached
 
 		if (Object.keys(payload).length === 0) return
 
@@ -337,6 +346,13 @@ export class ProfileService {
 				undefined,
 				'run totals'
 			)
+			// Keep the cache in step so the home page reflects the unlock
+			// the next time it is shown, without waiting for a re-sync.
+			if (payload.highestUnlockedLevel && this._profile) {
+				this._profile.highestUnlockedLevel =
+					payload.highestUnlockedLevel
+				this._emit()
+			}
 		} catch (error) {
 			console.warn(
 				'[Profile] recordRun failed:',

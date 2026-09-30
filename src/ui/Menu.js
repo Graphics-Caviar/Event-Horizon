@@ -24,8 +24,13 @@ export class Menu {
 			auth: document.getElementById('screen-auth'),
 			leaderboard:
 				document.getElementById('screen-leaderboard'),
+			pause: document.getElementById('screen-pause'),
+			results: document.getElementById('screen-results'),
 		}
 
+		this.levelCards = [
+			...document.querySelectorAll('.level-card[data-level]'),
+		]
 		this.accountEl = document.getElementById('menu-account')
 		this.accountGuestEl =
 			document.getElementById('menu-account-guest')
@@ -114,17 +119,41 @@ export class Menu {
 		}
 	}
 
+	// ---------------- level progression ----------------
+
+	/**
+	 * Lock every level above the player's progress. Level 1 can never be
+	 * locked. The markup ships with levels 2 and 3 already locked, so this
+	 * mainly REMOVES locks once real progress is known — no flash of
+	 * unlocked levels while the profile is still loading.
+	 *
+	 * @param {number} highestUnlocked the highest level the player may play
+	 */
+	setUnlockedLevel(highestUnlocked) {
+		const unlocked = Math.max(
+			1,
+			Math.floor(Number(highestUnlocked)) || 1
+		)
+		for (const card of this.levelCards) {
+			const level = Number(card.dataset.level)
+			card.classList.toggle('is-locked', level > unlocked)
+		}
+	}
+
 	// ---------------- individual modals ----------------
 
 	_openControlsModal() {
 		this._openModal(`
       <h3>CONTROLS</h3>
-      <p class="modal-desc">Flight controls for The Singularity Run.</p>
+      <p class="modal-desc">Flight controls for The Singularity Run. Escape the black hole's pull and steer around the asteroids.</p>
       <ul class="key-list">
-        <li><span>Accelerate</span><kbd>W / ↑</kbd></li>
+        <li><span>Thrust</span><kbd>W / ↑</kbd></li>
         <li><span>Brake / Reverse</span><kbd>S / ↓</kbd></li>
-        <li><span>Turn Left</span><kbd>A / ←</kbd></li>
-        <li><span>Turn Right</span><kbd>D / →</kbd></li>
+        <li><span>Turn Left / Right</span><kbd>A / D · ← / →</kbd></li>
+        <li><span>Fly Up</span><kbd>Space / R</kbd></li>
+        <li><span>Fly Down</span><kbd>Shift / F</kbd></li>
+        <li><span>Pitch Up / Down</span><kbd>Q / E</kbd></li>
+        <li><span>Pause</span><kbd>Esc</kbd></li>
       </ul>
     `)
 	}
