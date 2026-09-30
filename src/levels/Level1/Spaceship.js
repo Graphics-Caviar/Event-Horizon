@@ -82,7 +82,9 @@ export class Spaceship {
 		const config = SHIPS[selectedKey] || SHIPS.vanguard
 
 		try {
-			const model = await this.level.assetManager.loadModel(config.model)
+			const model = await this.level.assetManager.loadModel(
+				config.model
+			)
 			if (!this.shipGroup.parent) return
 
 			model.name = `spaceship-model-${config.key}`
@@ -97,7 +99,8 @@ export class Spaceship {
 			// Normalize each selected craft to the same gameplay footprint.
 			let box = new THREE.Box3().setFromObject(model)
 			const size = box.getSize(new THREE.Vector3())
-			const longestAxis = Math.max(size.x, size.y, size.z) || 1
+			const longestAxis =
+				Math.max(size.x, size.y, size.z) || 1
 			model.scale.setScalar(18 / longestAxis)
 
 			box = new THREE.Box3().setFromObject(model)
@@ -115,21 +118,27 @@ export class Spaceship {
 
 			const fitted = new THREE.Box3().setFromObject(model)
 			const fittedSize = fitted.getSize(new THREE.Vector3())
-			this.collisionRadius = Math.max(fittedSize.x, fittedSize.y) * 0.45
+			this.collisionRadius =
+				Math.max(fittedSize.x, fittedSize.y) * 0.45
 		} catch (error) {
-			console.error(`Unable to load selected ship ${config.key}:`, error)
+			console.error(
+				`Unable to load selected ship ${config.key}:`,
+				error
+			)
 		}
 	}
-
 
 	async loadSelectedPilot() {
 		const selectedKey = this.level.game.gameState.selectedCharacter
 		const config =
-			CHARACTERS.find((character) => character.id === selectedKey) ||
-			CHARACTERS[0]
+			CHARACTERS.find(
+				(character) => character.id === selectedKey
+			) || CHARACTERS[0]
 
 		try {
-			const pilot = await this.level.assetManager.loadModel(config.model)
+			const pilot = await this.level.assetManager.loadModel(
+				config.model
+			)
 			if (!this.shipGroup.parent) return
 
 			pilot.name = `pilot-model-${config.id}`
@@ -160,7 +169,10 @@ export class Spaceship {
 			this.shipGroup.add(pilot)
 			this.pilotModel = pilot
 		} catch (error) {
-			console.error(`Unable to load selected pilot ${config.id}:`, error)
+			console.error(
+				`Unable to load selected pilot ${config.id}:`,
+				error
+			)
 		}
 	}
 
