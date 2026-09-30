@@ -94,7 +94,9 @@ export class Spaceship {
 		const config = SHIPS[selectedKey] || SHIPS.vanguard
 
 		try {
-			const model = await this.level.assetManager.loadModel(config.model)
+			const model = await this.level.assetManager.loadModel(
+				config.model
+			)
 			if (!this.shipGroup.parent) return
 
 			model.name = `spaceship-model-${config.key}`
@@ -109,7 +111,8 @@ export class Spaceship {
 			// Normalize each selected craft to the same gameplay footprint.
 			let box = new THREE.Box3().setFromObject(model)
 			const size = box.getSize(new THREE.Vector3())
-			const longestAxis = Math.max(size.x, size.y, size.z) || 1
+			const longestAxis =
+				Math.max(size.x, size.y, size.z) || 1
 			model.scale.setScalar(18 / longestAxis)
 
 			box = new THREE.Box3().setFromObject(model)
@@ -127,13 +130,15 @@ export class Spaceship {
 
 			const fitted = new THREE.Box3().setFromObject(model)
 			const fittedSize = fitted.getSize(new THREE.Vector3())
-			this.collisionRadius = Math.max(fittedSize.x, fittedSize.y) * 0.45
+			this.collisionRadius =
+				Math.max(fittedSize.x, fittedSize.y) * 0.45
 		} catch (error) {
-			console.error(`Unable to load selected ship ${config.key}:`, error)
+			console.error(
+				`Unable to load selected ship ${config.key}:`,
+				error
+			)
 		}
 	}
-
-
 
 	createEngineEffects() {
 		this.engineGroup = new THREE.Group()
@@ -173,7 +178,10 @@ export class Spaceship {
 		}
 
 		const geometry = new THREE.BufferGeometry()
-		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+		geometry.setAttribute(
+			'position',
+			new THREE.BufferAttribute(positions, 3)
+		)
 		this.own(geometry)
 
 		const material = new THREE.PointsMaterial({
@@ -212,7 +220,11 @@ export class Spaceship {
 			bankT
 		)
 
-		const targetEngine = this.input.forward ? 1 : this.input.backward ? 0.3 : 0
+		const targetEngine = this.input.forward
+			? 1
+			: this.input.backward
+				? 0.3
+				: 0
 		this.engineIntensity = THREE.MathUtils.lerp(
 			this.engineIntensity,
 			targetEngine,
@@ -221,26 +233,33 @@ export class Spaceship {
 
 		if (this.engineFlame) {
 			this.engineFlame.visible = this.engineIntensity > 0.03
-			const pulse = 0.9 + Math.sin(this.elapsedTime * 28) * 0.12
+			const pulse =
+				0.9 + Math.sin(this.elapsedTime * 28) * 0.12
 			this.engineFlame.scale.set(
 				0.7 + this.engineIntensity * 0.45,
 				0.7 + this.engineIntensity * 0.45,
 				pulse * (0.45 + this.engineIntensity * 1.2)
 			)
-			this.engineFlame.material.opacity = 0.25 + this.engineIntensity * 0.65
+			this.engineFlame.material.opacity =
+				0.25 + this.engineIntensity * 0.65
 			this.engineLight.intensity = this.engineIntensity * 8
 		}
 
 		if (this.speedStreaks) {
-			this.speedStreaks.material.opacity = THREE.MathUtils.clamp(
-				(speedRatio - 0.12) * 1.15,
-				0,
-				0.8
-			)
-			this.speedStreaks.material.size = 0.35 + speedRatio * 0.85
-			const positions = this.speedStreaks.geometry.attributes.position
+			this.speedStreaks.material.opacity =
+				THREE.MathUtils.clamp(
+					(speedRatio - 0.12) * 1.15,
+					0,
+					0.8
+				)
+			this.speedStreaks.material.size =
+				0.35 + speedRatio * 0.85
+			const positions =
+				this.speedStreaks.geometry.attributes.position
 			for (let i = 0; i < positions.count; i++) {
-				let z = positions.getZ(i) + (18 + speedRatio * 150) * dt
+				let z =
+					positions.getZ(i) +
+					(18 + speedRatio * 150) * dt
 				if (z > 80) z = -80
 				positions.setZ(i, z)
 			}
@@ -336,15 +355,21 @@ export class Spaceship {
 		// camera uncomfortable while coasting.
 		if (this.input.forward && speedRatio > 0.08) {
 			const shake = 0.08 + speedRatio * 0.16
-			desiredPosition.x += Math.sin(this.elapsedTime * 37) * shake
-			desiredPosition.y += Math.cos(this.elapsedTime * 43) * shake
+			desiredPosition.x +=
+				Math.sin(this.elapsedTime * 37) * shake
+			desiredPosition.y +=
+				Math.cos(this.elapsedTime * 43) * shake
 		}
 
 		const t = 1 - Math.exp(-this.cameraSmoothing * dt)
 		camera.position.lerp(desiredPosition, t)
 
 		const targetFov = this.baseCameraFov + speedRatio * 10
-		const nextFov = THREE.MathUtils.lerp(camera.fov, targetFov, 1 - Math.exp(-4 * dt))
+		const nextFov = THREE.MathUtils.lerp(
+			camera.fov,
+			targetFov,
+			1 - Math.exp(-4 * dt)
+		)
 		if (Math.abs(nextFov - camera.fov) > 0.01) {
 			camera.fov = nextFov
 			camera.updateProjectionMatrix()
