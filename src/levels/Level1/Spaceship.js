@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { SHIPS } from '../../systems/ShipManager.js'
+import { CHARACTERS } from '../../launchbay/data/characters.js'
 
 const DEBUG = true
 
@@ -54,6 +56,8 @@ export class Spaceship {
 	}
 
 	createSpaceship() {
+		// Keep a tiny procedural craft as a loading/error fallback so gameplay
+		// can start immediately even while the selected GLB is being decoded.
 		const geo = new THREE.ConeGeometry(6, 18, 8)
 		this.own(geo)
 		geo.rotateX(-Math.PI / 2)
@@ -66,7 +70,98 @@ export class Spaceship {
 		this.own(mat)
 
 		this.mesh = new THREE.Mesh(geo, mat)
+		this.mesh.name = 'spaceship-loading-fallback'
 		this.shipGroup.add(this.mesh)
+
+		this.loadSelectedModel()
+		this.loadSelectedPilot()
+	}
+
+	async loadSelectedModel() {
+		const selectedKey = this.level.game.gameState.selectedShip
+		const config = SHIPS[selectedKey] || SHIPS.vanguard
+
+		try {
+			const model = await this.level.assetManager.loadModel(config.model)
+			if (!this.shipGroup.parent) return
+
+			model.name = `spaceship-model-${config.key}`
+			model.traverse((child) => {
+				if (child.isMesh) {
+					child.castShadow = true
+					child.receiveShadow = true
+				}
+			})
+
+			// GLB files can have wildly different authoring units and origins.
+			// Normalize each selected craft to the same gameplay footprint.
+			let box = new THREE.Box3().setFromObject(model)
+			const size = box.getSize(new THREE.Vector3())
+			const longestAxis = Math.max(size.x, size.y, size.z) || 1
+			model.scale.setScalar(18 / longestAxis)
+
+			box = new THREE.Box3().setFromObject(model)
+			const center = box.getCenter(new THREE.Vector3())
+			model.position.sub(center)
+
+			// The flight controller treats local -Z as forward. If a particular
+			// asset was authored facing the opposite direction, adjust this one
+			// rotation rather than changing the physics/controller code.
+			model.rotation.y = Math.PI
+
+			this.shipGroup.add(model)
+			this.shipGroup.remove(this.mesh)
+			this.model = model
+
+			const fitted = new THREE.Box3().setFromObject(model)
+			const fittedSize = fitted.getSize(new THREE.Vector3())
+			this.collisionRadius = Math.max(fittedSize.x, fittedSize.y) * 0.45
+		} catch (error) {
+			console.error(`Unable to load selected ship ${config.key}:`, error)
+		}
+	}
+
+
+	async loadSelectedPilot() {
+		const selectedKey = this.level.game.gameState.selectedCharacter
+		const config =
+			CHARACTERS.find((character) => character.id === selectedKey) ||
+			CHARACTERS[0]
+
+		try {
+			const pilot = await this.level.assetManager.loadModel(config.model)
+			if (!this.shipGroup.parent) return
+
+			pilot.name = `pilot-model-${config.id}`
+			pilot.traverse((child) => {
+				if (child.isMesh) {
+					child.castShadow = true
+					child.receiveShadow = true
+				}
+			})
+
+			// Normalize all pilot GLBs to a consistent seated/cockpit scale.
+			let box = new THREE.Box3().setFromObject(pilot)
+			const size = box.getSize(new THREE.Vector3())
+			const height = size.y || 1
+			pilot.scale.setScalar(3.2 / height)
+
+			box = new THREE.Box3().setFromObject(pilot)
+			const center = box.getCenter(new THREE.Vector3())
+			pilot.position.x -= center.x
+			pilot.position.y -= box.min.y
+			pilot.position.z -= center.z
+
+			// The pilot moves and rotates with the craft. This offset places the
+			// character around the cockpit area without affecting flight physics.
+			pilot.position.add(new THREE.Vector3(0, 1.1, 1.5))
+			pilot.rotation.y = Math.PI
+
+			this.shipGroup.add(pilot)
+			this.pilotModel = pilot
+		} catch (error) {
+			console.error(`Unable to load selected pilot ${config.id}:`, error)
+		}
 	}
 
 	setupInitialShipRotation() {

@@ -13,7 +13,7 @@ const STORAGE_KEY = 'event-horizon:profile'
 export const DEFAULT_PROFILE = Object.freeze({
 	playerName: '',
 	selectedCharacter: 'zara',
-	selectedShip: 'raven',
+	selectedShip: 'vanguard',
 	settings: Object.freeze({
 		muted: false,
 	}),
@@ -50,7 +50,7 @@ export class StorageService {
 					? parsed.selectedCharacter
 					: DEFAULT_PROFILE.selectedCharacter
 
-			const validShips = ['raven', 'phantom', 'interceptor']
+			const validShips = ['vanguard', 'starfighter', 'aegis']
 			const selectedShip =
 				typeof parsed.selectedShip === 'string' &&
 				validShips.includes(parsed.selectedShip)
