@@ -114,7 +114,7 @@ export class Level1 extends Level {
 	constructor(
 		game,
 		{
-			shipKey = 'starfighter',
+			shipKey = 'vanguard', // team default (PR #12)
 			pilotKey = 'zara',
 			onEnd,
 			onPauseChange,
@@ -125,7 +125,7 @@ export class Level1 extends Level {
 
 		this.onEnd = onEnd || (() => {})
 		this.onPauseChange = onPauseChange || (() => {})
-		this.shipKey = SHIPS[shipKey] ? shipKey : 'starfighter'
+		this.shipKey = SHIPS[shipKey] ? shipKey : 'vanguard'
 		this.pilotKey = CHARACTERS[pilotKey] ? pilotKey : 'zara'
 		this.handling = handlingFor(this.shipKey)
 		this.audio = game.audio
@@ -160,6 +160,7 @@ export class Level1 extends Level {
 		const ship = SHIPS[this.shipKey]
 		this.spaceship = new Spaceship(this, this.blackHole, {
 			shipKey: this.shipKey,
+			pilotKey: this.pilotKey,
 			modelPath: ship.model,
 			handling: this.handling,
 		})

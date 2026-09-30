@@ -24,7 +24,8 @@ const VALID_SHIPS = Object.keys(SHIPS)
 export const DEFAULT_PROFILE = Object.freeze({
 	playerName: '',
 	selectedCharacter: 'zara',
-	selectedShip: 'starfighter',
+	// Team default (PR #12).
+	selectedShip: 'vanguard',
 	settings: Object.freeze({
 		muted: false,
 	}),

@@ -20,7 +20,7 @@ import { SHIPS } from '../systems/ShipManager.js'
 import './styles/character-select.css'
 import './styles/launch-bay.css'
 
-const SHIP_ORDER = ['raven', 'phantom', 'interceptor']
+const SHIP_ORDER = ['vanguard', 'starfighter', 'aegis']
 const SHIP_MODEL_PATH = '/assets/models/spaceship/spaceship.glb'
 const TARGET_LENGTH = 6 // world units, matches roughly the procedural ship's scale
 
@@ -47,7 +47,7 @@ export class LaunchBayScene {
 		this._onLaunch = onLaunch
 		this._onBack = onBack
 		this._pilotName = pilotName || ''
-		this._shipKey = SHIPS[initialShip] ? initialShip : 'raven'
+		this._shipKey = SHIPS[initialShip] ? initialShip : 'vanguard'
 
 		this.starfield = assetManager.createStarfield(2000, 500)
 		this.group.add(this.starfield)
@@ -86,7 +86,7 @@ export class LaunchBayScene {
 
 	_applyShip(key) {
 		this._shipKey = key
-		const config = SHIPS[key] || SHIPS.raven
+		const config = SHIPS[key] || SHIPS.vanguard
 
 		if (this.shipModel) {
 			this.group.remove(this.shipModel)
@@ -189,7 +189,7 @@ export class LaunchBayScene {
 				this._onLaunch?.(this._shipKey)
 			})
 
-		this._updatePanelText(SHIPS[this._shipKey] || SHIPS.raven)
+		this._updatePanelText(SHIPS[this._shipKey] || SHIPS.vanguard)
 	}
 
 	_updatePanelText(config) {

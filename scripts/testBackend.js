@@ -35,7 +35,8 @@ globalThis.localStorage = {
 }
 
 const { default: backend } = await import('../src/services/FirebaseService.js')
-const { default: storage } = await import('../src/services/StorageService.js')
+const { default: storage, DEFAULT_PROFILE } =
+	await import('../src/services/StorageService.js')
 const { validateUsername, validatePassword, usernameToEmail } =
 	await import('../src/services/AuthService.js')
 const { db } = await import('../src/services/firebaseConfig.js')
@@ -292,7 +293,7 @@ check('signed out', backend.status().signedIn === false)
 check('username cleared', backend.status().username === null)
 check(
 	'cached ship reset to default',
-	storage.load().selectedShip === 'starfighter',
+	storage.load().selectedShip === DEFAULT_PROFILE.selectedShip,
 	storage.load().selectedShip
 )
 check(

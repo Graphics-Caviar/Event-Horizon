@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { CHARACTERS } from '../../launchbay/data/characters.js'
 
 // Per-frame velocity/distance logging. Keep this off: at 60fps it wrote
 // ~120 console lines a second, which measurably costs frame time.
@@ -31,13 +32,14 @@ export class Spaceship {
 	 * @param {object} blackHole
 	 * @param {object} [options]
 	 * @param {string} [options.shipKey] which ship the player picked
+	 * @param {string} [options.pilotKey] which pilot sits in the cockpit
 	 * @param {string|string[]} [options.modelPath] GLB path(s) to fly
 	 * @param {object} [options.handling] per-ship tuning (Level1.handlingFor)
 	 */
 	constructor(
 		level,
 		blackHole,
-		{ shipKey, modelPath, handling = {} } = {}
+		{ shipKey, pilotKey, modelPath, handling = {} } = {}
 	) {
 		this.level = level
 		this.blackHole = blackHole
@@ -98,8 +100,12 @@ export class Spaceship {
 		this.setupInitialCamera()
 
 		this.model = null
+		this.pilotModel = null
 		this._disposed = false
 		if (modelPath) this.loadModel(modelPath)
+		this.loadSelectedPilot(
+			pilotKey ?? level.game?.gameState?.selectedCharacter
+		)
 	}
 
 	addObject(object) {
@@ -132,6 +138,7 @@ export class Spaceship {
 		this.own(mat)
 
 		this.mesh = new THREE.Mesh(geo, mat)
+		this.mesh.name = 'spaceship-loading-fallback'
 		// Everything drawn goes in `visual`, a child of shipGroup, so the
 		// climb/dive tilt is purely cosmetic: physics reads shipGroup only.
 		this.visual = new THREE.Group()
@@ -182,6 +189,64 @@ export class Spaceship {
 		box = new THREE.Box3().setFromObject(pivot)
 		pivot.position.sub(box.getCenter(new THREE.Vector3()))
 		return pivot
+	}
+
+	/**
+	 * Seat the selected pilot in the cockpit (from Mpilo's PR #12).
+	 *
+	 * Their numbers were tuned for ships fitted to 18 units; scaling by
+	 * SHIP_LENGTH / 18 keeps the pilot in the same place relative to the
+	 * hull. Added to `visual`, so the pilot tips with the ship when climbing
+	 * or diving. Purely cosmetic — no effect on flight or collisions.
+	 */
+	async loadSelectedPilot(pilotKey) {
+		const config =
+			CHARACTERS.find(
+				(character) => character.id === pilotKey
+			) || CHARACTERS[0]
+		const fit = SHIP_LENGTH / 18
+
+		try {
+			const pilot = await this.level.assetManager.loadModel(
+				config.model
+			)
+			if (this._disposed) return
+
+			pilot.name = `pilot-model-${config.id}`
+			pilot.traverse((child) => {
+				if (child.isMesh) {
+					child.castShadow = true
+					child.receiveShadow = true
+				}
+			})
+
+			// Normalize all pilot GLBs to a consistent seated/cockpit scale.
+			let box = new THREE.Box3().setFromObject(pilot)
+			const size = box.getSize(new THREE.Vector3())
+			const height = size.y || 1
+			pilot.scale.setScalar((3.2 * fit) / height)
+
+			box = new THREE.Box3().setFromObject(pilot)
+			const center = box.getCenter(new THREE.Vector3())
+			pilot.position.x -= center.x
+			pilot.position.y -= box.min.y
+			pilot.position.z -= center.z
+
+			// The pilot moves and rotates with the craft. This offset places the
+			// character around the cockpit area without affecting flight physics.
+			pilot.position.add(
+				new THREE.Vector3(0, 1.1 * fit, 1.5 * fit)
+			)
+			pilot.rotation.y = Math.PI
+
+			this.visual.add(pilot)
+			this.pilotModel = pilot
+		} catch (error) {
+			console.error(
+				`Unable to load selected pilot ${config.id}:`,
+				error
+			)
+		}
 	}
 
 	setupInitialShipRotation() {

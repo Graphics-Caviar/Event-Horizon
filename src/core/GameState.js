@@ -14,7 +14,7 @@ export class GameState {
 	constructor() {
 		this.playerName = 'Pilot'
 		this.selectedCharacter = 'zara'
-		this.selectedShip = 'raven'
+		this.selectedShip = 'vanguard'
 		this.reset()
 	}
 
