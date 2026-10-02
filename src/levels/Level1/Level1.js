@@ -44,7 +44,7 @@ export const LEVEL1_TUNING = Object.freeze({
 	hitDamage: 20,
 	// Lateral spread of the field around the ship. Tighter packs the same
 	// number of asteroids closer to the flight path.
-	asteroidSpread: 801,
+	asteroidSpread: 800,
 	invulnerableSeconds: 1,
 	hitSpeedKept: 0.55, // fraction of velocity kept after an impact
 	shakeSeconds: 0.35,
