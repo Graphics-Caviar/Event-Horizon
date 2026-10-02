@@ -1,8 +1,11 @@
 import * as THREE from 'three'
 
 import { Level, clearScene } from '../../core/Level.js'
+import { STATUS } from '../../core/GameState.js'
+import { Skybox } from '../../skybox.js'
 import { AsteroidField } from './AsteroidField.js'
 import { BlackHole } from './BlackHole.js'
+import { Endpoint } from './Endpoint.js'
 import { Spaceship } from './Spaceship.js'
 
 export class Level1 extends Level {
@@ -22,6 +25,10 @@ export class Level1 extends Level {
 		this.spaceship.onAsteroidCollision = (asteroid) => {
 			console.log('collision')
 		}
+
+		this.skybox = new Skybox(this)
+		this.endpoint = new Endpoint(this)
+		this.completed = false
 	}
 
 	clearStartMenu() {
@@ -47,6 +54,11 @@ export class Level1 extends Level {
 
 	update(delta) {
 		super.update(delta)
+		this.skybox.update()
+		this.endpoint.update(delta)
+
+		if (this.completed) return
+
 		if (this.asteroidField)
 			this.asteroidField.updateAsteroidPhysics(
 				delta,
@@ -68,7 +80,20 @@ export class Level1 extends Level {
 				this.spaceship.onAsteroidCollision?.(
 					hitAsteroid
 				)
+			if (
+				this.endpoint.checkReached(
+					this.spaceship.position
+				)
+			) {
+				this._completeLevel()
+			}
 		}
 		this.elapsedPlayTime += delta
+	}
+
+	_completeLevel() {
+		this.completed = true
+		this.game.gameState.status = STATUS.LEVEL_COMPLETE
+		console.log('Level 1 complete — you escaped the singularity!')
 	}
 }
