@@ -3,6 +3,13 @@ import { Spaceship } from '../models/Spaceship.js'
 import { CharacterManager, CHARACTERS } from '../systems/CharacterManager.js'
 import { SHIPS } from '../systems/ShipManager.js'
 
+/** World-space length a ship is fitted to when its stage has room. */
+const SHIP_SIZE = 5
+/** Camera-to-ship distance in the ship pose (camera (0,2.4,8) -> origin). */
+const SHIP_CAMERA_DISTANCE = 8.2
+/** Camera-to-lineup distance in the pilot overview pose (camera z = 6.7). */
+const OVERVIEW_CAMERA_DISTANCE = 6.7
+
 /** 3D content behind the pilot / ship selection screen. */
 export class HangarScene {
 	constructor(sceneManager, assetManager) {
@@ -28,6 +35,15 @@ export class HangarScene {
 		this.podium = new THREE.Mesh(podiumGeo, podiumMat)
 		this.podium.position.y = -0.15
 		this.group.add(this.podium)
+
+		// The ship sits inside a pivot centred on its bounding box. Rotating
+		// or scaling the model itself happens about its authored origin, which
+		// is not its visual centre — so resizing it to fit the stage made it
+		// drift sideways. The pivot rotates and scales about the true centre.
+		this.shipPivot = new THREE.Group()
+		this.group.add(this.shipPivot)
+		this._shipStage = null
+		this._pilotAnchor = null
 
 		this.characterManager = new CharacterManager(
 			this.group,
@@ -145,7 +161,7 @@ export class HangarScene {
 			)
 				return
 			this._prepareShip(model)
-			this.group.add(model)
+			this.shipPivot.add(model)
 			this.ship = model
 		} catch (error) {
 			console.error(
@@ -174,7 +190,11 @@ export class HangarScene {
 				child.receiveShadow = true
 			}
 		})
-		this._fitAndCenter(model, 5)
+		this._fitAndCenter(model, SHIP_SIZE)
+		// _fitAndCenter re-centres x/z after scaling but not y; finish the job
+		// so the pivot sits exactly on the hull's visual centre.
+		const box = new THREE.Box3().setFromObject(model)
+		model.position.y -= box.getCenter(new THREE.Vector3()).y
 	}
 
 	_fitAndCenter(model, targetSize) {
@@ -201,8 +221,100 @@ export class HangarScene {
 
 	_removeShip() {
 		if (!this.ship) return
-		this.group.remove(this.ship)
+		this.ship.parent?.remove(this.ship)
 		this.ship = null
+	}
+
+	/**
+	 * Tell the scene which on-screen box the ship should appear in. The ship
+	 * select UI keeps its text in a left sidebar and leaves this element
+	 * empty on the right; framing against the element's real position (read
+	 * every frame) keeps the ship there at any window size and breakpoint,
+	 * instead of relying on hardcoded offsets that only suit one aspect ratio.
+	 * @param {HTMLElement|null} element
+	 */
+	setShipStage(element) {
+		this._shipStage = element || null
+	}
+
+	/**
+	 * Tell the scene where each pilot's name card is, so the lineup can stand
+	 * each 3D pilot directly above its card.
+	 *
+	 * The models used to sit at hardcoded x positions and only lined up with
+	 * the cards by coincidence, so widening the card row in CSS would have
+	 * left the pilots behind. Anchoring to the cards makes the CSS the single
+	 * source of truth for pilot spacing, at every screen size.
+	 * @param {(key: string) => HTMLElement|null} lookup
+	 */
+	setPilotAnchor(lookup) {
+		this._pilotAnchor = typeof lookup === 'function' ? lookup : null
+	}
+
+	/** Move each overview pilot to sit above its card's horizontal centre. */
+	_alignOverview() {
+		if (!this._pilotAnchor) return
+		const cam = this.camera
+		const halfW =
+			Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) *
+			OVERVIEW_CAMERA_DISTANCE *
+			cam.aspect
+		const vw = window.innerWidth
+		for (const [key, model] of this.overviewCharacters) {
+			const rect =
+				this._pilotAnchor(key)?.getBoundingClientRect()
+			if (!rect || rect.width === 0) continue
+			const ndcX = ((rect.left + rect.width / 2) / vw) * 2 - 1
+			model.position.x = ndcX * halfW
+		}
+	}
+
+	/**
+	 * Centre the ship in the stage box and size it to fit.
+	 *
+	 * The camera slides sideways rather than turning, so the ship keeps the
+	 * same straight-on three-quarter view — it simply lands in the stage
+	 * instead of the middle of the screen, where it used to sit behind the
+	 * ship cards and stat table.
+	 */
+	_frameShip() {
+		const cam = this.camera
+		const halfH =
+			Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) *
+			SHIP_CAMERA_DISTANCE
+		const halfW = halfH * cam.aspect
+
+		let ndcX = 0
+		let ndcY = 0
+		let fracW = 1
+		let fracH = 1
+		const rect = this._shipStage?.getBoundingClientRect()
+		if (rect && rect.width > 0 && rect.height > 0) {
+			const vw = window.innerWidth
+			const vh = window.innerHeight
+			ndcX = ((rect.left + rect.width / 2) / vw) * 2 - 1
+			ndcY = -(((rect.top + rect.height / 2) / vh) * 2 - 1)
+			fracW = rect.width / vw
+			fracH = rect.height / vh
+		}
+
+		// Same downward viewing angle as the original pose (a 1.9 drop over
+		// 8 units), but aimed at the hull's centre rather than 0.5 above it,
+		// which left the ship sitting low in the stage.
+		const offX = -ndcX * halfW
+		const offY = -ndcY * halfH
+		cam.position.set(offX, 1.9 + offY, 8)
+		cam.lookAt(offX, offY, 0)
+
+		// Full size when the stage has room; smaller on narrow stages, with
+		// margin because the hull's width changes as it rotates.
+		const stageW = fracW * halfW * 2
+		const stageH = fracH * halfH * 2
+		const target = Math.max(
+			1.5,
+			Math.min(SHIP_SIZE, stageW * 0.7, stageH * 0.85)
+		)
+		this.shipPivot.scale.setScalar(target / SHIP_SIZE)
 	}
 
 	update(delta) {
@@ -220,6 +332,7 @@ export class HangarScene {
 			}
 			this.camera.position.set(0, 1.55, 6.7)
 			this.camera.lookAt(0, 1.18, 0)
+			this._alignOverview()
 		} else if (
 			this._mode === 'character-detail' &&
 			this.characterManager.currentModel
@@ -229,10 +342,10 @@ export class HangarScene {
 			this.camera.position.set(-0.25, 1.6, 4.35)
 			this.camera.lookAt(-0.62, 1.28, 0)
 		} else if (this._mode === 'ship' && this.ship) {
-			this.ship.rotation.y += delta * 0.25
-			this.ship.position.y = Math.sin(this._time * 0.8) * 0.08
-			this.camera.position.set(0, 2.4, 8)
-			this.camera.lookAt(0, 0.5, 0)
+			this.shipPivot.rotation.y += delta * 0.25
+			this.shipPivot.position.y =
+				Math.sin(this._time * 0.8) * 0.08
+			this._frameShip()
 		}
 	}
 

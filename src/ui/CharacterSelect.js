@@ -71,6 +71,7 @@ export class CharacterSelect {
 			document.getElementById('pilot-detail-card')
 		this.pilotPanel = document.getElementById('pilot-panel')
 		this.shipCardsEl = document.getElementById('ship-cards')
+		this.shipDetailEl = document.getElementById('ship-detail')
 		this.shipStatComparisonEl = document.getElementById(
 			'ship-stat-comparison'
 		)
@@ -229,41 +230,58 @@ export class CharacterSelect {
 		if (notifyScene) this.onPilotOverview()
 	}
 
+	/**
+	 * Ship tab = a compact list of ships + the selected ship's details and
+	 * stats, all in a left-hand sidebar. The right side of the screen is left
+	 * empty (see #ship-stage) so the 3D ship can be seen clearly.
+	 */
 	_renderShipCards() {
 		if (!this.shipCardsEl) return
 		this.shipCardsEl.innerHTML = Object.values(SHIPS)
-			.map(
-				(s) => `
-      <div class="ship-card ${s.accentClass} ${s.key === this.selectedShipKey ? 'selected' : ''}">
-        <div class="ship-card-name">${s.name} <span class="ship-card-mark">${s.mark}</span></div>
-        <div class="ship-card-role">${s.role}</div>
-        <div class="ship-card-tagline">${s.tagline}</div>
-        <p class="ship-card-desc">${s.description}</p>
-        <div class="ship-card-specs">
-          ${s.specs
-			.map(
-				(spec) => `
-            <div class="spec-mini-row">
-              <span>${spec.label}</span>
-              <span>${spec.value}</span>
-            </div>
-          `
-			)
-			.join('')}
-        </div>
-        <button class="ship-select-btn" data-key="${s.key}">${s.key === this.selectedShipKey ? 'SELECTED' : 'SELECT'}</button>
-      </div>
-    `
-			)
+			.map((s) => {
+				const selected = s.key === this.selectedShipKey
+				return `
+      <button class="ship-row ${s.accentClass} ${selected ? 'selected' : ''}"
+        type="button" role="radio" aria-checked="${selected}" data-key="${s.key}">
+        <span class="ship-row-name">${s.name}<span class="ship-row-mark">${s.mark}</span></span>
+        <span class="ship-row-role">${s.role}</span>
+        <span class="ship-row-state">SELECTED</span>
+      </button>`
+			})
 			.join('')
 
 		this.shipCardsEl
-			.querySelectorAll('.ship-select-btn')
-			.forEach((btn) => {
-				btn.addEventListener('click', () =>
-					this._selectShip(btn.dataset.key)
+			.querySelectorAll('.ship-row')
+			.forEach((row) => {
+				row.addEventListener('click', () =>
+					this._selectShip(row.dataset.key)
 				)
 			})
+
+		this._renderShipDetail()
+		this._renderShipStatComparison()
+	}
+
+	_renderShipDetail() {
+		if (!this.shipDetailEl) return
+		const s = SHIPS[this.selectedShipKey] || SHIPS.starfighter
+		this.shipDetailEl.className = `ship-detail ${s.accentClass}`
+		this.shipDetailEl.innerHTML = `
+      <div class="ship-detail-name">${s.name}</div>
+      <div class="ship-detail-role">${s.mark} · ${s.role}</div>
+      <div class="ship-card-tagline">${s.tagline}</div>
+      <p class="ship-card-desc">${s.description}</p>
+      <div class="ship-card-specs">
+        ${s.specs
+		.map(
+			(spec) => `
+          <div class="spec-mini-row">
+            <span>${spec.label}</span>
+            <span>${spec.value}</span>
+          </div>`
+		)
+		.join('')}
+      </div>`
 	}
 
 	_selectShip(key) {
@@ -274,23 +292,22 @@ export class CharacterSelect {
 		this.onSelectShip(key)
 	}
 
+	/** Stats for the SELECTED ship. The old side-by-side table of all three
+	 * ships needed the full screen width; in a sidebar, per-ship bars with
+	 * their values read far better, and clicking through the list above
+	 * makes comparing ships a single click. */
 	_renderShipStatComparison() {
 		if (!this.shipStatComparisonEl) return
+		const s = SHIPS[this.selectedShipKey] || SHIPS.starfighter
 		this.shipStatComparisonEl.innerHTML = SHIP_STAT_NAMES.map(
 			(stat) => `
-      <div class="stat-compare-row">
+      <div class="ship-stat-row">
         <span class="stat-compare-label">${stat.toUpperCase()}</span>
-        ${Object.values(SHIPS)
-		.map(
-			(s) => `
-          <div class="stat-bar-track ${s.accentClass}">
-            <div class="stat-bar-fill" style="width:${s.stats[stat] * 10}%"></div>
-          </div>
-        `
-		)
-		.join('')}
-      </div>
-    `
+        <div class="stat-bar-track ${s.accentClass}">
+          <div class="stat-bar-fill" style="width:${s.stats[stat] * 10}%"></div>
+        </div>
+        <span class="ship-stat-value">${s.stats[stat]}</span>
+      </div>`
 		).join('')
 	}
 

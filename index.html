@@ -40,12 +40,21 @@
 						class="bar-fill distance"
 					></div>
 				</div>
+				<div
+					id="hud-distance"
+					class="hud-readout"
+				></div>
 			</div>
 
 			<div id="hud-top-right">
 				<div class="hud-label">SCORE</div>
 				<div id="score-value">0</div>
-				<div class="hud-label">
+				<div id="hud-timer" class="hud-readout">
+					0:00
+				</div>
+				<!-- Nitrogen canisters are not implemented yet (Nitrogen.js is
+				     empty); HUD.js hides this row rather than show a dead 0. -->
+				<div id="hud-nitrogen" class="hud-label">
 					NITROGEN
 					<span id="nitrogen-count">0</span>
 				</div>
@@ -61,8 +70,108 @@
 					⚠ GRAVITATIONAL PULL CRITICAL ⚠
 				</div>
 				<div id="controls-hint">
-					W/↑ Thrust &nbsp;·&nbsp; S/↓ Brake
-					&nbsp;·&nbsp; A/D or ←/→ Turn
+					W Forward &nbsp;·&nbsp; S Brake
+					&nbsp;·&nbsp; A/D Left/Right
+					&nbsp;·&nbsp; Q/E Up/Down &nbsp;·&nbsp;
+					Esc Pause
+				</div>
+			</div>
+		</div>
+
+		<!-- ============ In-level overlays (pause / results) ============ -->
+		<div id="screen-pause" class="screen level-overlay hidden">
+			<div class="level-panel">
+				<div class="level-panel-kicker">
+					LEVEL 1 · THE SINGULARITY RUN
+				</div>
+				<h2 class="level-panel-title">PAUSED</h2>
+				<p class="level-panel-sub">
+					The singularity waits. It is patient.
+				</p>
+				<div class="level-panel-actions">
+					<button
+						id="btn-pause-quit"
+						class="btn-secondary"
+						type="button"
+					>
+						MAIN MENU
+					</button>
+					<button
+						id="btn-pause-restart"
+						class="btn-secondary"
+						type="button"
+					>
+						RESTART
+					</button>
+					<button
+						id="btn-pause-resume"
+						type="button"
+					>
+						RESUME
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="screen-results" class="screen level-overlay hidden">
+			<div class="level-panel">
+				<div class="level-panel-kicker">
+					LEVEL 1 · THE SINGULARITY RUN
+				</div>
+				<h2
+					id="results-title"
+					class="level-panel-title"
+				></h2>
+				<p
+					id="results-subtitle"
+					class="level-panel-sub"
+				></p>
+				<div class="results-stats">
+					<div class="results-stat">
+						<span>SCORE</span>
+						<strong id="results-score">
+							0
+						</strong>
+					</div>
+					<div class="results-stat">
+						<span>TIME</span>
+						<strong id="results-time">
+							0:00
+						</strong>
+					</div>
+					<div class="results-stat">
+						<span>HULL</span>
+						<strong id="results-hull">
+							100%
+						</strong>
+					</div>
+					<div class="results-stat">
+						<span>DISTANCE</span>
+						<strong id="results-distance">
+							0%
+						</strong>
+					</div>
+				</div>
+				<div
+					id="results-note"
+					class="results-note"
+					role="status"
+					aria-live="polite"
+				></div>
+				<div class="level-panel-actions">
+					<button
+						id="btn-results-menu"
+						class="btn-secondary"
+						type="button"
+					>
+						MAIN MENU
+					</button>
+					<button
+						id="btn-results-retry"
+						type="button"
+					>
+						FLY AGAIN
+					</button>
 				</div>
 			</div>
 		</div>
@@ -94,6 +203,31 @@
 					<strong>SURVIVE. ADAPT. ESCAPE.</strong>
 				</p>
 
+				<div
+					id="menu-account"
+					class="menu-account hidden"
+				>
+					<span class="menu-account-label">
+						WELCOME
+					</span>
+					<span
+						id="menu-account-name"
+						class="menu-account-name"
+					></span>
+					<span
+						id="menu-account-guest"
+						class="menu-account-guest hidden"
+					>
+						GUEST
+					</span>
+					<button
+						id="btn-sign-out"
+						class="auth-link"
+					>
+						SIGN OUT
+					</button>
+				</div>
+
 				<nav class="menu-actions">
 					<button
 						id="btn-start"
@@ -109,6 +243,24 @@
 							/>
 						</svg>
 						<span>PLAY</span>
+					</button>
+					<button
+						id="btn-leaderboard"
+						class="menu-btn"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="menu-icon"
+						>
+							<path
+								d="M5 20h4V10H5v10zm5 0h4V4h-4v16zm5 0h4v-7h-4v7z"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linejoin="round"
+							/>
+						</svg>
+						<span>LEADERBOARD</span>
 					</button>
 					<button
 						id="btn-controls"
@@ -228,7 +380,15 @@
 					</span>
 				</div>
 
-				<div class="level-card level-card-1">
+				<!--
+					Levels 2 and 3 ship with .is-locked so there is no flash of
+					unlocked levels before the profile loads. Menu.setUnlockedLevel()
+					removes locks as the player's progress allows.
+				-->
+				<div
+					class="level-card level-card-1"
+					data-level="1"
+				>
 					<div class="level-thumb thumb-1">
 						<div class="thumb-hole"></div>
 						<div class="thumb-ship"></div>
@@ -246,13 +406,49 @@
 					</div>
 				</div>
 
-				<div class="level-card level-card-2">
+				<div
+					class="level-card level-card-2 is-locked"
+					data-level="2"
+				>
 					<div class="level-thumb thumb-2">
 						<div class="thumb-planet"></div>
 						<div
 							class="thumb-terrain"
 						></div>
 						<div class="thumb-rover"></div>
+					</div>
+					<div
+						class="level-lock"
+						aria-hidden="true"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="lock-icon"
+						>
+							<rect
+								x="5"
+								y="10.5"
+								width="14"
+								height="10"
+								rx="2"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+							/>
+							<path
+								d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+								stroke-linecap="round"
+							/>
+							<path
+								d="M12 14.6v2.6"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
 					</div>
 					<div class="level-badge badge-green">
 						02
@@ -266,13 +462,77 @@
 						>
 							SURVIVE. ADAPT. ESCAPE.
 						</div>
+						<div class="level-status">
+							<svg
+								viewBox="0 0 24 24"
+								aria-hidden="true"
+							>
+								<rect
+									x="5"
+									y="10.5"
+									width="14"
+									height="10"
+									rx="2"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								/>
+								<path
+									d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+								/>
+							</svg>
+							<span>
+								LOCKED · CLEAR
+								LEVEL 1
+							</span>
+						</div>
 					</div>
 				</div>
 
-				<div class="level-card level-card-3">
+				<div
+					class="level-card level-card-3 is-locked"
+					data-level="3"
+				>
 					<div class="level-thumb thumb-3">
 						<div class="thumb-void"></div>
 						<div class="thumb-figure"></div>
+					</div>
+					<div
+						class="level-lock"
+						aria-hidden="true"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							class="lock-icon"
+						>
+							<rect
+								x="5"
+								y="10.5"
+								width="14"
+								height="10"
+								rx="2"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+							/>
+							<path
+								d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.6"
+								stroke-linecap="round"
+							/>
+							<path
+								d="M12 14.6v2.6"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+							/>
+						</svg>
 					</div>
 					<div class="level-badge badge-purple">
 						03
@@ -285,6 +545,34 @@
 							class="level-sub sub-purple"
 						>
 							DESTROY THE DEVOURER
+						</div>
+						<div class="level-status">
+							<svg
+								viewBox="0 0 24 24"
+								aria-hidden="true"
+							>
+								<rect
+									x="5"
+									y="10.5"
+									width="14"
+									height="10"
+									rx="2"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								/>
+								<path
+									d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+								/>
+							</svg>
+							<span>
+								LOCKED · CLEAR
+								LEVEL 2
+							</span>
 						</div>
 					</div>
 				</div>
@@ -482,11 +770,35 @@
 				</div>
 			</div>
 
-			<div id="ship-panel" class="hangar-panel hidden">
-				<div class="ship-cards" id="ship-cards"></div>
+			<div
+				id="ship-panel"
+				class="hangar-panel ship-panel hidden"
+			>
+				<!-- Text lives in a left sidebar so the ship has the right
+				     side of the screen to itself. -->
+				<div class="ship-sidebar">
+					<div
+						class="ship-list"
+						id="ship-cards"
+						role="radiogroup"
+						aria-label="Choose your starfighter"
+					></div>
+					<div
+						class="ship-detail"
+						id="ship-detail"
+					></div>
+					<div
+						class="ship-stats"
+						id="ship-stat-comparison"
+					></div>
+				</div>
+				<!-- Deliberately empty. HangarScene measures this box every
+				     frame and frames the 3D ship inside it, so the ship
+				     follows the layout at any screen size. -->
 				<div
-					class="stat-comparison"
-					id="ship-stat-comparison"
+					id="ship-stage"
+					class="ship-stage"
+					aria-hidden="true"
 				></div>
 			</div>
 
@@ -500,6 +812,177 @@
 				<button id="btn-hangar-continue">
 					READY — CONTINUE TO LAUNCH BAY
 				</button>
+			</div>
+		</div>
+
+		<!-- ============ Pilot registry (sign in / create account) ============ -->
+		<div id="screen-auth" class="screen auth-screen hidden">
+			<div class="auth-panel">
+				<div class="auth-brand">EVENT&nbsp;HORIZON</div>
+				<div class="auth-sub">PILOT REGISTRY</div>
+
+				<div class="auth-tabs">
+					<button
+						id="auth-tab-signin"
+						class="auth-tab active"
+						type="button"
+					>
+						SIGN IN
+					</button>
+					<button
+						id="auth-tab-signup"
+						class="auth-tab"
+						type="button"
+					>
+						NEW PILOT
+					</button>
+				</div>
+
+				<form id="auth-form" novalidate>
+					<label
+						class="auth-label"
+						for="auth-username"
+					>
+						CALLSIGN
+					</label>
+					<input
+						id="auth-username"
+						class="modal-input"
+						type="text"
+						maxlength="16"
+						placeholder="e.g. Nova_7"
+						autocomplete="username"
+						spellcheck="false"
+					/>
+
+					<label
+						class="auth-label"
+						for="auth-password"
+					>
+						PASSWORD
+					</label>
+					<input
+						id="auth-password"
+						class="modal-input"
+						type="password"
+						maxlength="128"
+						placeholder="At least 8 characters"
+						autocomplete="current-password"
+					/>
+
+					<div
+						id="auth-confirm-row"
+						class="hidden"
+					>
+						<label
+							class="auth-label"
+							for="auth-confirm"
+						>
+							CONFIRM PASSWORD
+						</label>
+						<input
+							id="auth-confirm"
+							class="modal-input"
+							type="password"
+							maxlength="128"
+							placeholder="Re-enter password"
+							autocomplete="new-password"
+						/>
+					</div>
+
+					<div
+						id="auth-error"
+						class="modal-error hidden"
+					></div>
+
+					<button
+						id="auth-submit"
+						class="auth-submit"
+						type="submit"
+					>
+						SIGN IN
+					</button>
+				</form>
+
+				<div class="auth-alt">
+					<button
+						id="auth-guest"
+						class="auth-link"
+						type="button"
+					>
+						Continue as guest
+					</button>
+					<button
+						id="auth-back"
+						class="auth-link"
+						type="button"
+					>
+						Back to menu
+					</button>
+				</div>
+
+				<div
+					id="auth-notice"
+					class="auth-notice hidden"
+				></div>
+			</div>
+		</div>
+
+		<!-- ============ Leaderboard ============ -->
+		<div
+			id="screen-leaderboard"
+			class="screen leaderboard-screen hidden"
+		>
+			<div class="lb-panel">
+				<div class="lb-header">
+					<div class="lb-heading">
+						<div class="lb-title">
+							LEADERBOARD
+						</div>
+						<div class="lb-sub">
+							TOP PILOTS OF THE
+							SINGULARITY
+						</div>
+					</div>
+					<button
+						id="lb-refresh"
+						class="btn-secondary lb-refresh"
+					>
+						REFRESH
+					</button>
+				</div>
+
+				<div class="lb-tabs" id="lb-tabs"></div>
+
+				<div class="lb-table">
+					<div class="lb-row lb-row-head">
+						<span class="lb-rank">#</span>
+						<span class="lb-pilot">
+							PILOT
+						</span>
+						<span class="lb-score">
+							SCORE
+						</span>
+						<span class="lb-time">
+							TIME
+						</span>
+						<span class="lb-nitro">N2</span>
+					</div>
+					<div id="lb-rows" class="lb-rows"></div>
+					<div
+						id="lb-message"
+						class="lb-message"
+					></div>
+				</div>
+
+				<div class="lb-footer">
+					<button
+						id="lb-back"
+						class="btn-secondary"
+					>
+						BACK TO MENU
+					</button>
+				</div>
 			</div>
 		</div>
 

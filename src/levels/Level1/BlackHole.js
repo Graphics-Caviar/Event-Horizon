@@ -11,7 +11,13 @@ export class BlackHole {
 
 		this.planePosition = new THREE.Vector3(0, 0, 0)
 		this.planeNormal = new THREE.Vector3(0, 0, 1).normalize()
-		this.gravityStrength = 60
+		// Gravity eases from gravityStart to gravityMax over
+		// gravityRampSeconds (see rampDifficulty). Level1 overrides these from
+		// its tuning table.
+		this.gravityStart = 25
+		this.gravityMax = 85
+		this.gravityRampSeconds = 75
+		this.gravityStrength = this.gravityStart
 		this.captureDistance = -20
 	}
 
@@ -75,12 +81,25 @@ export class BlackHole {
 		this.own(diskMat)
 		this.blackHoleDisk = new THREE.Mesh(diskGeo, diskMat)
 		this.blackHoleGroup.add(this.blackHoleDisk)
-
-		console.log(this.blackHoleGroup)
 	}
 
-	rampDifficulty(elapsedPlayTime, rampRate = 4) {
-		this.gravityStrength = 60 + rampRate * elapsedPlayTime
+	/**
+	 * Strengthen the pull as the run goes on, easing to a ceiling.
+	 *
+	 * The previous version grew without limit (60 + 4t) and was never called.
+	 * Uncapped, it outgrew the ship's thrust after ~10 seconds, at which point
+	 * escape becomes physically impossible — the ceiling keeps it winnable.
+	 */
+	rampDifficulty(elapsedPlayTime) {
+		const t = Math.min(
+			1,
+			Math.max(0, elapsedPlayTime) / this.gravityRampSeconds
+		)
+		this.gravityStrength = THREE.MathUtils.lerp(
+			this.gravityStart,
+			this.gravityMax,
+			t
+		)
 	}
 
 	updateBlackHoleDisk(delta, timeScale) {

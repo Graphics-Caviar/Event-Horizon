@@ -2,13 +2,18 @@ import * as THREE from 'three'
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 
 export class AsteroidField {
-	constructor(level, blackHole) {
+	constructor(level, blackHole, { spawnRadius = 1000 } = {}) {
 		this.level = level
 		this.blackHole = blackHole
-		this.spawnRadius = 1000 // lateral spread, perpendicular to the gravity axis
+		this.spawnRadius = spawnRadius // lateral spread, perpendicular to the gravity axis
 		this.spawnJitter = 500 // spread along the travel axis when (re)spawning near the front
 		this.spawnDistance = 1000 // how far out along +normal asteroids start
-		this.recycleDistance = -20 // once past the plane by this much, respawn far side
+		// Recycle an asteroid once it is this far BEHIND THE SHIP (signed, so
+		// negative). It used to be measured from the black hole instead, so
+		// asteroids only respawned after flying all the way back to z = -20:
+		// as the ship escaped, the field ended up trailing behind it and the
+		// space ahead thinned out, making the late game trivially easy.
+		this.recycleDistance = -150
 		this.baseSpeed = 200
 		this.speedVariance = 100
 
@@ -52,6 +57,35 @@ export class AsteroidField {
 			this.asteroids.push(
 				this.spawnAsteroid(tangent, bitangent, true)
 			)
+		}
+		this.updateInstanceMatrices()
+	}
+
+	/** Respawn one asteroid far ahead — used after it hits the ship, so the
+	 * same rock cannot register a second hit on the next frame. */
+	removeAsteroid(asteroid) {
+		const { tangent, bitangent } = this.getBasis(
+			this.blackHole.planeNormal
+		)
+		Object.assign(asteroid, this.spawnAsteroid(tangent, bitangent))
+		this.updateInstanceMatrices()
+	}
+
+	/** Push every asteroid out of a bubble around `position`. The field is
+	 * filled at random on creation, so without this a run could open with a
+	 * rock already overlapping the ship — an instant, unavoidable hit. */
+	clearAround(position, radius) {
+		const { tangent, bitangent } = this.getBasis(
+			this.blackHole.planeNormal
+		)
+		const limitSq = radius * radius
+		for (const a of this.asteroids) {
+			if (a.position.distanceToSquared(position) < limitSq) {
+				Object.assign(
+					a,
+					this.spawnAsteroid(tangent, bitangent)
+				)
+			}
 		}
 		this.updateInstanceMatrices()
 	}
@@ -138,11 +172,15 @@ export class AsteroidField {
 			this.blackHole.planeNormal
 		)
 
+		const shipDistance = this.blackHole.getSignedDistance(
+			this.level.spaceship.position
+		)
 		for (const a of this.asteroids) {
 			a.position.addScaledVector(a.velocity, dt)
 			a.rotation += a.rotationSpeed * dt
 			if (
-				this.blackHole.getSignedDistance(a.position) <
+				this.blackHole.getSignedDistance(a.position) -
+					shipDistance <
 				this.recycleDistance
 			) {
 				Object.assign(
