@@ -24,3 +24,4 @@ Thumbs.db
 # Placeholder asset folders are tracked on purpose (public/assets/**/*.txt)
 # so the intended folder structure survives in git even though it's empty
 # of real assets right now. Once real files land, this section is a no-op.
+node_modules

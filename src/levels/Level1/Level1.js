@@ -41,7 +41,6 @@ export const LEVEL1_TUNING = Object.freeze({
 	thrust: 120,
 	maxSpeed: 115,
 	turnSpeed: 1.5,
-	pitchSpeed: 1.2,
 
 	hitDamage: 20,
 	// Lateral spread of the field around the ship. Tighter packs the same
@@ -62,9 +61,10 @@ export const LEVEL1_TUNING = Object.freeze({
 })
 
 /**
- * Space flies the ship up, but a focused <button> also treats Space as a
- * click. Runs start from LAUNCH / FLY AGAIN and resume from RESUME, all of
- * which keep focus — so without this, climbing would restart the run.
+ * Runs start from LAUNCH / FLY AGAIN and resume from RESUME, and those
+ * buttons keep keyboard focus even once hidden. A focused button treats
+ * Space and Enter as a click, so a stray press mid-flight would restart the
+ * run. Dropping focus when play starts or resumes prevents that.
  */
 function releaseButtonFocus() {
 	const el = document.activeElement
@@ -98,7 +98,6 @@ export function handlingFor(shipKey) {
 		thrustPower: T.thrust * speed,
 		maxSpeed: T.maxSpeed * speed,
 		turnSpeed: T.turnSpeed * agility,
-		pitchSpeed: T.pitchSpeed * agility,
 		// Multiplier on hull damage per hit: tough ships take less.
 		damageTaken: lerpStat(defence, 5, 10, 1.2, 0.8),
 	}

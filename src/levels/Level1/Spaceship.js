@@ -70,7 +70,6 @@ export class Spaceship {
 		this.thrustPower = handling.thrustPower ?? 100 // forward acceleration while held
 		this.reverseFactor = 0.4 // reverse thrust is weaker than forward
 		this.turnSpeed = handling.turnSpeed ?? 1.5 // yaw, rad/sec
-		this.pitchSpeed = handling.pitchSpeed ?? 1.2 // pitch, rad/sec
 		this.dragFactor = 0.5 // fraction of velocity kept per second when coasting
 		// Used to be gravity * 1.01, read once at construction. Gravity now
 		// ramps during the run, so the ceiling is its own tuning value.
@@ -91,8 +90,6 @@ export class Spaceship {
 			backward: false,
 			left: false,
 			right: false,
-			pitchUp: false,
-			pitchDown: false,
 			up: false,
 			down: false,
 		}
@@ -381,21 +378,13 @@ export class Spaceship {
 			case 'ArrowRight':
 				this.input.right = isDown
 				break
+			// Q/E lift and drop the ship straight up/down (vertical
+			// thrusters). They used to pitch the nose, which only changed
+			// height indirectly — and only while thrusting.
 			case 'KeyQ':
-				this.input.pitchUp = isDown
-				break
-			case 'KeyE':
-				this.input.pitchDown = isDown
-				break
-			case 'Space':
-			case 'KeyR':
 				this.input.up = isDown
 				break
-			// Shift for players who expect it, F because tapping Shift five
-			// times on Windows opens the Sticky Keys prompt mid-game.
-			case 'ShiftLeft':
-			case 'ShiftRight':
-			case 'KeyF':
+			case 'KeyE':
 				this.input.down = isDown
 				break
 		}
@@ -476,14 +465,12 @@ export class Spaceship {
 	updatePhysics(delta, timeScale) {
 		const dt = delta * timeScale
 
-		// Steering
+		// Steering: A/D turn the ship left/right. The nose always stays
+		// level (Q/E move straight up/down instead), so forward thrust
+		// never points the ship into or out of the screen by accident.
 		if (this.input.left) this.shipGroup.rotateY(this.turnSpeed * dt)
 		if (this.input.right)
 			this.shipGroup.rotateY(-this.turnSpeed * dt)
-		if (this.input.pitchUp)
-			this.shipGroup.rotateX(this.pitchSpeed * dt)
-		if (this.input.pitchDown)
-			this.shipGroup.rotateX(-this.pitchSpeed * dt)
 
 		const gravityDir = this.blackHole.getGravityDirection()
 		if (DEBUG) {

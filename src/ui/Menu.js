@@ -147,12 +147,12 @@ export class Menu {
       <h3>CONTROLS</h3>
       <p class="modal-desc">Flight controls for The Singularity Run. Escape the black hole's pull and steer around the asteroids.</p>
       <ul class="key-list">
-        <li><span>Thrust</span><kbd>W / ↑</kbd></li>
+        <li><span>Forward</span><kbd>W / ↑</kbd></li>
         <li><span>Brake / Reverse</span><kbd>S / ↓</kbd></li>
-        <li><span>Turn Left / Right</span><kbd>A / D · ← / →</kbd></li>
-        <li><span>Fly Up</span><kbd>Space / R</kbd></li>
-        <li><span>Fly Down</span><kbd>Shift / F</kbd></li>
-        <li><span>Pitch Up / Down</span><kbd>Q / E</kbd></li>
+        <li><span>Left</span><kbd>A / ←</kbd></li>
+        <li><span>Right</span><kbd>D / →</kbd></li>
+        <li><span>Up</span><kbd>Q</kbd></li>
+        <li><span>Down</span><kbd>E</kbd></li>
         <li><span>Pause</span><kbd>Esc</kbd></li>
       </ul>
     `)
