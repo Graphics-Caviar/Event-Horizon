@@ -5,8 +5,10 @@ import { STATUS } from '../../core/GameState.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { HUD } from '../../ui/HUD.js'
+import { Skybox } from '../../skybox.js'
 import { AsteroidField } from './AsteroidField.js'
 import { BlackHole } from './BlackHole.js'
+import { Endpoint } from './Endpoint.js'
 import { Spaceship } from './Spaceship.js'
 
 /**
@@ -160,7 +162,6 @@ export class Level1 extends Level {
 		const ship = SHIPS[this.shipKey]
 		this.spaceship = new Spaceship(this, this.blackHole, {
 			shipKey: this.shipKey,
-			pilotKey: this.pilotKey,
 			modelPath: ship.model,
 			handling: this.handling,
 		})
@@ -174,6 +175,26 @@ export class Level1 extends Level {
 			this.spaceship.position,
 			T.safeStartRadius
 		)
+
+		// Tagona's finish-line beacon (PR #15) placed it at z = 2500. It now
+		// sits exactly on the escape line, so the ring marks where safe space
+		// begins and doubles as the steering target from spawn.
+		this.endpoint = new Endpoint(
+			this,
+			new THREE.Vector3(0, 0, T.escapeDistance)
+		)
+
+		// The camera stops drawing at 3000 units by default, which hid the
+		// ring until the player was ~2000 units in — the opposite of the
+		// ring's "visible from spawn" design. It also clipped the skybox's
+		// corners, which sit ~4850 units out. Extended for this level only;
+		// dispose() hands the original value back to the menu and hangar.
+		const camera = this.sceneManager.camera
+		this._baseCameraFar = camera.far
+		camera.far = Math.max(camera.far, T.escapeDistance + 1000)
+		camera.updateProjectionMatrix()
+
+		this.skybox = new Skybox(this)
 
 		this.hud = new HUD()
 		this.hud.show({
@@ -239,6 +260,8 @@ export class Level1 extends Level {
 			// Let the field drift on in slow motion behind the result.
 			this.asteroidField.updateAsteroidPhysics(delta, 0.2)
 			this.blackHole.updateBlackHoleDisk(delta, 0.2)
+			this.endpoint.update(delta * 0.2)
+			this.skybox.update()
 			return
 		}
 
@@ -252,6 +275,8 @@ export class Level1 extends Level {
 		this.spaceship.updatePhysics(delta, this.timeScale)
 		this.spaceship.updateCamera(delta, this.timeScale)
 		this._applyShake(dt)
+		this.skybox.update()
+		this.endpoint.update(dt)
 
 		this.invulnerableFor = Math.max(0, this.invulnerableFor - dt)
 		if (this.invulnerableFor === 0) {
@@ -280,7 +305,11 @@ export class Level1 extends Level {
 			)
 		)
 			return this._end('captured')
-		if (distance >= T.escapeDistance) return this._end('escaped')
+		if (
+			distance >= T.escapeDistance ||
+			this.endpoint.checkReached(this.spaceship.position)
+		)
+			return this._end('escaped')
 
 		this.audio?.setThrusterLevel(
 			this.spaceship.isThrusting ? 1 : 0.15
@@ -428,6 +457,11 @@ export class Level1 extends Level {
 		this.spaceship?.dispose()
 		this.audio?.stopThrusterHum()
 		this.hud?.hide()
+		const camera = this.sceneManager.camera
+		if (camera && this._baseCameraFar !== undefined) {
+			camera.far = this._baseCameraFar
+			camera.updateProjectionMatrix()
+		}
 		super.dispose()
 	}
 }

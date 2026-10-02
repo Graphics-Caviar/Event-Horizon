@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { CHARACTERS } from '../../launchbay/data/characters.js'
 
 // Per-frame velocity/distance logging. Keep this off: at 60fps it wrote
 // ~120 console lines a second, which measurably costs frame time.
@@ -32,14 +31,13 @@ export class Spaceship {
 	 * @param {object} blackHole
 	 * @param {object} [options]
 	 * @param {string} [options.shipKey] which ship the player picked
-	 * @param {string} [options.pilotKey] which pilot sits in the cockpit
 	 * @param {string|string[]} [options.modelPath] GLB path(s) to fly
 	 * @param {object} [options.handling] per-ship tuning (Level1.handlingFor)
 	 */
 	constructor(
 		level,
 		blackHole,
-		{ shipKey, pilotKey, modelPath, handling = {} } = {}
+		{ shipKey, modelPath, handling = {} } = {}
 	) {
 		this.level = level
 		this.blackHole = blackHole
@@ -53,6 +51,14 @@ export class Spaceship {
 
 		this.shipGroup = new THREE.Group()
 		this.shipGroup.name = 'spaceship'
+
+		// Visuals are separated from the physics group so banking, the
+		// climb/dive tilt and engine animation never change the direction
+		// used by the flight controller. (Mpilo's PR #13 and this branch both
+		// introduced this group independently; it is now shared.)
+		this.visualGroup = new THREE.Group()
+		this.visualGroup.name = 'spaceship-visuals'
+		this.shipGroup.add(this.visualGroup)
 		this.createSpaceship()
 		this.addObject(this.shipGroup)
 
@@ -97,15 +103,20 @@ export class Spaceship {
 		this.cameraOffset = new THREE.Vector3(0, 9, 44)
 		this.cameraLookAhead = new THREE.Vector3(0, 4, -60)
 		this.cameraSmoothing = 5
+		// Speed-reactive camera and engine effects (Mpilo, PR #13).
+		this.baseCameraFov = this.level.sceneManager.camera?.fov || 75
+		this.bankAmount = 0.42
+		this.bankSmoothing = 7
+		this.engineIntensity = 0
+		this.elapsedTime = 0
+
+		this.createEngineEffects()
+		this.createSpeedStreaks()
 		this.setupInitialCamera()
 
 		this.model = null
-		this.pilotModel = null
 		this._disposed = false
 		if (modelPath) this.loadModel(modelPath)
-		this.loadSelectedPilot(
-			pilotKey ?? level.game?.gameState?.selectedCharacter
-		)
 	}
 
 	addObject(object) {
@@ -139,11 +150,7 @@ export class Spaceship {
 
 		this.mesh = new THREE.Mesh(geo, mat)
 		this.mesh.name = 'spaceship-loading-fallback'
-		// Everything drawn goes in `visual`, a child of shipGroup, so the
-		// climb/dive tilt is purely cosmetic: physics reads shipGroup only.
-		this.visual = new THREE.Group()
-		this.visual.add(this.mesh)
-		this.shipGroup.add(this.visual)
+		this.visualGroup.add(this.mesh)
 	}
 
 	/**
@@ -160,7 +167,7 @@ export class Spaceship {
 				)
 			if (this._disposed) return
 			this.model = this._fitModel(model)
-			this.visual.add(this.model)
+			this.visualGroup.add(this.model)
 			this.mesh.visible = false
 		} catch (error) {
 			console.warn(
@@ -191,61 +198,135 @@ export class Spaceship {
 		return pivot
 	}
 
-	/**
-	 * Seat the selected pilot in the cockpit (from Mpilo's PR #12).
-	 *
-	 * Their numbers were tuned for ships fitted to 18 units; scaling by
-	 * SHIP_LENGTH / 18 keeps the pilot in the same place relative to the
-	 * hull. Added to `visual`, so the pilot tips with the ship when climbing
-	 * or diving. Purely cosmetic — no effect on flight or collisions.
-	 */
-	async loadSelectedPilot(pilotKey) {
-		const config =
-			CHARACTERS.find(
-				(character) => character.id === pilotKey
-			) || CHARACTERS[0]
-		const fit = SHIP_LENGTH / 18
+	createEngineEffects() {
+		this.engineGroup = new THREE.Group()
+		this.engineGroup.name = 'engine-effects'
+		// Mpilo tuned these positions for ships fitted to 18 units; scale
+		// with SHIP_LENGTH so the flame still leaves the tail.
+		this.engineGroup.scale.setScalar(SHIP_LENGTH / 18)
+		this.visualGroup.add(this.engineGroup)
 
-		try {
-			const pilot = await this.level.assetManager.loadModel(
-				config.model
+		const flameGeometry = new THREE.ConeGeometry(1.2, 7, 12)
+		flameGeometry.rotateX(Math.PI / 2)
+		this.own(flameGeometry)
+
+		const flameMaterial = new THREE.MeshBasicMaterial({
+			color: 0x66ccff,
+			transparent: true,
+			opacity: 0.75,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
+		})
+		this.own(flameMaterial)
+
+		this.engineFlame = new THREE.Mesh(flameGeometry, flameMaterial)
+		this.engineFlame.position.set(0, 0, 10.5)
+		this.engineFlame.visible = false
+		this.engineGroup.add(this.engineFlame)
+
+		this.engineLight = new THREE.PointLight(0x66ccff, 0, 30, 2)
+		this.engineLight.position.set(0, 0, 8)
+		this.engineGroup.add(this.engineLight)
+	}
+
+	createSpeedStreaks() {
+		const count = 90
+		const positions = new Float32Array(count * 3)
+		for (let i = 0; i < count; i++) {
+			positions[i * 3] = (Math.random() - 0.5) * 90
+			positions[i * 3 + 1] = (Math.random() - 0.5) * 55
+			positions[i * 3 + 2] = Math.random() * 160 - 80
+		}
+
+		const geometry = new THREE.BufferGeometry()
+		geometry.setAttribute(
+			'position',
+			new THREE.BufferAttribute(positions, 3)
+		)
+		this.own(geometry)
+
+		const material = new THREE.PointsMaterial({
+			color: 0xcceeff,
+			size: 0.55,
+			transparent: true,
+			opacity: 0,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
+		})
+		this.own(material)
+
+		this.speedStreaks = new THREE.Points(geometry, material)
+		this.speedStreaks.name = 'speed-streaks'
+		this.shipGroup.add(this.speedStreaks)
+	}
+
+	updateFlightEffects(delta, timeScale) {
+		const dt = delta * timeScale
+		this.elapsedTime += dt
+		const speedRatio = THREE.MathUtils.clamp(
+			this.velocity.length() / Math.max(this.maxSpeed, 1),
+			0,
+			1
+		)
+
+		// Bank into turns (roll, z). The climb/dive tilt is pitch (x) on the
+		// same group, set in updatePhysics, so the two never fight.
+		const targetBank = this.input.left
+			? this.bankAmount
+			: this.input.right
+				? -this.bankAmount
+				: 0
+		const bankT = 1 - Math.exp(-this.bankSmoothing * dt)
+		this.visualGroup.rotation.z = THREE.MathUtils.lerp(
+			this.visualGroup.rotation.z,
+			targetBank,
+			bankT
+		)
+
+		const targetEngine = this.input.forward
+			? 1
+			: this.input.backward
+				? 0.3
+				: 0
+		this.engineIntensity = THREE.MathUtils.lerp(
+			this.engineIntensity,
+			targetEngine,
+			1 - Math.exp(-9 * dt)
+		)
+
+		if (this.engineFlame) {
+			this.engineFlame.visible = this.engineIntensity > 0.03
+			const pulse =
+				0.9 + Math.sin(this.elapsedTime * 28) * 0.12
+			this.engineFlame.scale.set(
+				0.7 + this.engineIntensity * 0.45,
+				0.7 + this.engineIntensity * 0.45,
+				pulse * (0.45 + this.engineIntensity * 1.2)
 			)
-			if (this._disposed) return
+			this.engineFlame.material.opacity =
+				0.25 + this.engineIntensity * 0.65
+			this.engineLight.intensity = this.engineIntensity * 8
+		}
 
-			pilot.name = `pilot-model-${config.id}`
-			pilot.traverse((child) => {
-				if (child.isMesh) {
-					child.castShadow = true
-					child.receiveShadow = true
-				}
-			})
-
-			// Normalize all pilot GLBs to a consistent seated/cockpit scale.
-			let box = new THREE.Box3().setFromObject(pilot)
-			const size = box.getSize(new THREE.Vector3())
-			const height = size.y || 1
-			pilot.scale.setScalar((3.2 * fit) / height)
-
-			box = new THREE.Box3().setFromObject(pilot)
-			const center = box.getCenter(new THREE.Vector3())
-			pilot.position.x -= center.x
-			pilot.position.y -= box.min.y
-			pilot.position.z -= center.z
-
-			// The pilot moves and rotates with the craft. This offset places the
-			// character around the cockpit area without affecting flight physics.
-			pilot.position.add(
-				new THREE.Vector3(0, 1.1 * fit, 1.5 * fit)
-			)
-			pilot.rotation.y = Math.PI
-
-			this.visual.add(pilot)
-			this.pilotModel = pilot
-		} catch (error) {
-			console.error(
-				`Unable to load selected pilot ${config.id}:`,
-				error
-			)
+		if (this.speedStreaks) {
+			this.speedStreaks.material.opacity =
+				THREE.MathUtils.clamp(
+					(speedRatio - 0.12) * 1.15,
+					0,
+					0.8
+				)
+			this.speedStreaks.material.size =
+				0.35 + speedRatio * 0.85
+			const positions =
+				this.speedStreaks.geometry.attributes.position
+			for (let i = 0; i < positions.count; i++) {
+				let z =
+					positions.getZ(i) +
+					(18 + speedRatio * 150) * dt
+				if (z > 80) z = -80
+				positions.setZ(i, z)
+			}
+			positions.needsUpdate = true
 		}
 	}
 
@@ -332,6 +413,14 @@ export class Spaceship {
 		this._disposed = true
 		window.removeEventListener('keydown', this._onKeyDown)
 		window.removeEventListener('keyup', this._onKeyUp)
+		// The speed-reactive FOV widens the SHARED camera. Without restoring
+		// it, the menu and hangar would render zoomed out after a run, and
+		// each retry would read the widened FOV as its new baseline.
+		const camera = this.level.sceneManager.camera
+		if (camera && camera.fov !== this.baseCameraFov) {
+			camera.fov = this.baseCameraFov
+			camera.updateProjectionMatrix()
+		}
 	}
 
 	updateCamera(delta, timeScale) {
@@ -340,13 +429,42 @@ export class Spaceship {
 
 		const dt = delta * timeScale
 
-		const desiredPosition = this.cameraOffset
-			.clone()
+		const speedRatio = THREE.MathUtils.clamp(
+			this.velocity.length() / Math.max(this.maxSpeed, 1),
+			0,
+			1
+		)
+		const dynamicOffset = this.cameraOffset.clone()
+		dynamicOffset.z += speedRatio * 10
+		dynamicOffset.y += speedRatio * 2
+
+		const desiredPosition = dynamicOffset
 			.applyQuaternion(this.shipGroup.quaternion)
 			.add(this.position)
 
+		// A small acceleration shake makes thrust readable without making the
+		// camera uncomfortable while coasting.
+		if (this.input.forward && speedRatio > 0.08) {
+			const shake = 0.08 + speedRatio * 0.16
+			desiredPosition.x +=
+				Math.sin(this.elapsedTime * 37) * shake
+			desiredPosition.y +=
+				Math.cos(this.elapsedTime * 43) * shake
+		}
+
 		const t = 1 - Math.exp(-this.cameraSmoothing * dt)
 		camera.position.lerp(desiredPosition, t)
+
+		const targetFov = this.baseCameraFov + speedRatio * 10
+		const nextFov = THREE.MathUtils.lerp(
+			camera.fov,
+			targetFov,
+			1 - Math.exp(-4 * dt)
+		)
+		if (Math.abs(nextFov - camera.fov) > 0.01) {
+			camera.fov = nextFov
+			camera.updateProjectionMatrix()
+		}
 
 		const lookTarget = this.cameraLookAhead
 			.clone()
@@ -418,13 +536,14 @@ export class Spaceship {
 		const tiltTarget = lift * 0.22
 		this._tilt +=
 			(tiltTarget - this._tilt) * (1 - Math.exp(-8 * dt))
-		this.visual.rotation.x = this._tilt
+		this.visualGroup.rotation.x = this._tilt
 
 		if (this.velocity.length() > this.maxSpeed)
 			this.velocity.setLength(this.maxSpeed)
 
 		this.position.addScaledVector(this.velocity, dt)
 		this.shipGroup.position.copy(this.position)
+		this.updateFlightEffects(delta, timeScale)
 
 		if (this.blackHole.isBeyondEventHorizon(this.position))
 			this.onCaptured?.()
