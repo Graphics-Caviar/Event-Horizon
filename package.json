@@ -1,7 +1,8 @@
 {
 	"dependencies": {
 		"firebase": "^10.14.1",
-		"three": "^0.160.0"
+		"three": "^0.160.0",
+		"@dimforge/rapier3d-compat": "^0.20.0"
 	},
 	"description": "Event Horizon: Escape from Singularity - 3D browser action game with Three.js and Firebase backend",
 	"devDependencies": {
@@ -16,7 +17,8 @@
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"preview": "vite preview",
-		"seed": "node scripts/seedFirestore.js"
+		"seed": "node scripts/seedFirestore.js",
+		"test:backend": "node scripts/testBackend.js"
 	},
 	"type": "module",
 	"version": "1.0.0"
