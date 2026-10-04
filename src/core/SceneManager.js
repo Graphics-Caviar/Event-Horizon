@@ -53,5 +53,10 @@ export class SceneManager {
 
 	render() {
 		this.renderer.render(this.scene, this.camera)
+		const { calls, triangles } = this.renderer.info.render
+		console.info(
+			`Calls: ${calls.toLocaleString('en-US').replace(/,/g, ' ')}\n` +
+				`Triangles: ${triangles.toLocaleString('en-US').replace(/,/g, ' ')}`
+		)
 	}
 }
