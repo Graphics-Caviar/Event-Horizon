@@ -74,6 +74,7 @@ export class Spaceship {
 		// Used to be gravity * 1.01, read once at construction. Gravity now
 		// ramps during the run, so the ceiling is its own tuning value.
 		this.maxSpeed = handling.maxSpeed ?? 110
+		this.originalMax = this.maxSpeed
 		// Vertical thrusters: push the ship straight up/down relative to
 		// itself without changing its heading — the quick sidestep for
 		// dodging an asteroid. Weaker than the main engine, so climbing
@@ -106,6 +107,8 @@ export class Spaceship {
 		this.bankSmoothing = 7
 		this.engineIntensity = 0
 		this.elapsedTime = 0
+		this.nitrogenBoost = false
+		this.nitrogenTimer = 0
 
 		this.createEngineEffects()
 		this.createSpeedStreaks()
@@ -412,6 +415,12 @@ export class Spaceship {
 		}
 	}
 
+	applyNitrogenBoost() {
+		this.nitrogenBoost = true
+		this.nitrogenTimer += 3
+		this.maxSpeed = this.originalMax * 2
+	}
+
 	updateCamera(delta, timeScale) {
 		const camera = this.level.sceneManager.camera
 		if (!camera) return
@@ -485,7 +494,10 @@ export class Spaceship {
 			this.blackHole.getGravityStrength() * dt
 		)
 
-		if (this.input.forward || this.input.backward) {
+		if (
+			(this.input.forward || this.input.backward) &&
+			this.velocity.length() < this.maxSpeed
+		) {
 			const forward = new THREE.Vector3(
 				0,
 				0,
@@ -495,6 +507,9 @@ export class Spaceship {
 				? this.thrustPower
 				: -this.thrustPower * this.reverseFactor
 			this.velocity.addScaledVector(forward, power * dt)
+			if (this.nitrogenBoost) {
+				this.velocity.z += 5
+			}
 		} else {
 			this.velocity.multiplyScalar(
 				Math.pow(this.dragFactor, dt)
@@ -526,13 +541,26 @@ export class Spaceship {
 		this.visualGroup.rotation.x = this._tilt
 
 		if (this.velocity.length() > this.maxSpeed)
-			this.velocity.setLength(this.maxSpeed)
+			this.velocity.z -= 20
 
 		this.position.addScaledVector(this.velocity, dt)
 		this.shipGroup.position.copy(this.position)
 		this.updateFlightEffects(delta, timeScale)
 
-		if (this.blackHole.isBeyondEventHorizon(this.position))
+		if (this.blackHole.isBeyondEventHorizon(this.position)) {
 			this.onCaptured?.()
+		}
+
+		if (this.nitrogenTimer > 0) {
+			this.nitrogenTimer = Math.max(
+				0,
+				this.nitrogenTimer - dt
+			)
+		}
+
+		if (this.nitrogenTimer === 0 && this.nitrogenBoost) {
+			this.nitrogenBoost = false
+			this.maxSpeed = this.originalMax ?? 110
+		}
 	}
 }

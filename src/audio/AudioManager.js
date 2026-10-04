@@ -106,4 +106,8 @@ export class AudioManager {
 	playCrash() {
 		this._blip(150, 20, 1.4, 'sawtooth', 0.3)
 	}
+	playBoost() {
+		this._blip(200, 2000, 2, 'square', 0.4)
+		this._blip(400, 2000, 2, 'sine', 0.4)
+	}
 }
