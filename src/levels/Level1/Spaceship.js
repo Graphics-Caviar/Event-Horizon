@@ -85,7 +85,7 @@ export class Spaceship {
 		// so the ship settles instead of sliding on forever.
 		this.verticalDamping = 0.05
 		this._tilt = 0 // visual nose tilt while climbing/diving (radians)
-		
+
 		this.input = {
 			forward: false,
 			backward: false,
@@ -107,8 +107,8 @@ export class Spaceship {
 		this.bankSmoothing = 7
 		this.engineIntensity = 0
 		this.elapsedTime = 0
-		this.nitrogenBoost = false;
-		this.nitrogenTimer = 0;
+		this.nitrogenBoost = false
+		this.nitrogenTimer = 0
 
 		this.createEngineEffects()
 		this.createSpeedStreaks()
@@ -416,9 +416,9 @@ export class Spaceship {
 	}
 
 	applyNitrogenBoost() {
-		this.nitrogenBoost = true;
-		this.nitrogenTimer += 50;
-		this.maxSpeed = this.originalMax * 2;
+		this.nitrogenBoost = true
+		this.nitrogenTimer += 50
+		this.maxSpeed = this.originalMax * 2
 	}
 
 	updateCamera(delta, timeScale) {
@@ -493,10 +493,11 @@ export class Spaceship {
 			gravityDir,
 			this.blackHole.getGravityStrength() * dt
 		)
-		
 
-		if ((this.input.forward || this.input.backward) && this.velocity.length() < this.maxSpeed) {
-			
+		if (
+			(this.input.forward || this.input.backward) &&
+			this.velocity.length() < this.maxSpeed
+		) {
 			const forward = new THREE.Vector3(
 				0,
 				0,
@@ -506,7 +507,7 @@ export class Spaceship {
 				? this.thrustPower
 				: -this.thrustPower * this.reverseFactor
 			this.velocity.addScaledVector(forward, power * dt)
-			if(this.nitrogenBoost){
+			if (this.nitrogenBoost) {
 				this.velocity.z += 5
 			}
 		} else {
@@ -546,19 +547,16 @@ export class Spaceship {
 		this.shipGroup.position.copy(this.position)
 		this.updateFlightEffects(delta, timeScale)
 
-		if (this.blackHole.isBeyondEventHorizon(this.position)){
+		if (this.blackHole.isBeyondEventHorizon(this.position)) {
 			this.onCaptured?.()
 		}
-			
-		
-		
 
-		if(this.nitrogenTimer > 0){
-			this.nitrogenTimer -= 1;
+		if (this.nitrogenTimer > 0) {
+			this.nitrogenTimer -= 1
 		}
-		if(this.nitrogenTimer <= 0 && this.nitrogenBoost){
-			this.nitrogenBoost = false;
-			this.maxSpeed = this.originalMax ?? 110;
+		if (this.nitrogenTimer <= 0 && this.nitrogenBoost) {
+			this.nitrogenBoost = false
+			this.maxSpeed = this.originalMax ?? 110
 		}
 	}
 }

@@ -64,7 +64,16 @@ export class HUD {
 	 * @param {number} state.time seconds elapsed
 	 * @param {boolean} state.warning close to the event horizon
 	 */
-	update({ integrity, progress, score, time, warning, speed, nitrogen, boostTime }) {
+	update({
+		integrity,
+		progress,
+		score,
+		time,
+		warning,
+		speed,
+		nitrogen,
+		boostTime,
+	}) {
 		const hull = Math.max(0, Math.round(integrity))
 		if (hull !== this._last.hull) {
 			this._last.hull = hull
@@ -78,11 +87,11 @@ export class HUD {
 						: 'var(--red)'
 		}
 
-		const boost = boostTime / 10;
-		if(boost != this._last.boost){
+		const boost = boostTime / 10
+		if (boost != this._last.boost) {
 			this._last.boost = boost
-			this.boostTimer.textContent = boost;
-			if(boost == 0){
+			this.boostTimer.textContent = boost
+			if (boost == 0) {
 				this.boostEl.classList.toggle('hidden', true)
 			}
 		}
@@ -104,13 +113,13 @@ export class HUD {
 			this.scoreEl.textContent = shownScore.toLocaleString()
 		}
 
-		const _speed = Math.round(speed) 
-		if(_speed != this._last.clock){
+		const _speed = Math.round(speed)
+		if (_speed != this._last.clock) {
 			this._last.speed = _speed
-			this.speed.textContent = _speed;
+			this.speed.textContent = _speed
 		}
-		const _nitrogen = nitrogen;
-		if(_nitrogen != this._last.nitrogen){
+		const _nitrogen = nitrogen
+		if (_nitrogen != this._last.nitrogen) {
 			this._last.nitrogen = _nitrogen
 			this.nitrogenRow.textContent = _nitrogen
 		}
@@ -124,7 +133,7 @@ export class HUD {
 		this.setWarning(Boolean(warning))
 	}
 
-	updateBoost(duration){
+	updateBoost(duration) {
 		this.boostEl.classList.toggle('hidden', false)
 		this.boostTimer.textContent = duration
 	}

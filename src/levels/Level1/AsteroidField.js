@@ -8,11 +8,11 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 const ASTEROID_MODELS = ['/public/assets/models/asteroids/asteroid_01.glb']
 
 function randomUnit() {
-    return new THREE.Vector3(
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1
-    ).normalize()
+	return new THREE.Vector3(
+		Math.random() * 2 - 1,
+		Math.random() * 2 - 1,
+		Math.random() * 2 - 1
+	).normalize()
 }
 
 export class AsteroidField {
@@ -516,7 +516,6 @@ export class AsteroidField {
 	}
 
 	spawnAsteroid(tangent, bitangent, fillVolume = false) {
-
 		const angle = Math.random() * Math.PI * 2
 		const radius = Math.sqrt(Math.random()) * this.spawnRadius
 
@@ -526,31 +525,29 @@ export class AsteroidField {
 			.add(
 				bitangent
 					.clone()
-					.multiplyScalar(Math.sin(angle) * radius)
+					.multiplyScalar(
+						Math.sin(angle) * radius
+					)
 			)
 
 		const depth = fillVolume
 			? THREE.MathUtils.lerp(
-				this.recycleDistance,
-				this.spawnDistance,
-				Math.random()
-			)
+					this.recycleDistance,
+					this.spawnDistance,
+					Math.random()
+				)
 			: this.spawnDistance +
-			(Math.random() - 0.5) * this.spawnJitter
+				(Math.random() - 0.5) * this.spawnJitter
 
 		const shipPos = this.level.spaceship.position
 
 		const position = shipPos
 			.clone()
-			.addScaledVector(
-				this.blackHole.planeNormal,
-				depth
-			)
+			.addScaledVector(this.blackHole.planeNormal, depth)
 			.add(offset)
 
 		const speed =
-			this.baseSpeed +
-			Math.random() * this.speedVariance
+			this.baseSpeed + Math.random() * this.speedVariance
 
 		const jitter = tangent
 			.clone()
@@ -558,7 +555,9 @@ export class AsteroidField {
 			.add(
 				bitangent
 					.clone()
-					.multiplyScalar((Math.random() - 0.5) * 10)
+					.multiplyScalar(
+						(Math.random() - 0.5) * 10
+					)
 			)
 
 		const velocity = this.blackHole.planeNormal
@@ -598,15 +597,17 @@ export class AsteroidField {
 			.add(
 				bitangent
 					.clone()
-					.multiplyScalar(Math.sin(angle) * radius)
+					.multiplyScalar(
+						Math.sin(angle) * radius
+					)
 			)
 
 		const depth = fillVolume
 			? THREE.MathUtils.lerp(
-				this.recycleDistance,
-				this.spawnDistance,
-				Math.random()
-			)
+					this.recycleDistance,
+					this.spawnDistance,
+					Math.random()
+				)
 			: this.spawnDistance +
 				(Math.random() - 0.5) * this.spawnJitter
 
@@ -614,15 +615,11 @@ export class AsteroidField {
 
 		const position = shipPos
 			.clone()
-			.addScaledVector(
-				this.blackHole.planeNormal,
-				depth
-			)
+			.addScaledVector(this.blackHole.planeNormal, depth)
 			.add(offset)
 
 		const speed =
-			this.baseSpeed +
-			Math.random() * this.speedVariance
+			this.baseSpeed + Math.random() * this.speedVariance
 
 		const jitter = tangent
 			.clone()
@@ -630,7 +627,9 @@ export class AsteroidField {
 			.add(
 				bitangent
 					.clone()
-					.multiplyScalar((Math.random() - 0.5) * 10)
+					.multiplyScalar(
+						(Math.random() - 0.5) * 10
+					)
 			)
 
 		const velocity = this.blackHole.planeNormal
@@ -638,9 +637,7 @@ export class AsteroidField {
 			.multiplyScalar(-speed)
 			.add(jitter)
 
-		const canister = new NitrogenCanister(
-			this.assetManager
-		)
+		const canister = new NitrogenCanister(this.assetManager)
 
 		const object = canister.object
 
@@ -672,50 +669,36 @@ export class AsteroidField {
 
 		this.updateDebris(dt)
 
-		const { tangent, bitangent } =
-			this.getBasis(this.blackHole.planeNormal)
+		const { tangent, bitangent } = this.getBasis(
+			this.blackHole.planeNormal
+		)
 
-		const shipDistance =
-			this.blackHole.getSignedDistance(
-				this.level.spaceship.position
-			)
+		const shipDistance = this.blackHole.getSignedDistance(
+			this.level.spaceship.position
+		)
 
 		// Normal asteroids
 		for (const a of this.asteroids) {
-			a.position.addScaledVector(
-				a.velocity,
-				dt
-			)
+			a.position.addScaledVector(a.velocity, dt)
 
-			a.rotation +=
-				a.rotationSpeed * dt
+			a.rotation += a.rotationSpeed * dt
 
 			if (
 				this.blackHole.getSignedDistance(a.position) -
 					shipDistance <
 				this.recycleDistance
 			) {
-				this.replaceAsteroid(
-					a,
-					tangent,
-					bitangent
-				)
+				this.replaceAsteroid(a, tangent, bitangent)
 			}
 		}
 
 		// Nitrogen canisters
 		for (const canister of this.canisters) {
-			canister.position.addScaledVector(
-				canister.velocity,
-				dt
-			)
+			canister.position.addScaledVector(canister.velocity, dt)
 
-			canister.rotation +=
-				canister.rotationSpeed * dt
+			canister.rotation += canister.rotationSpeed * dt
 
-			canister.object.position.copy(
-				canister.position
-			)
+			canister.object.position.copy(canister.position)
 
 			canister.object.quaternion.setFromAxisAngle(
 				canister.rotationAxis,
@@ -725,7 +708,8 @@ export class AsteroidField {
 			if (
 				this.blackHole.getSignedDistance(
 					canister.position
-				) - shipDistance <
+				) -
+					shipDistance <
 				this.recycleDistance
 			) {
 				this.replaceCanister(canister)
@@ -736,14 +720,10 @@ export class AsteroidField {
 		this.updateInstanceMatrices()
 	}
 
-
 	replaceAsteroid(asteroid, tangent, bitangent) {
 		const modelIndex = asteroid.modelIndex
 
-		const replacement = this.spawnAsteroid(
-			tangent,
-			bitangent
-		)
+		const replacement = this.spawnAsteroid(tangent, bitangent)
 
 		Object.assign(asteroid, replacement)
 
@@ -757,10 +737,7 @@ export class AsteroidField {
 			this.blackHole.planeNormal
 		)
 
-		const replacement = this.spawnCanister(
-			tangent,
-			bitangent
-		)
+		const replacement = this.spawnCanister(tangent, bitangent)
 
 		Object.assign(canister, replacement)
 	}
