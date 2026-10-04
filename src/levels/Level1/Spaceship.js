@@ -417,7 +417,7 @@ export class Spaceship {
 
 	applyNitrogenBoost() {
 		this.nitrogenBoost = true
-		this.nitrogenTimer += 50
+		this.nitrogenTimer += 3
 		this.maxSpeed = this.originalMax * 2
 	}
 
@@ -552,9 +552,13 @@ export class Spaceship {
 		}
 
 		if (this.nitrogenTimer > 0) {
-			this.nitrogenTimer -= 1
+			this.nitrogenTimer = Math.max(
+				0,
+				this.nitrogenTimer - dt
+			)
 		}
-		if (this.nitrogenTimer <= 0 && this.nitrogenBoost) {
+
+		if (this.nitrogenTimer === 0 && this.nitrogenBoost) {
 			this.nitrogenBoost = false
 			this.maxSpeed = this.originalMax ?? 110
 		}

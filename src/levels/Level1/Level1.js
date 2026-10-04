@@ -10,7 +10,6 @@ import { AsteroidField } from './AsteroidField.js'
 import { BlackHole } from './BlackHole.js'
 import { Endpoint } from './Endpoint.js'
 import { Spaceship } from './Spaceship.js'
-import { NitrogenCanister } from './Nitrogen.js'
 
 /**
  * Level 1 balance, all in one place.

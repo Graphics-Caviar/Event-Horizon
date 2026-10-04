@@ -87,7 +87,7 @@ export class HUD {
 						: 'var(--red)'
 		}
 
-		const boost = boostTime / 10
+		const boost = Math.ceil(boostTime)
 		if (boost != this._last.boost) {
 			this._last.boost = boost
 			this.boostTimer.textContent = boost
