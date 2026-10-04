@@ -324,33 +324,43 @@ export class Level1 extends Level {
 	}
 
 	_onHit(asteroid) {
-		if(asteroid.isCanister){
-			
-		} else {
+		
 			const T = LEVEL1_TUNING
 			// Bigger rocks hurt more (asteroid scale runs ~0.6-2.4).
 			const size = 0.75 + asteroid.scale * 0.17
-			this.state.damage(
-				Math.round(
-					T.hitDamage * size * this.handling.damageTaken
+			if(this.spaceship.nitrogenBoost){
+				this.state.damage(
+					Math.round(
+						(T.hitDamage * size * this.handling.damageTaken) / 2
+					)
 				)
-			)
+			} else {
+				this.state.damage(
+					Math.round(
+						T.hitDamage * size * this.handling.damageTaken
+					)
+				)
+			}
+			
+			
 			this.invulnerableFor = T.invulnerableSeconds
 			this.shakeFor = T.shakeSeconds
 			this.spaceship.velocity.multiplyScalar(T.hitSpeedKept)
 			this.asteroidField.removeAsteroid(asteroid)
 			this.audio?.playImpact()
 			this.hud.flashDamage()
-		}
+		
 		
 	}
 
 	_onCanister(canister) {
+		this.audio?.playBoost()
+		this.hud.flashBoost()
 		this.spaceship.applyNitrogenBoost();
 		this.asteroidField.replaceCanister(canister);
 		this.nitrogen++;
 		this.hud.updateBoost(5)
-		this.nitrogenScore += 500
+		this.nitrogenScore += 1000
 	}
 
 	/** Nudge the camera for a moment after an impact. Applied after the

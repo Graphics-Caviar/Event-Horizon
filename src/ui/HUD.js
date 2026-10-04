@@ -149,4 +149,18 @@ export class HUD {
 			400
 		)
 	}
+
+	flashBoost() {
+		if (!this.root) return
+		this.root.classList.remove('hud-boost')
+		// Force a reflow so re-adding the class restarts the animation even
+		// when two hits land close together.
+		void this.root.offsetWidth
+		this.root.classList.add('hud-boost')
+		clearTimeout(this._hitTimer)
+		this._hitTimer = setTimeout(
+			() => this.root.classList.remove('hud-boost'),
+			400
+		)
+	}
 }

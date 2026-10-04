@@ -7,6 +7,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 const ASTEROID_MODELS = ['/public/assets/models/asteroids/asteroid_01.glb']
 
+function randomUnit() {
+    return new THREE.Vector3(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+    ).normalize()
+}
+
 export class AsteroidField {
 	constructor(
 		level,
@@ -24,6 +32,7 @@ export class AsteroidField {
 			debrisInherit = 0.1, // fraction of the asteroid's own velocity the shards keep
 		} = {}
 	) {
+		this.nitChance = 0.05
 		this.level = level
 		this.blackHole = blackHole
 		this.spawnRadius = spawnRadius // lateral spread, perpendicular to the gravity axis
@@ -270,7 +279,7 @@ export class AsteroidField {
 			})
 
 			for (let i = 0; i < instances; i++) {
-				if (Math.random() < 0.05) {
+				if (Math.random() < this.nitChance) {
 					const canister = this.spawnCanister(
 						tangent,
 						bitangent,
