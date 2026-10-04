@@ -23,8 +23,10 @@ export class HUD {
 		this.scoreEl = document.getElementById('score-value')
 		this.timerEl = document.getElementById('hud-timer')
 		this.warningEl = document.getElementById('warning-text')
-		this.nitrogenRow = document.getElementById('hud-nitrogen')
+		this.nitrogenRow = document.getElementById('nitrogen-count')
 		this.boostEl = document.getElementById('boost-indicator')
+		this.boostTimer = document.getElementById('boost-timer')
+		this.speed = document.getElementById('speed-tracker')
 
 		this._last = {}
 		this._hitTimer = null
@@ -41,8 +43,8 @@ export class HUD {
 		}
 		// Nitrogen pickups and boosts are not implemented yet; hide their
 		// rows instead of showing a counter that can never change.
-		this.nitrogenRow?.classList.add('hidden')
-		this.boostEl?.classList.add('hidden')
+		//this.nitrogenRow?.classList.add('hidden')
+		//this.boostEl?.classList.add('hidden')
 		this.setWarning(false)
 		this.root?.classList.remove('hidden', 'hud-hit')
 	}
@@ -62,7 +64,7 @@ export class HUD {
 	 * @param {number} state.time seconds elapsed
 	 * @param {boolean} state.warning close to the event horizon
 	 */
-	update({ integrity, progress, score, time, warning }) {
+	update({ integrity, progress, score, time, warning, speed, nitrogen, boostTime }) {
 		const hull = Math.max(0, Math.round(integrity))
 		if (hull !== this._last.hull) {
 			this._last.hull = hull
@@ -74,6 +76,15 @@ export class HUD {
 					: hull > 25
 						? '#ffb347'
 						: 'var(--red)'
+		}
+
+		const boost = boostTime / 10;
+		if(boost != this._last.boost){
+			this._last.boost = boost
+			this.boostTimer.textContent = boost;
+			if(boost == 0){
+				this.boostEl.classList.toggle('hidden', true)
+			}
 		}
 
 		const pct = Math.max(
@@ -93,6 +104,17 @@ export class HUD {
 			this.scoreEl.textContent = shownScore.toLocaleString()
 		}
 
+		const _speed = Math.round(speed) 
+		if(_speed != this._last.clock){
+			this._last.speed = _speed
+			this.speed.textContent = _speed;
+		}
+		const _nitrogen = nitrogen;
+		if(_nitrogen != this._last.nitrogen){
+			this._last.nitrogen = _nitrogen
+			this.nitrogenRow.textContent = _nitrogen
+		}
+
 		const clock = formatClock(time)
 		if (clock !== this._last.clock) {
 			this._last.clock = clock
@@ -100,6 +122,11 @@ export class HUD {
 		}
 
 		this.setWarning(Boolean(warning))
+	}
+
+	updateBoost(duration){
+		this.boostEl.classList.toggle('hidden', false)
+		this.boostTimer.textContent = duration
 	}
 
 	setWarning(on) {

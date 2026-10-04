@@ -2,6 +2,10 @@ import * as THREE from 'three';
 
 export class NitrogenCanister{
 
+    constructor(assetManager) {
+        this.object = this._buildNitrogen(assetManager)
+    }
+
     _buildNitrogen(assetManager){
         const group = new THREE.Group();
         const radius = 2;
@@ -21,6 +25,22 @@ export class NitrogenCanister{
         geo = assetManager.createNitrogenGeometry(1.9, 2.5, segments, false);
         mat = assetManager.createNitrogenLiquidMaterial(0x00fffb);
         const liquid = new THREE.Mesh(geo, mat);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00fffb,
+            transparent: true,
+            opacity: 0.12,
+            side: THREE.BackSide,
+            depthWrite: false,
+        })
+
+        const glowGeometry = new THREE.SphereGeometry(12, 32, 32)
+
+        const glow = new THREE.Mesh(
+            glowGeometry,
+            glowMaterial
+        )
+
+        group.add(glow)
         liquid.position.set(0, -1.3, 0);
         main.position.set(0, 0, 0);
         top.position.set(0, 2, 0);

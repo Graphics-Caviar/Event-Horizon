@@ -10,6 +10,7 @@ import { AsteroidField } from './AsteroidField.js'
 import { BlackHole } from './BlackHole.js'
 import { Endpoint } from './Endpoint.js'
 import { Spaceship } from './Spaceship.js'
+import { NitrogenCanister } from './Nitrogen.js'
 
 /**
  * Level 1 balance, all in one place.
@@ -151,7 +152,8 @@ export class Level1 extends Level {
 		this.paused = false
 		this.ended = false
 		this._endTimer = null
-
+		this.nitrogen = 0
+		this.nitrogenScore = 0
 		this.blackHole = new BlackHole(this)
 		this.blackHole.gravityStart = T.gravityStart
 		this.blackHole.gravityMax = T.gravityMax
@@ -318,20 +320,29 @@ export class Level1 extends Level {
 	}
 
 	_onHit(asteroid) {
-		const T = LEVEL1_TUNING
-		// Bigger rocks hurt more (asteroid scale runs ~0.6-2.4).
-		const size = 0.75 + asteroid.scale * 0.17
-		this.state.damage(
-			Math.round(
-				T.hitDamage * size * this.handling.damageTaken
+		if(asteroid.isCanister){
+			this.spaceship.applyNitrogenBoost();
+			this.asteroidField.removeAsteroid(asteroid);
+			this.nitrogen++;
+			this.hud.updateBoost(5)
+			this.nitrogenScore += 500
+		} else {
+			const T = LEVEL1_TUNING
+			// Bigger rocks hurt more (asteroid scale runs ~0.6-2.4).
+			const size = 0.75 + asteroid.scale * 0.17
+			this.state.damage(
+				Math.round(
+					T.hitDamage * size * this.handling.damageTaken
+				)
 			)
-		)
-		this.invulnerableFor = T.invulnerableSeconds
-		this.shakeFor = T.shakeSeconds
-		this.spaceship.velocity.multiplyScalar(T.hitSpeedKept)
-		this.asteroidField.removeAsteroid(asteroid)
-		this.audio?.playImpact()
-		this.hud.flashDamage()
+			this.invulnerableFor = T.invulnerableSeconds
+			this.shakeFor = T.shakeSeconds
+			this.spaceship.velocity.multiplyScalar(T.hitSpeedKept)
+			this.asteroidField.removeAsteroid(asteroid)
+			this.audio?.playImpact()
+			this.hud.flashDamage()
+		}
+		
 	}
 
 	/** Nudge the camera for a moment after an impact. Applied after the
@@ -381,10 +392,13 @@ export class Level1 extends Level {
 	_updateHud(distance) {
 		this.hud.update({
 			integrity: this.state.integrity,
-			progress: this._progress(this.bestDistance),
-			score: this.state.score,
+			progress: this._progress(distance),
+			score: this.state.score + this.nitrogenScore,
 			time: this.elapsedPlayTime,
 			warning: distance < LEVEL1_TUNING.warningDistance,
+			speed: this.spaceship.velocity.length(),
+			nitrogen: this.nitrogen,
+			boostTime: this.spaceship.nitrogenTimer
 		})
 	}
 

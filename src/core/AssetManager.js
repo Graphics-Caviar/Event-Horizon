@@ -163,7 +163,9 @@ export class AssetManager {
     return new THREE.MeshStandardMaterial({
       color: color, 
       transparent: true,
-      opacity: 0.9
+      opacity: 0.9,
+	  emissive: color,
+      emissiveIntensity: 3
     });
   }
 
