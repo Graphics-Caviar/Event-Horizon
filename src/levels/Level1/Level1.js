@@ -286,6 +286,10 @@ export class Level1 extends Level {
 			)
 			if (hit) this._onHit(hit)
 		}
+		const canister = this.asteroidField.checkCanisterCollision(
+				this.spaceship
+			)
+			if (canister) this._onCanister(canister)
 		// Blink while invulnerable so the grace period is readable.
 		this.spaceship.shipGroup.visible =
 			this.invulnerableFor === 0 ||
@@ -321,11 +325,7 @@ export class Level1 extends Level {
 
 	_onHit(asteroid) {
 		if(asteroid.isCanister){
-			this.spaceship.applyNitrogenBoost();
-			this.asteroidField.removeAsteroid(asteroid);
-			this.nitrogen++;
-			this.hud.updateBoost(5)
-			this.nitrogenScore += 500
+			
 		} else {
 			const T = LEVEL1_TUNING
 			// Bigger rocks hurt more (asteroid scale runs ~0.6-2.4).
@@ -343,6 +343,14 @@ export class Level1 extends Level {
 			this.hud.flashDamage()
 		}
 		
+	}
+
+	_onCanister(canister) {
+		this.spaceship.applyNitrogenBoost();
+		this.asteroidField.replaceCanister(canister);
+		this.nitrogen++;
+		this.hud.updateBoost(5)
+		this.nitrogenScore += 500
 	}
 
 	/** Nudge the camera for a moment after an impact. Applied after the

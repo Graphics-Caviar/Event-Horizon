@@ -1,14 +1,11 @@
 import * as THREE from 'three'
-<<<<<<< HEAD
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 import { NitrogenCanister } from './Nitrogen'
 import { AssetManager } from '../../core/AssetManager'
-=======
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 const ASTEROID_MODELS = ['/public/assets/models/asteroids/asteroid_01.glb']
->>>>>>> main
 
 export class AsteroidField {
 	constructor(
@@ -40,9 +37,7 @@ export class AsteroidField {
 		this.recycleDistance = -150
 		this.baseSpeed = 200
 		this.speedVariance = 100
-<<<<<<< HEAD
 		this.assetManager = new AssetManager()
-=======
 
 		this.count = count
 		this.modelUrls = models
@@ -61,8 +56,12 @@ export class AsteroidField {
 		this._spin = new THREE.Quaternion()
 
 		this.models = [] // { pieces, colliders, radius, matrices }
->>>>>>> main
 		this.asteroids = []
+
+		this.canisters = []
+		this.canisterGroup = new THREE.Group()
+		this.canisterGroup.name = 'nitrogenCanisters'
+		this.level.addObject(this.canisterGroup)
 
 		// eliminate overhead for object instantiation in matrix update
 		this._matrix = new THREE.Matrix4()
@@ -106,14 +105,6 @@ export class AsteroidField {
 		return { tangent, bitangent }
 	}
 
-<<<<<<< HEAD
-	createAsteroids(count = 200) {
-		this.asteroidGroup = new THREE.Group()
-		this.asteroidGroup.name = 'asteroidField'
-		this.level.addObject(this.asteroidGroup)
-
-		this.baseCollisionRadius = 6
-=======
 	loadModel(loader, url) {
 		return loader
 			.loadAsync(url)
@@ -245,27 +236,11 @@ export class AsteroidField {
 		const n = this.models.length
 		const base = Math.floor(this.count / n)
 		const extra = this.count % n
->>>>>>> main
 
 		const { tangent, bitangent } = this.getBasis(
 			this.blackHole.planeNormal
 		)
 
-<<<<<<< HEAD
-		for (let i = 0; i < count; i++) {
-			const asteroid = this.spawnAsteroid(
-				tangent,
-				bitangent,
-				true
-			)
-
-			this.asteroids.push(asteroid)
-
-			if (asteroid.object) {
-				this.asteroidGroup.add(asteroid.object)
-			}
-		}
-=======
 		this.models.forEach((model, modelIndex) => {
 			// number of instances of this model for an equal share
 			const instances = base + (modelIndex < extra ? 1 : 0)
@@ -295,15 +270,24 @@ export class AsteroidField {
 			})
 
 			for (let i = 0; i < instances; i++) {
-				const asteroid = this.spawnAsteroid(
-					tangent,
-					bitangent,
-					true
-				)
-				// modelIndex is NOT returned by spawnAsteroid, so the
-				// Object.assign respawns below keep it intact
-				asteroid.modelIndex = modelIndex
-				this.asteroids.push(asteroid)
+				if (Math.random() < 0.05) {
+					const canister = this.spawnCanister(
+						tangent,
+						bitangent,
+						true
+					)
+
+					this.canisters.push(canister)
+				} else {
+					const asteroid = this.spawnAsteroid(
+						tangent,
+						bitangent,
+						true
+					)
+
+					asteroid.modelIndex = modelIndex
+					this.asteroids.push(asteroid)
+				}
 			}
 		})
 
@@ -336,7 +320,6 @@ export class AsteroidField {
 
 		this.loaded = true
 		this.updateInstanceMatrices()
->>>>>>> main
 	}
 
 	/** Respawn one asteroid far ahead after it hits the ship, so the
@@ -372,6 +355,14 @@ export class AsteroidField {
 				this.replaceAsteroid(a, tangent, bitangent)
 			}
 		}
+		for (const canister of this.canisters) {
+			if (
+				canister.position.distanceToSquared(position) <
+				limitSq
+			) {
+				this.replaceCanister(canister)
+			}
+		}
 	}
 
 	/** Two-phase test: a cheap sphere around the whole asteroid first, then
@@ -380,21 +371,12 @@ export class AsteroidField {
 	checkShipCollision(ship) {
 		const shipPos = ship.position
 		const shipRadius = ship.collisionRadius
-<<<<<<< HEAD
-
-		for (const a of this.asteroids) {
-
-			const combinedRadius =
-				a.collisionRadius + shipRadius
-
-=======
 		const quat = this._quat
 		const center = this._center
 
 		for (const a of this.asteroids) {
 			const model = this.models[a.modelIndex]
 			const broad = model.radius * a.scale + shipRadius
->>>>>>> main
 			if (
 				a.position.distanceToSquared(shipPos) >
 				broad * broad
@@ -410,6 +392,25 @@ export class AsteroidField {
 				const r = c.radius * a.scale + shipRadius
 				if (center.distanceToSquared(shipPos) < r * r)
 					return a
+			}
+		}
+
+		return null
+	}
+
+	checkCanisterCollision(ship) {
+		const shipPos = ship.position
+		const shipRadius = ship.collisionRadius
+
+		for (const canister of this.canisters) {
+			const combinedRadius =
+				canister.collisionRadius + shipRadius
+
+			if (
+				canister.position.distanceToSquared(shipPos) <
+				combinedRadius * combinedRadius
+			) {
+				return canister
 			}
 		}
 
@@ -556,38 +557,94 @@ export class AsteroidField {
 			.multiplyScalar(-speed)
 			.add(jitter)
 
-		const isCanister = Math.random() < 0.8
+		const scale = 0.6 + Math.random() * 1.8
 
-		let object
-		let scale
+		//object.position.copy(position)
+		//object.scale.setScalar(scale)
 
-		if (isCanister) {
-			const canister = new NitrogenCanister(this.assetManager)
+		return {
+			position,
+			velocity,
+			scale,
+			collisionRadius: 6 * scale,
 
-			object = canister.object
+			rotationAxis: new THREE.Vector3(
+				Math.random(),
+				Math.random(),
+				Math.random()
+			).normalize(),
 
-			scale = 1
-		} else {
-			const geo = new THREE.IcosahedronGeometry(6, 0)
-			const mat = new THREE.MeshStandardMaterial({
-				color: 0x8a8a8a,
-				flatShading: true,
-			})
-
-			object = new THREE.Mesh(geo, mat)
-
-			scale = 0.6 + Math.random() * 1.8
+			rotationSpeed: (Math.random() - 0.5) * 2,
+			rotation: 0,
 		}
+	}
+
+	spawnCanister(tangent, bitangent, fillVolume = false) {
+		const angle = Math.random() * Math.PI * 2
+		const radius = Math.sqrt(Math.random()) * this.spawnRadius
+
+		const offset = tangent
+			.clone()
+			.multiplyScalar(Math.cos(angle) * radius)
+			.add(
+				bitangent
+					.clone()
+					.multiplyScalar(Math.sin(angle) * radius)
+			)
+
+		const depth = fillVolume
+			? THREE.MathUtils.lerp(
+				this.recycleDistance,
+				this.spawnDistance,
+				Math.random()
+			)
+			: this.spawnDistance +
+				(Math.random() - 0.5) * this.spawnJitter
+
+		const shipPos = this.level.spaceship.position
+
+		const position = shipPos
+			.clone()
+			.addScaledVector(
+				this.blackHole.planeNormal,
+				depth
+			)
+			.add(offset)
+
+		const speed =
+			this.baseSpeed +
+			Math.random() * this.speedVariance
+
+		const jitter = tangent
+			.clone()
+			.multiplyScalar((Math.random() - 0.5) * 10)
+			.add(
+				bitangent
+					.clone()
+					.multiplyScalar((Math.random() - 0.5) * 10)
+			)
+
+		const velocity = this.blackHole.planeNormal
+			.clone()
+			.multiplyScalar(-speed)
+			.add(jitter)
+
+		const canister = new NitrogenCanister(
+			this.assetManager
+		)
+
+		const object = canister.object
 
 		object.position.copy(position)
-		object.scale.setScalar(scale)
+		object.scale.setScalar(1)
+
+		this.canisterGroup.add(object)
 
 		return {
 			object,
 			position,
 			velocity,
-			scale,
-			collisionRadius: isCanister ? 3 : 6 * scale,
+
 			rotationAxis: new THREE.Vector3(
 				Math.random(),
 				Math.random(),
@@ -597,28 +654,25 @@ export class AsteroidField {
 			rotationSpeed: (Math.random() - 0.5) * 2,
 			rotation: 0,
 
-			isCanister,
+			collisionRadius: 3,
 		}
 	}
 
 	updateAsteroidPhysics(delta, timeScale) {
 		const dt = delta * timeScale
-<<<<<<< HEAD
 
-=======
 		this.updateDebris(dt)
->>>>>>> main
-		const { tangent, bitangent } = this.getBasis(
-			this.blackHole.planeNormal
-		)
+
+		const { tangent, bitangent } =
+			this.getBasis(this.blackHole.planeNormal)
 
 		const shipDistance =
 			this.blackHole.getSignedDistance(
 				this.level.spaceship.position
 			)
 
+		// Normal asteroids
 		for (const a of this.asteroids) {
-
 			a.position.addScaledVector(
 				a.velocity,
 				dt
@@ -627,27 +681,55 @@ export class AsteroidField {
 			a.rotation +=
 				a.rotationSpeed * dt
 
-			a.object.position.copy(a.position)
-
-			a.object.quaternion.setFromAxisAngle(
-				a.rotationAxis,
-				a.rotation
-			)
-
 			if (
 				this.blackHole.getSignedDistance(a.position) -
 					shipDistance <
 				this.recycleDistance
 			) {
-				this.replaceAsteroid(a, tangent, bitangent)
+				this.replaceAsteroid(
+					a,
+					tangent,
+					bitangent
+				)
 			}
 		}
+
+		// Nitrogen canisters
+		for (const canister of this.canisters) {
+			canister.position.addScaledVector(
+				canister.velocity,
+				dt
+			)
+
+			canister.rotation +=
+				canister.rotationSpeed * dt
+
+			canister.object.position.copy(
+				canister.position
+			)
+
+			canister.object.quaternion.setFromAxisAngle(
+				canister.rotationAxis,
+				canister.rotation
+			)
+
+			if (
+				this.blackHole.getSignedDistance(
+					canister.position
+				) - shipDistance <
+				this.recycleDistance
+			) {
+				this.replaceCanister(canister)
+			}
+		}
+
+		// Update the InstancedMeshes
+		this.updateInstanceMatrices()
 	}
 
-<<<<<<< HEAD
 
 	replaceAsteroid(asteroid, tangent, bitangent) {
-		this.asteroidGroup.remove(asteroid.object)
+		const modelIndex = asteroid.modelIndex
 
 		const replacement = this.spawnAsteroid(
 			tangent,
@@ -656,8 +738,24 @@ export class AsteroidField {
 
 		Object.assign(asteroid, replacement)
 
-		this.asteroidGroup.add(asteroid.object)
-=======
+		asteroid.modelIndex = modelIndex
+	}
+
+	replaceCanister(canister) {
+		this.canisterGroup.remove(canister.object)
+
+		const { tangent, bitangent } = this.getBasis(
+			this.blackHole.planeNormal
+		)
+
+		const replacement = this.spawnCanister(
+			tangent,
+			bitangent
+		)
+
+		Object.assign(canister, replacement)
+	}
+
 	updateInstanceMatrices() {
 		if (!this.loaded) return
 		const matrix = this._matrix
@@ -696,7 +794,6 @@ export class AsteroidField {
 		}
 		this.farMesh.count = farCount
 		this.farMesh.instanceMatrix.needsUpdate = true
->>>>>>> main
 	}
 
 	// updateInstanceMatrices() {
