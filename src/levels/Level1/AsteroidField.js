@@ -687,7 +687,12 @@ export class AsteroidField {
 
 			a.rotation += a.rotationSpeed * dt
 
-			if (this._outsideActiveCorridor(a.position, shipPosition)) {
+			if (
+				this._outsideActiveCorridor(
+					a.position,
+					shipPosition
+				)
+			) {
 				this.replaceAsteroid(a, tangent, bitangent)
 			}
 		}
@@ -719,7 +724,6 @@ export class AsteroidField {
 		this.updateInstanceMatrices()
 	}
 
-
 	_outsideActiveCorridor(position, shipPosition) {
 		const offset = this._corridorOffset.subVectors(
 			position,
@@ -730,10 +734,7 @@ export class AsteroidField {
 
 		// Remove the component along the travel axis without allocating a new
 		// Vector3 every frame; what remains is the lateral corridor distance.
-		const lateralSq = Math.max(
-			0,
-			offset.lengthSq() - axial * axial
-		)
+		const lateralSq = Math.max(0, offset.lengthSq() - axial * axial)
 		return lateralSq > this.recycleLateralDistanceSq
 	}
 

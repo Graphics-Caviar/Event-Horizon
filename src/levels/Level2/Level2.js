@@ -54,13 +54,17 @@ export class Level2 extends Level {
 		)
 		this.crashSite = vec3From(
 			transition.crashSite || this.state.crashSite,
-			this.landingSite.clone().add(new THREE.Vector3(120, 0, 90))
+			this.landingSite
+				.clone()
+				.add(new THREE.Vector3(120, 0, 90))
 		)
 		this.roverSite = this.landingSite
 			.clone()
 			.add(new THREE.Vector3(95, 0, -55))
 
-		const center = this.landingSite.clone().lerp(this.crashSite, 0.5)
+		const center = this.landingSite
+			.clone()
+			.lerp(this.crashSite, 0.5)
 		center.y = this.baseY
 
 		this.gameplayColliders = []
@@ -69,9 +73,21 @@ export class Level2 extends Level {
 			baseY: this.baseY,
 			size: 1100,
 			clearZones: [
-				{ x: this.landingSite.x, z: this.landingSite.z, radius: 28 },
-				{ x: this.crashSite.x, z: this.crashSite.z, radius: 42 },
-				{ x: this.roverSite.x, z: this.roverSite.z, radius: 46 },
+				{
+					x: this.landingSite.x,
+					z: this.landingSite.z,
+					radius: 28,
+				},
+				{
+					x: this.crashSite.x,
+					z: this.crashSite.z,
+					radius: 42,
+				},
+				{
+					x: this.roverSite.x,
+					z: this.roverSite.z,
+					radius: 46,
+				},
 			],
 		})
 
@@ -92,7 +108,11 @@ export class Level2 extends Level {
 		this.wreckRoot.name = 'crashed-spaceship'
 		this.wreckRoot.position.copy(this.crashSite)
 		this.wreckRoot.position.y =
-			alienTerrainHeight(this.crashSite.x, this.crashSite.z, this.baseY) + 1.5
+			alienTerrainHeight(
+				this.crashSite.x,
+				this.crashSite.z,
+				this.baseY
+			) + 1.5
 		this.wreckRoot.rotation.set(0.18, 0.75, -0.42)
 		this.addObject(this.wreckRoot)
 		this._registerGameplayCollider(
@@ -134,14 +154,31 @@ export class Level2 extends Level {
 		for (const radius of radii) {
 			const samples = radius === 0 ? 1 : 16
 			for (let i = 0; i < samples; i++) {
-				const angle = samples === 1 ? 0 : (i / samples) * Math.PI * 2
+				const angle =
+					samples === 1
+						? 0
+						: (i / samples) * Math.PI * 2
 				candidate.set(
 					origin.x + Math.cos(angle) * radius,
 					0,
 					origin.z + Math.sin(angle) * radius
 				)
-				if (!this.planet.isInsideBounds(candidate.x, candidate.z, 8)) continue
-				if (this.planet.slopeDegreesAt(candidate.x, candidate.z) > MAX_WALK_SLOPE - 1) continue
+				if (
+					!this.planet.isInsideBounds(
+						candidate.x,
+						candidate.z,
+						8
+					)
+				)
+					continue
+				if (
+					this.planet.slopeDegreesAt(
+						candidate.x,
+						candidate.z
+					) >
+					MAX_WALK_SLOPE - 1
+				)
+					continue
 				const crashDx = candidate.x - this.crashSite.x
 				const crashDz = candidate.z - this.crashSite.z
 				if (Math.hypot(crashDx, crashDz) < 25) continue
@@ -152,14 +189,21 @@ export class Level2 extends Level {
 	}
 
 	async _loadPilot() {
-		const config = CHARACTERS[this.state.selectedCharacter] || CHARACTERS.zara
+		const config =
+			CHARACTERS[this.state.selectedCharacter] ||
+			CHARACTERS.zara
 		try {
-			const model = await this.assetManager.loadModel(config.model)
+			const model = await this.assetManager.loadModel(
+				config.model
+			)
 			if (!this.playerRoot.parent) return
 			this._fit(model, 3.2)
 			this._setPilot(model)
 		} catch (error) {
-			console.warn('[Level2] Pilot model unavailable:', error?.message)
+			console.warn(
+				'[Level2] Pilot model unavailable:',
+				error?.message
+			)
 		}
 	}
 
@@ -168,7 +212,9 @@ export class Level2 extends Level {
 			? this.state.selectedShip
 			: 'vanguard'
 		try {
-			const model = await this.assetManager.loadModel(SHIPS[shipKey].model)
+			const model = await this.assetManager.loadModel(
+				SHIPS[shipKey].model
+			)
 			if (!this.wreckRoot.parent) return
 			this._fit(model, 18)
 			const pivot = new THREE.Group()
@@ -176,7 +222,10 @@ export class Level2 extends Level {
 			pivot.add(model)
 			this._setWreck(pivot)
 		} catch (error) {
-			console.warn('[Level2] Wreck model unavailable:', error?.message)
+			console.warn(
+				'[Level2] Wreck model unavailable:',
+				error?.message
+			)
 		}
 	}
 
@@ -195,7 +244,9 @@ export class Level2 extends Level {
 	_fallbackPilot() {
 		const group = new THREE.Group()
 		const body = new THREE.Mesh(
-			this.own(new THREE.CylinderGeometry(0.55, 0.7, 2.2, 10)),
+			this.own(
+				new THREE.CylinderGeometry(0.55, 0.7, 2.2, 10)
+			),
 			this.own(
 				new THREE.MeshStandardMaterial({
 					color: 0x4c6070,
@@ -206,7 +257,11 @@ export class Level2 extends Level {
 		)
 		const head = new THREE.Mesh(
 			this.own(new THREE.SphereGeometry(0.48, 12, 10)),
-			this.own(new THREE.MeshStandardMaterial({ color: 0xc48d71 }))
+			this.own(
+				new THREE.MeshStandardMaterial({
+					color: 0xc48d71,
+				})
+			)
 		)
 		head.position.y = 1.45
 		group.add(body, head)
@@ -274,7 +329,9 @@ export class Level2 extends Level {
 		this.wreckRoot.add(smoke)
 		this.wreckSmoke = smoke
 
-		const debrisGeometry = this.own(new THREE.TetrahedronGeometry(0.8, 0))
+		const debrisGeometry = this.own(
+			new THREE.TetrahedronGeometry(0.8, 0)
+		)
 		const debrisMaterial = this.own(
 			new THREE.MeshStandardMaterial({
 				color: 0x2e2527,
@@ -284,7 +341,10 @@ export class Level2 extends Level {
 		)
 		const world = new THREE.Vector3()
 		for (let i = 0; i < 16; i++) {
-			const debris = new THREE.Mesh(debrisGeometry, debrisMaterial)
+			const debris = new THREE.Mesh(
+				debrisGeometry,
+				debrisMaterial
+			)
 			const angle = Math.random() * Math.PI * 2
 			const radius = 10 + Math.random() * 24
 			debris.position.set(
@@ -322,7 +382,10 @@ export class Level2 extends Level {
 			})
 		)
 		const wheelMaterial = this.own(
-			new THREE.MeshStandardMaterial({ color: 0x111316, roughness: 0.9 })
+			new THREE.MeshStandardMaterial({
+				color: 0x111316,
+				roughness: 0.9,
+			})
 		)
 		const body = new THREE.Mesh(
 			this.own(new THREE.BoxGeometry(7.5, 2.2, 11)),
@@ -336,7 +399,10 @@ export class Level2 extends Level {
 		)
 		for (const z of [-3.8, 0, 3.8]) {
 			for (const x of [-4.2, 4.2]) {
-				const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial)
+				const wheel = new THREE.Mesh(
+					wheelGeometry,
+					wheelMaterial
+				)
 				wheel.rotation.z = Math.PI / 2
 				wheel.position.set(x, 1.25, z)
 				root.add(wheel)
@@ -345,7 +411,11 @@ export class Level2 extends Level {
 
 		root.position.copy(this.roverSite)
 		root.position.y =
-			alienTerrainHeight(root.position.x, root.position.z, this.baseY) + 0.5
+			alienTerrainHeight(
+				root.position.x,
+				root.position.z,
+				this.baseY
+			) + 0.5
 		root.rotation.y = -0.55
 
 		const beacon = new THREE.PointLight(0x5ef2ff, 4, 65)
@@ -422,10 +492,14 @@ export class Level2 extends Level {
 		camera.near = 0.1
 		camera.far = Math.max(camera.far, 3000)
 		camera.position.copy(
-			this.playerRoot.position.clone().add(new THREE.Vector3(10, 8, 18))
+			this.playerRoot.position
+				.clone()
+				.add(new THREE.Vector3(10, 8, 18))
 		)
 		camera.lookAt(
-			this.playerRoot.position.clone().add(new THREE.Vector3(0, 1.8, 0))
+			this.playerRoot.position
+				.clone()
+				.add(new THREE.Vector3(0, 1.8, 0))
 		)
 		camera.updateProjectionMatrix()
 	}
@@ -439,8 +513,15 @@ export class Level2 extends Level {
 			) + 2.2
 	}
 
-	_validateMovementCandidate(from, candidate, { allowSteepDownhill = true } = {}) {
-		const hitBoundary = this.planet.clampToBounds(candidate, PLAYER_RADIUS)
+	_validateMovementCandidate(
+		from,
+		candidate,
+		{ allowSteepDownhill = true } = {}
+	) {
+		const hitBoundary = this.planet.clampToBounds(
+			candidate,
+			PLAYER_RADIUS
+		)
 		const hitObstacle = this.planet.resolveCircleCollisions(
 			candidate,
 			PLAYER_RADIUS,
@@ -461,12 +542,21 @@ export class Level2 extends Level {
 		}
 
 		const currentHeight = this.planet.heightAt(from.x, from.z)
-		const nextHeight = this.planet.heightAt(candidate.x, candidate.z)
+		const nextHeight = this.planet.heightAt(
+			candidate.x,
+			candidate.z
+		)
 		const rising = nextHeight > currentHeight + 0.025
 		const gradeDegrees = THREE.MathUtils.radToDeg(
-			Math.atan2(Math.abs(nextHeight - currentHeight), horizontal)
+			Math.atan2(
+				Math.abs(nextHeight - currentHeight),
+				horizontal
+			)
 		)
-		const surfaceSlope = this.planet.slopeDegreesAt(candidate.x, candidate.z)
+		const surfaceSlope = this.planet.slopeDegreesAt(
+			candidate.x,
+			candidate.z
+		)
 		const effectiveSlope = Math.max(gradeDegrees, surfaceSlope)
 
 		const blockedBySlope =
@@ -485,19 +575,30 @@ export class Level2 extends Level {
 	_movePlayerDirection(direction, distance, { sliding = false } = {}) {
 		if (distance <= 0 || direction.lengthSq() < 1e-8) return false
 		const dir = direction.clone().setY(0).normalize()
-		const steps = Math.max(1, Math.ceil(distance / MAX_MOVEMENT_SUBSTEP))
+		const steps = Math.max(
+			1,
+			Math.ceil(distance / MAX_MOVEMENT_SUBSTEP)
+		)
 		const stepDistance = distance / steps
 		let moved = false
 
 		for (let i = 0; i < steps; i++) {
 			const from = this.playerRoot.position.clone()
-			const candidate = from.clone().addScaledVector(dir, stepDistance)
-			const result = this._validateMovementCandidate(from, candidate, {
-				allowSteepDownhill: true,
-			})
+			const candidate = from
+				.clone()
+				.addScaledVector(dir, stepDistance)
+			const result = this._validateMovementCandidate(
+				from,
+				candidate,
+				{
+					allowSteepDownhill: true,
+				}
+			)
 
 			if (result.hitBoundary && !sliding) {
-				this._showMovementFeedback('MISSION AREA BOUNDARY')
+				this._showMovementFeedback(
+					'MISSION AREA BOUNDARY'
+				)
 			}
 
 			if (result.ok) {
@@ -513,17 +614,30 @@ export class Level2 extends Level {
 			for (const axis of ['x', 'z']) {
 				const alternative = from.clone()
 				alternative[axis] += dir[axis] * stepDistance
-				if (Math.abs(alternative[axis] - from[axis]) < 1e-5) continue
-				const altResult = this._validateMovementCandidate(from, alternative, {
-					allowSteepDownhill: true,
-				})
+				if (
+					Math.abs(
+						alternative[axis] - from[axis]
+					) < 1e-5
+				)
+					continue
+				const altResult =
+					this._validateMovementCandidate(
+						from,
+						alternative,
+						{
+							allowSteepDownhill: true,
+						}
+					)
 				if (!altResult.ok) continue
 				const progress = Math.hypot(
 					alternative.x - from.x,
 					alternative.z - from.z
 				)
 				if (!best || progress > best.progress) {
-					best = { position: alternative, progress }
+					best = {
+						position: alternative,
+						progress,
+					}
 				}
 			}
 
@@ -535,7 +649,9 @@ export class Level2 extends Level {
 			}
 
 			if (result.blockedBySlope && !sliding) {
-				this._showMovementFeedback('TOO STEEP — FIND ANOTHER ROUTE')
+				this._showMovementFeedback(
+					'TOO STEEP — FIND ANOTHER ROUTE'
+				)
 			}
 			break
 		}
@@ -559,16 +675,22 @@ export class Level2 extends Level {
 
 		const strength = clamp01((slope - SLIDE_START_SLOPE) / 18)
 		const slideSpeed = 2.2 + strength * 7.5
-		this._movePlayerDirection(downhill.normalize(), slideSpeed * delta, {
-			sliding: true,
-		})
+		this._movePlayerDirection(
+			downhill.normalize(),
+			slideSpeed * delta,
+			{
+				sliding: true,
+			}
+		)
 	}
 
 	_updatePlayerMovement(delta) {
 		const move = new THREE.Vector3(
-			(this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0),
+			(this.keys.has('KeyD') ? 1 : 0) -
+				(this.keys.has('KeyA') ? 1 : 0),
 			0,
-			(this.keys.has('KeyS') ? 1 : 0) - (this.keys.has('KeyW') ? 1 : 0)
+			(this.keys.has('KeyS') ? 1 : 0) -
+				(this.keys.has('KeyW') ? 1 : 0)
 		)
 
 		if (move.lengthSq() > 0) {
@@ -577,13 +699,18 @@ export class Level2 extends Level {
 				this.playerRoot.position.x,
 				this.playerRoot.position.z
 			)
-			const slopePenalty = 1 - Math.min(0.28, currentSlope / 180)
+			const slopePenalty =
+				1 - Math.min(0.28, currentSlope / 180)
 			const baseSpeed = this.keys.has('ShiftLeft') ? 20 : 12
 			const moved = this._movePlayerDirection(
 				move,
 				baseSpeed * slopePenalty * delta
 			)
-			if (moved) this.playerRoot.rotation.y = Math.atan2(move.x, move.z)
+			if (moved)
+				this.playerRoot.rotation.y = Math.atan2(
+					move.x,
+					move.z
+				)
 		}
 
 		this._applySlopeSlide(delta)
@@ -600,7 +727,9 @@ export class Level2 extends Level {
 
 	update(delta) {
 		if (this.wreckFlame) {
-			const pulse = 0.88 + Math.sin(performance.now() * 0.012) * 0.12
+			const pulse =
+				0.88 +
+				Math.sin(performance.now() * 0.012) * 0.12
 			this.wreckFlame.scale.setScalar(pulse)
 			this.wreckFire.intensity = 4 + pulse * 2
 			this.wreckSmoke.rotation.y += delta * 0.12
@@ -615,7 +744,9 @@ export class Level2 extends Level {
 			.add(new THREE.Vector3(10, 8, 18))
 		camera.position.lerp(desired, 1 - Math.exp(-5 * delta))
 		camera.lookAt(
-			this.playerRoot.position.clone().add(new THREE.Vector3(0, 1.8, 0))
+			this.playerRoot.position
+				.clone()
+				.add(new THREE.Vector3(0, 1.8, 0))
 		)
 
 		const dx = this.playerRoot.position.x - this.rover.position.x

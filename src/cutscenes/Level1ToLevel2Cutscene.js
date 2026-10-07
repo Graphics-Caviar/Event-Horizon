@@ -135,12 +135,19 @@ export class Level1ToLevel2Cutscene {
 		this._buildCrashEffects()
 		this._buildOverlays()
 		this._setupCamera()
-		this.comicRenderer = new ComicCutsceneRenderer(this.sceneManager.renderer)
+		this.comicRenderer = new ComicCutsceneRenderer(
+			this.sceneManager.renderer
+		)
 		this.sceneManager.setRenderPipeline(this.comicRenderer)
 
 		this._onKeyDown = (event) => {
-			if (!['Escape', 'Space', 'Enter'].includes(event.code)) return
-			if (event.repeat || performance.now() - this._startedAt < 800) return
+			if (!['Escape', 'Space', 'Enter'].includes(event.code))
+				return
+			if (
+				event.repeat ||
+				performance.now() - this._startedAt < 800
+			)
+				return
 			event.preventDefault()
 			this.skip()
 		}
@@ -151,13 +158,18 @@ export class Level1ToLevel2Cutscene {
 			if (this._disposed) return
 			this.ready = true
 			this.skipEl.textContent = SKIP_HINT
-			console.info('[Cutscene] Playing continuous Level 1 -> Level 2 transition.')
+			console.info(
+				'[Cutscene] Playing continuous Level 1 -> Level 2 transition.'
+			)
 		})
 	}
 
 	_initTrajectory() {
 		const defaultStart = new THREE.Vector3(0, 40, 5000)
-		this.shipPosition = vectorFrom(this.handoff.position, defaultStart)
+		this.shipPosition = vectorFrom(
+			this.handoff.position,
+			defaultStart
+		)
 		this.shipQuaternion = quaternionFrom(this.handoff.quaternion)
 
 		const quaternionForward = new THREE.Vector3(0, 0, -1)
@@ -168,7 +180,9 @@ export class Level1ToLevel2Cutscene {
 			quaternionForward.clone().multiplyScalar(95)
 		)
 		if (this.shipVelocity.lengthSq() < 35 * 35) {
-			this.shipVelocity.copy(quaternionForward).multiplyScalar(85)
+			this.shipVelocity
+				.copy(quaternionForward)
+				.multiplyScalar(85)
 		}
 
 		this.flightForward = this.shipVelocity.clone().normalize()
@@ -226,7 +240,11 @@ export class Level1ToLevel2Cutscene {
 	_buildSpaceEnvironment() {
 		const scene = this.sceneManager.scene
 		scene.add(new THREE.AmbientLight(0x8297c8, 0.9))
-		this.skyFill = new THREE.HemisphereLight(0xa7c8ff, 0x441923, 1.15)
+		this.skyFill = new THREE.HemisphereLight(
+			0xa7c8ff,
+			0x441923,
+			1.15
+		)
 		scene.add(this.skyFill)
 		this.sun = new THREE.DirectionalLight(0xffcf9e, 2.35)
 		this.sun.position.copy(
@@ -240,12 +258,21 @@ export class Level1ToLevel2Cutscene {
 		const geometry = new THREE.BufferGeometry()
 		const points = []
 		for (let i = 0; i < 1900; i++) {
-			const x = this.shipPosition.x + (Math.random() - 0.5) * 3600
-			const y = this.shipPosition.y + (Math.random() - 0.5) * 2200
-			const z = this.shipPosition.z + (Math.random() - 0.5) * 4200
+			const x =
+				this.shipPosition.x +
+				(Math.random() - 0.5) * 3600
+			const y =
+				this.shipPosition.y +
+				(Math.random() - 0.5) * 2200
+			const z =
+				this.shipPosition.z +
+				(Math.random() - 0.5) * 4200
 			points.push(x, y, z)
 		}
-		geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
+		geometry.setAttribute(
+			'position',
+			new THREE.Float32BufferAttribute(points, 3)
+		)
 		this.stars = new THREE.Points(
 			geometry,
 			new THREE.PointsMaterial({
@@ -283,7 +310,9 @@ export class Level1ToLevel2Cutscene {
 
 		this.planetLight = new THREE.PointLight(0xff7554, 4.6, 2100)
 		this.planetLight.position.copy(
-			this.planetCenter.clone().addScaledVector(this.flightUp, 520)
+			this.planetCenter
+				.clone()
+				.addScaledVector(this.flightUp, 520)
 		)
 		scene.add(this.planetLight)
 	}
@@ -304,8 +333,11 @@ export class Level1ToLevel2Cutscene {
 			const worldZ = this.terrainCenter.z - localY
 			position.setZ(
 				i,
-				alienTerrainHeight(worldX, worldZ, this.surfaceBaseY) -
+				alienTerrainHeight(
+					worldX,
+					worldZ,
 					this.surfaceBaseY
+				) - this.surfaceBaseY
 			)
 		}
 		geometry.rotateX(-Math.PI / 2)
@@ -330,12 +362,17 @@ export class Level1ToLevel2Cutscene {
 			roughness: 0.96,
 		})
 		for (let i = 0; i < 65; i++) {
-			const x = this.terrainCenter.x + (Math.random() - 0.5) * 900
-			const z = this.terrainCenter.z + (Math.random() - 0.5) * 900
+			const x =
+				this.terrainCenter.x +
+				(Math.random() - 0.5) * 900
+			const z =
+				this.terrainCenter.z +
+				(Math.random() - 0.5) * 900
 			const rock = new THREE.Mesh(rockGeometry, rockMaterial)
 			rock.position.set(
 				x,
-				alienTerrainHeight(x, z, this.surfaceBaseY) + 0.5,
+				alienTerrainHeight(x, z, this.surfaceBaseY) +
+					0.5,
 				z
 			)
 			rock.scale.set(
@@ -351,15 +388,26 @@ export class Level1ToLevel2Cutscene {
 			this.terrainRoot.add(rock)
 		}
 
-		const plantMaterial = new THREE.MeshBasicMaterial({ color: 0x6df2ff })
+		const plantMaterial = new THREE.MeshBasicMaterial({
+			color: 0x6df2ff,
+		})
 		const plantGeometry = new THREE.SphereGeometry(0.7, 10, 8)
 		for (let i = 0; i < 38; i++) {
-			const x = this.terrainCenter.x + (Math.random() - 0.5) * 750
-			const z = this.terrainCenter.z + (Math.random() - 0.5) * 750
-			const plant = new THREE.Mesh(plantGeometry, plantMaterial)
+			const x =
+				this.terrainCenter.x +
+				(Math.random() - 0.5) * 750
+			const z =
+				this.terrainCenter.z +
+				(Math.random() - 0.5) * 750
+			const plant = new THREE.Mesh(
+				plantGeometry,
+				plantMaterial
+			)
 			plant.position.set(
 				x,
-				alienTerrainHeight(x, z, this.surfaceBaseY) + 1 + Math.random() * 2,
+				alienTerrainHeight(x, z, this.surfaceBaseY) +
+					1 +
+					Math.random() * 2,
 				z
 			)
 			plant.scale.y = 1.4 + Math.random() * 2.8
@@ -539,7 +587,10 @@ export class Level1ToLevel2Cutscene {
 			roughness: 0.7,
 		})
 		for (let i = 0; i < 14; i++) {
-			const mesh = new THREE.Mesh(debrisGeometry, debrisMaterial)
+			const mesh = new THREE.Mesh(
+				debrisGeometry,
+				debrisMaterial
+			)
 			mesh.visible = false
 			mesh.scale.setScalar(0.45 + Math.random() * 1.5)
 			this.crashRoot.add(mesh)
@@ -622,12 +673,16 @@ export class Level1ToLevel2Cutscene {
 			pointerEvents: 'none',
 			textShadow: '0 0 10px rgba(255,35,35,.85)',
 		})
-		this.controlAlertTitleEl = this.controlAlertEl.querySelector('[data-control-alert-title]')
+		this.controlAlertTitleEl = this.controlAlertEl.querySelector(
+			'[data-control-alert-title]'
+		)
 		Object.assign(this.controlAlertTitleEl.style, {
 			fontSize: 'clamp(15px,2vw,28px)',
 			lineHeight: '1.15',
 		})
-		this.controlAlertSubEl = this.controlAlertEl.querySelector('[data-control-alert-sub]')
+		this.controlAlertSubEl = this.controlAlertEl.querySelector(
+			'[data-control-alert-sub]'
+		)
 		Object.assign(this.controlAlertSubEl.style, {
 			marginTop: '7px',
 			fontSize: 'clamp(9px,.9vw,13px)',
@@ -653,14 +708,17 @@ export class Level1ToLevel2Cutscene {
 			overflow: 'hidden',
 			fontFamily: 'Impact, Haettenschweiler, Arial Narrow Bold, sans-serif',
 		})
-		this.comicFrameEl = this.comicEl.querySelector('[data-comic-frame]')
+		this.comicFrameEl =
+			this.comicEl.querySelector('[data-comic-frame]')
 		Object.assign(this.comicFrameEl.style, {
 			position: 'absolute',
 			inset: '18px',
 			border: 'clamp(5px, .65vw, 10px) solid rgba(7,8,12,.95)',
 			boxShadow: 'inset 0 0 0 2px rgba(242,231,205,.28), inset 0 0 70px rgba(0,0,0,.3)',
 		})
-		this.comicKickerEl = this.comicEl.querySelector('[data-comic-kicker]')
+		this.comicKickerEl = this.comicEl.querySelector(
+			'[data-comic-kicker]'
+		)
 		Object.assign(this.comicKickerEl.style, {
 			position: 'absolute',
 			left: '34px',
@@ -675,7 +733,9 @@ export class Level1ToLevel2Cutscene {
 			letterSpacing: '.12em',
 			transform: 'rotate(-1deg)',
 		})
-		this.comicCaptionEl = this.comicEl.querySelector('[data-comic-caption]')
+		this.comicCaptionEl = this.comicEl.querySelector(
+			'[data-comic-caption]'
+		)
 		Object.assign(this.comicCaptionEl.style, {
 			position: 'absolute',
 			left: 'clamp(32px,5vw,78px)',
@@ -691,7 +751,9 @@ export class Level1ToLevel2Cutscene {
 			lineHeight: '1',
 			textTransform: 'uppercase',
 		})
-		this.comicSplitVEl = this.comicEl.querySelector('[data-comic-split-v]')
+		this.comicSplitVEl = this.comicEl.querySelector(
+			'[data-comic-split-v]'
+		)
 		Object.assign(this.comicSplitVEl.style, {
 			position: 'absolute',
 			top: '18px',
@@ -702,7 +764,9 @@ export class Level1ToLevel2Cutscene {
 			transform: 'translateX(-50%)',
 			display: 'none',
 		})
-		this.comicSplitDEl = this.comicEl.querySelector('[data-comic-split-d]')
+		this.comicSplitDEl = this.comicEl.querySelector(
+			'[data-comic-split-d]'
+		)
 		Object.assign(this.comicSplitDEl.style, {
 			position: 'absolute',
 			top: '-18%',
@@ -713,7 +777,9 @@ export class Level1ToLevel2Cutscene {
 			transform: 'rotate(17deg)',
 			display: 'none',
 		})
-		this.comicImpactEl = this.comicEl.querySelector('[data-comic-impact]')
+		this.comicImpactEl = this.comicEl.querySelector(
+			'[data-comic-impact]'
+		)
 		Object.assign(this.comicImpactEl.style, {
 			position: 'absolute',
 			left: '50%',
@@ -749,7 +815,9 @@ export class Level1ToLevel2Cutscene {
 				.addScaledVector(this.flightForward, -48)
 		)
 		camera.lookAt(
-			this.shipPosition.clone().addScaledVector(this.flightForward, 140)
+			this.shipPosition
+				.clone()
+				.addScaledVector(this.flightForward, 140)
 		)
 		camera.updateProjectionMatrix()
 		this.cameraMode = CAMERA_MODE.SHIP_FOLLOW
@@ -778,7 +846,10 @@ export class Level1ToLevel2Cutscene {
 				this._setShip(model, shipKey)
 			})
 			.catch((error) =>
-				console.warn('[Cutscene] Ship model unavailable:', error?.message)
+				console.warn(
+					'[Cutscene] Ship model unavailable:',
+					error?.message
+				)
 			)
 		const loadPilot = this.assetManager
 			.loadModel(CHARACTERS[pilotKey].model)
@@ -788,13 +859,19 @@ export class Level1ToLevel2Cutscene {
 				this._setPilot(model)
 			})
 			.catch((error) =>
-				console.warn('[Cutscene] Pilot model unavailable:', error?.message)
+				console.warn(
+					'[Cutscene] Pilot model unavailable:',
+					error?.message
+				)
 			)
 
 		await Promise.race([
 			Promise.all([loadShip, loadPilot]),
 			new Promise((resolve) => {
-				this._waitTimer = setTimeout(resolve, MODEL_WAIT_MS)
+				this._waitTimer = setTimeout(
+					resolve,
+					MODEL_WAIT_MS
+				)
 			}),
 		])
 		clearTimeout(this._waitTimer)
@@ -866,7 +943,14 @@ export class Level1ToLevel2Cutscene {
 		camera.lookAt(target)
 	}
 
-	_setCinematicCamera(mode, position, target, smoothing, delta, shake = 0) {
+	_setCinematicCamera(
+		mode,
+		position,
+		target,
+		smoothing,
+		delta,
+		shake = 0
+	) {
 		if (this.cameraMode !== mode) {
 			this.cameraMode = mode
 			this.sceneManager.camera.position.copy(position)
@@ -877,19 +961,31 @@ export class Level1ToLevel2Cutscene {
 		this._setCamera(position, target, smoothing, delta, shake)
 	}
 
-	_surfaceCameraAnchor(base, rightOffset = 0, forwardOffset = 0, height = 10) {
+	_surfaceCameraAnchor(
+		base,
+		rightOffset = 0,
+		forwardOffset = 0,
+		height = 10
+	) {
 		const anchor = base
 			.clone()
 			.addScaledVector(this.flightRight, rightOffset)
 			.addScaledVector(this.flightForward, forwardOffset)
 		anchor.y =
-			alienTerrainHeight(anchor.x, anchor.z, this.surfaceBaseY) + height
+			alienTerrainHeight(
+				anchor.x,
+				anchor.z,
+				this.surfaceBaseY
+			) + height
 		return anchor
 	}
 
 	_enterPlanetPov() {
 		this.terrainRoot.visible = true
-		this.sceneManager.scene.fog = new THREE.FogExp2(0x351823, 0.00034)
+		this.sceneManager.scene.fog = new THREE.FogExp2(
+			0x351823,
+			0.00034
+		)
 		// Once the camera is standing on the planet, the distant proxy sphere is
 		// no longer part of the shot. Hiding it prevents the old "planet ahead"
 		// composition from competing with the surface-view storytelling.
@@ -903,7 +999,11 @@ export class Level1ToLevel2Cutscene {
 			: 1
 		const value = clamp01(intensity) * flicker
 		this.engineFlame.visible = value > 0.04
-		this.engineFlame.scale.set(0.75 + value * 0.5, 0.75 + value, 0.75 + value * 0.5)
+		this.engineFlame.scale.set(
+			0.75 + value * 0.5,
+			0.75 + value,
+			0.75 + value * 0.5
+		)
 		this.engineFlame.material.opacity = 0.25 + value * 0.65
 		this.engineLight.intensity = value * 5
 	}
@@ -912,53 +1012,97 @@ export class Level1ToLevel2Cutscene {
 		const acceleration = new THREE.Vector3()
 		if (mode === PHASE.APPROACH) {
 			acceleration.addScaledVector(this.flightForward, 1.8)
-			this.shipAngularVelocity.multiplyScalar(Math.exp(-3 * delta))
+			this.shipAngularVelocity.multiplyScalar(
+				Math.exp(-3 * delta)
+			)
 			this._setEngine(0.95)
 		} else if (mode === PHASE.MALFUNCTION) {
-			const severity = clamp01(this.phaseTime / MALFUNCTION_RAMP_SECONDS)
-			acceleration.addScaledVector(this.flightForward, 0.8 - severity * 2.5)
-			acceleration.addScaledVector(this.flightRight, Math.sin(this.elapsed * 2.1) * 5 * severity)
-			acceleration.addScaledVector(this.flightUp, -3.5 * severity)
+			const severity = clamp01(
+				this.phaseTime / MALFUNCTION_RAMP_SECONDS
+			)
+			acceleration.addScaledVector(
+				this.flightForward,
+				0.8 - severity * 2.5
+			)
+			acceleration.addScaledVector(
+				this.flightRight,
+				Math.sin(this.elapsed * 2.1) * 5 * severity
+			)
+			acceleration.addScaledVector(
+				this.flightUp,
+				-3.5 * severity
+			)
 
 			// As control is lost, the planet gradually captures the damaged ship.
 			// This is acceleration, not a positional correction, so the inherited
 			// Level 1 trajectory remains continuous while naturally bending inward.
-			const planetward = this.planetCenter.clone().sub(this.shipPosition)
+			const planetward = this.planetCenter
+				.clone()
+				.sub(this.shipPosition)
 			if (planetward.lengthSq() > 1) {
 				planetward.normalize()
-				const capture = 0.7 + severity * 2.4 + Math.max(0, this.phaseTime - 6) * 0.25
-				acceleration.addScaledVector(planetward, capture)
+				const capture =
+					0.7 +
+					severity * 2.4 +
+					Math.max(0, this.phaseTime - 6) * 0.25
+				acceleration.addScaledVector(
+					planetward,
+					capture
+				)
 			}
-			this.shipAngularVelocity.x += (0.25 + severity * 0.75) * delta
-			this.shipAngularVelocity.y += Math.sin(this.elapsed * 4.5) * 0.4 * delta
-			this.shipAngularVelocity.z += (0.5 + severity * 1.2) * delta
+			this.shipAngularVelocity.x +=
+				(0.25 + severity * 0.75) * delta
+			this.shipAngularVelocity.y +=
+				Math.sin(this.elapsed * 4.5) * 0.4 * delta
+			this.shipAngularVelocity.z +=
+				(0.5 + severity * 1.2) * delta
 			this._setEngine(0.75 - severity * 0.55, true)
-		} else if (mode === PHASE.EJECTION || mode === PHASE.FREE_FALL || mode === PHASE.PARACHUTE) {
+		} else if (
+			mode === PHASE.EJECTION ||
+			mode === PHASE.FREE_FALL ||
+			mode === PHASE.PARACHUTE
+		) {
 			// After ejection the damaged vessel remains ballistic and independent.
 			// It is gently drawn toward the crash corridor while vertical damping
 			// prevents it from going below the terrain before the entry shot begins.
-			const toCrash = this.crashGuidePoint.clone().sub(this.shipPosition)
+			const toCrash = this.crashGuidePoint
+				.clone()
+				.sub(this.shipPosition)
 			if (toCrash.lengthSq() > 1) {
-				acceleration.addScaledVector(toCrash.normalize(), 2.0)
+				acceleration.addScaledVector(
+					toCrash.normalize(),
+					2.0
+				)
 			}
 			acceleration.y += -this.shipVelocity.y * 0.25 - 0.1
 			this.shipAngularVelocity.x += 0.85 * delta
-			this.shipAngularVelocity.y += Math.sin(this.elapsed * 4.5) * 0.35 * delta
+			this.shipAngularVelocity.y +=
+				Math.sin(this.elapsed * 4.5) * 0.35 * delta
 			this.shipAngularVelocity.z += 1.35 * delta
 			this._setEngine(0.16, true)
 			this.damageTrail.material.opacity = 0.12
 			this._updateDamageTrail()
 		} else if (mode === PHASE.SHIP_ENTRY) {
-			const toCrash = this.crashGuidePoint.clone().sub(this.shipPosition)
+			const toCrash = this.crashGuidePoint
+				.clone()
+				.sub(this.shipPosition)
 			const distance = Math.max(toCrash.length(), 1)
-			acceleration.addScaledVector(toCrash.normalize(), 42 + clamp01(this.phaseTime / 6) * 30)
+			acceleration.addScaledVector(
+				toCrash.normalize(),
+				42 + clamp01(this.phaseTime / 6) * 30
+			)
 			acceleration.y -= 15
-			this.shipVelocity.multiplyScalar(Math.exp(-0.075 * delta))
+			this.shipVelocity.multiplyScalar(
+				Math.exp(-0.075 * delta)
+			)
 			this.shipAngularVelocity.x += 1.3 * delta
 			this.shipAngularVelocity.z += 1.8 * delta
 			this._setEngine(0.1, true)
-			this.entryGlow.material.opacity = 0.18 + clamp01(900 / distance) * 0.45
-			this.entryGlow.scale.setScalar(0.9 + Math.sin(this.elapsed * 12) * 0.08)
+			this.entryGlow.material.opacity =
+				0.18 + clamp01(900 / distance) * 0.45
+			this.entryGlow.scale.setScalar(
+				0.9 + Math.sin(this.elapsed * 12) * 0.08
+			)
 			this.damageTrail.material.opacity = 0.42
 		}
 
@@ -976,7 +1120,8 @@ export class Level1ToLevel2Cutscene {
 				this.shipPosition.z,
 				this.surfaceBaseY
 			)
-			if (this.shipPosition.y <= ground + 5) this._impactShip(ground)
+			if (this.shipPosition.y <= ground + 5)
+				this._impactShip(ground)
 		}
 	}
 
@@ -1015,8 +1160,15 @@ export class Level1ToLevel2Cutscene {
 		// Landing/crash targets are projected from the *real* ejection point.
 		// This matters now that ejection is proximity-driven: neither actor has
 		// to turn around toward coordinates authored for an earlier timeline.
-		const forwardSpeed = Math.max(60, this.pilotVelocity.dot(this.flightForward))
-		const landingDrift = THREE.MathUtils.clamp(forwardSpeed * 3.05, 290, 410)
+		const forwardSpeed = Math.max(
+			60,
+			this.pilotVelocity.dot(this.flightForward)
+		)
+		const landingDrift = THREE.MathUtils.clamp(
+			forwardSpeed * 3.05,
+			290,
+			410
+		)
 		this.landingPoint
 			.copy(this.pilotPosition)
 			.addScaledVector(this.flightForward, landingDrift)
@@ -1045,13 +1197,21 @@ export class Level1ToLevel2Cutscene {
 		const acceleration = new THREE.Vector3(0, -18 + open * 8, 0)
 
 		if (open > 0) {
-			const toLanding = this.landingPoint.clone().sub(this.pilotPosition)
+			const toLanding = this.landingPoint
+				.clone()
+				.sub(this.pilotPosition)
 			toLanding.y = 0
 			if (toLanding.lengthSq() > 1) {
-				acceleration.addScaledVector(toLanding.normalize(), 9 + open * 8)
+				acceleration.addScaledVector(
+					toLanding.normalize(),
+					9 + open * 8
+				)
 			}
-			this.pilotVelocity.multiplyScalar(Math.exp(-(0.15 + open * 1.1) * delta))
-			if (open > 0.75 && this.pilotVelocity.y < -9) this.pilotVelocity.y = -9
+			this.pilotVelocity.multiplyScalar(
+				Math.exp(-(0.15 + open * 1.1) * delta)
+			)
+			if (open > 0.75 && this.pilotVelocity.y < -9)
+				this.pilotVelocity.y = -9
 		}
 
 		this.pilotVelocity.addScaledVector(acceleration, delta)
@@ -1059,10 +1219,18 @@ export class Level1ToLevel2Cutscene {
 		this.pilotRoot.position.copy(this.pilotPosition)
 
 		if (open < 0.7) {
-			this.pilotRoot.rotateX(this.pilotAngularVelocity.x * delta)
-			this.pilotRoot.rotateY(this.pilotAngularVelocity.y * delta)
-			this.pilotRoot.rotateZ(this.pilotAngularVelocity.z * delta)
-			this.pilotAngularVelocity.multiplyScalar(Math.exp(-0.16 * delta))
+			this.pilotRoot.rotateX(
+				this.pilotAngularVelocity.x * delta
+			)
+			this.pilotRoot.rotateY(
+				this.pilotAngularVelocity.y * delta
+			)
+			this.pilotRoot.rotateZ(
+				this.pilotAngularVelocity.z * delta
+			)
+			this.pilotAngularVelocity.multiplyScalar(
+				Math.exp(-0.16 * delta)
+			)
 		} else {
 			this.pilotRoot.rotation.x *= Math.exp(-4 * delta)
 			this.pilotRoot.rotation.z =
@@ -1085,7 +1253,10 @@ export class Level1ToLevel2Cutscene {
 	}
 
 	_deployParachute(amount) {
-		this.parachuteOpen = Math.max(this.parachuteOpen, clamp01(amount))
+		this.parachuteOpen = Math.max(
+			this.parachuteOpen,
+			clamp01(amount)
+		)
 		const open = smooth(this.parachuteOpen)
 		this.parachute.visible = open > 0.01
 		this.parachute.scale.set(
@@ -1093,8 +1264,10 @@ export class Level1ToLevel2Cutscene {
 			Math.max(0.001, open),
 			0.35 + open * 0.8
 		)
-		this.parachute.rotation.z = Math.sin(this.elapsed * 1.7) * 0.06 * open
-		this.parachute.rotation.x = Math.sin(this.elapsed * 1.2) * 0.04 * open
+		this.parachute.rotation.z =
+			Math.sin(this.elapsed * 1.7) * 0.06 * open
+		this.parachute.rotation.x =
+			Math.sin(this.elapsed * 1.2) * 0.04 * open
 	}
 
 	_impactShip(groundY) {
@@ -1134,14 +1307,20 @@ export class Level1ToLevel2Cutscene {
 		this.crashLight.intensity = 8 + burst * 100
 		this.crashFire.material.opacity = 0.2 + burst * 0.75
 		this.crashFire.scale.setScalar(1 + (1 - burst) * 3.2)
-		this.crashSmoke.material.opacity = Math.min(0.72, 0.25 + t * 0.12)
+		this.crashSmoke.material.opacity = Math.min(
+			0.72,
+			0.25 + t * 0.12
+		)
 		this.crashSmoke.scale.setScalar(1 + t * 1.7)
 		this.crashRing.material.opacity = 0.7 * burst
 		this.crashRing.scale.setScalar(1 + t * 8)
 		for (const piece of this.crashDebris) {
 			if (!piece.mesh.visible) continue
 			piece.velocity.y -= 22 * delta
-			piece.mesh.position.addScaledVector(piece.velocity, delta)
+			piece.mesh.position.addScaledVector(
+				piece.velocity,
+				delta
+			)
 			piece.mesh.rotation.x += piece.spin.x * delta
 			piece.mesh.rotation.y += piece.spin.y * delta
 			piece.mesh.rotation.z += piece.spin.z * delta
@@ -1174,12 +1353,18 @@ export class Level1ToLevel2Cutscene {
 	}
 
 	_distanceToPlanetSurface() {
-		return Math.max(0, this.shipPosition.distanceTo(this.planetCenter) - PLANET_RADIUS)
+		return Math.max(
+			0,
+			this.shipPosition.distanceTo(this.planetCenter) -
+				PLANET_RADIUS
+		)
 	}
 
 	_setComicText(kicker, caption) {
-		if (this.comicKickerEl) this.comicKickerEl.textContent = kicker || ''
-		if (this.comicCaptionEl) this.comicCaptionEl.textContent = caption || ''
+		if (this.comicKickerEl)
+			this.comicKickerEl.textContent = kicker || ''
+		if (this.comicCaptionEl)
+			this.comicCaptionEl.textContent = caption || ''
 	}
 
 	_updateControlAlert() {
@@ -1190,13 +1375,19 @@ export class Level1ToLevel2Cutscene {
 		let sub = ''
 		let urgency = 0
 
-		if (this.phase === PHASE.MALFUNCTION && this.phaseTime >= 0.55) {
+		if (
+			this.phase === PHASE.MALFUNCTION &&
+			this.phaseTime >= 0.55
+		) {
 			visible = true
-			urgency = clamp01(this.phaseTime / MALFUNCTION_RAMP_SECONDS)
+			urgency = clamp01(
+				this.phaseTime / MALFUNCTION_RAMP_SECONDS
+			)
 			title = 'WARNING · LOSING CONTROL OF SHIP'
-			sub = this.phaseTime >= PLANET_POV_CUT_SECONDS
-				? 'SURFACE TRAJECTORY UNSTABLE · COLLISION RISK RISING'
-				: 'FLIGHT CONTROL FAILURE · TRAJECTORY UNSTABLE'
+			sub =
+				this.phaseTime >= PLANET_POV_CUT_SECONDS
+					? 'SURFACE TRAJECTORY UNSTABLE · COLLISION RISK RISING'
+					: 'FLIGHT CONTROL FAILURE · TRAJECTORY UNSTABLE'
 		} else if (
 			this.phase === PHASE.EJECTION ||
 			this.phase === PHASE.FREE_FALL ||
@@ -1223,7 +1414,9 @@ export class Level1ToLevel2Cutscene {
 		this.controlAlertSubEl.textContent = sub
 		const flashRate = 5.5 + urgency * 8.5
 		const flash = 0.5 + 0.5 * Math.sin(this.elapsed * flashRate)
-		this.controlAlertEl.style.opacity = String(0.46 + flash * (0.32 + urgency * 0.18))
+		this.controlAlertEl.style.opacity = String(
+			0.46 + flash * (0.32 + urgency * 0.18)
+		)
 		this.controlAlertEl.style.transform = `translateX(-50%) scale(${1 + flash * urgency * 0.012})`
 		this.controlAlertEl.style.borderColor = `rgba(255,48,48,${0.62 + flash * 0.38})`
 	}
@@ -1250,7 +1443,10 @@ export class Level1ToLevel2Cutscene {
 
 		switch (this.phase) {
 			case PHASE.APPROACH: {
-				const p = smooth(this.phaseTime / PHASE_DURATION[PHASE.APPROACH])
+				const p = smooth(
+					this.phaseTime /
+						PHASE_DURATION[PHASE.APPROACH]
+				)
 				mix = Math.max(0, (p - 0.78) / 0.22) * 0.12
 				break
 			}
@@ -1259,11 +1455,14 @@ export class Level1ToLevel2Cutscene {
 				mix = 0.12 + p * 0.76
 				overlay = p * 0.88
 				if (this.phaseTime < PLANET_POV_CUT_SECONDS) {
-					kicker = 'SYSTEM WARNING // FLIGHT CONTROL'
-					caption = 'ENGINE FAILURE — LOSING CONTROL'
+					kicker =
+						'SYSTEM WARNING // FLIGHT CONTROL'
+					caption =
+						'ENGINE FAILURE — LOSING CONTROL'
 				} else {
 					kicker = 'ALIEN SURFACE // SKYWARD'
-					caption = 'UNCONTROLLED VESSEL DESCENDING'
+					caption =
+						'UNCONTROLLED VESSEL DESCENDING'
 				}
 				style.edgeStrength = 1.25
 				break
@@ -1303,7 +1502,14 @@ export class Level1ToLevel2Cutscene {
 				kicker = 'SURFACE CONTACT'
 				caption = 'VESSEL DOWN'
 				impact = 1 - smooth(this.phaseTime / 0.7)
-				style = { edgeStrength: 1.55, posterizeLevels: 5, halftoneStrength: 0.28, vignetteStrength: 0.22, exposure: 1.15, shadowLift: 0.02 }
+				style = {
+					edgeStrength: 1.55,
+					posterizeLevels: 5,
+					halftoneStrength: 0.28,
+					vignetteStrength: 0.22,
+					exposure: 1.15,
+					shadowLift: 0.02,
+				}
 				break
 			case PHASE.ALARM:
 				mix = 1
@@ -1319,7 +1525,10 @@ export class Level1ToLevel2Cutscene {
 				caption = 'TOUCHDOWN'
 				break
 			case PHASE.REVEAL: {
-				const p = smooth(this.phaseTime / PHASE_DURATION[PHASE.REVEAL])
+				const p = smooth(
+					this.phaseTime /
+						PHASE_DURATION[PHASE.REVEAL]
+				)
 				mix = 0.84 * (1 - p)
 				overlay = 0.82 * (1 - p)
 				kicker = 'ALIEN PLANET EXODUS'
@@ -1330,12 +1539,21 @@ export class Level1ToLevel2Cutscene {
 
 		this.comicRenderer.setMix(mix)
 		this.comicRenderer.setStyle(style)
-		if (this.comicEl) this.comicEl.style.opacity = String(clamp01(overlay))
+		if (this.comicEl)
+			this.comicEl.style.opacity = String(clamp01(overlay))
 		this._setComicText(kicker, caption)
-		if (this.comicSplitVEl) this.comicSplitVEl.style.display = splitV ? 'block' : 'none'
-		if (this.comicSplitDEl) this.comicSplitDEl.style.display = splitD ? 'block' : 'none'
+		if (this.comicSplitVEl)
+			this.comicSplitVEl.style.display = splitV
+				? 'block'
+				: 'none'
+		if (this.comicSplitDEl)
+			this.comicSplitDEl.style.display = splitD
+				? 'block'
+				: 'none'
 		if (this.comicImpactEl) {
-			this.comicImpactEl.style.opacity = String(clamp01(impact))
+			this.comicImpactEl.style.opacity = String(
+				clamp01(impact)
+			)
 			const scale = 0.7 + (1 - clamp01(impact)) * 0.45
 			this.comicImpactEl.style.transform = `translate(-50%,-50%) rotate(-7deg) scale(${scale})`
 		}
@@ -1347,7 +1565,10 @@ export class Level1ToLevel2Cutscene {
 		if (nextPhase === PHASE.EJECTION) this._ejectPilot()
 		if (nextPhase === PHASE.SHIP_ENTRY) {
 			this.terrainRoot.visible = true
-			this.sceneManager.scene.fog = new THREE.FogExp2(0x351823, 0.0005)
+			this.sceneManager.scene.fog = new THREE.FogExp2(
+				0x351823,
+				0.0005
+			)
 		}
 		if (nextPhase === PHASE.ALARM) this._triggerAlarm()
 	}
@@ -1358,7 +1579,9 @@ export class Level1ToLevel2Cutscene {
 		this.elapsed += dt
 		this.phaseTime += dt
 		this.stars.rotation.y += dt * 0.002
-		this.fadeEl.style.opacity = String(clamp01(1 - this.elapsed / 0.9))
+		this.fadeEl.style.opacity = String(
+			clamp01(1 - this.elapsed / 0.9)
+		)
 
 		switch (this.phase) {
 			case PHASE.APPROACH:
@@ -1399,7 +1622,9 @@ export class Level1ToLevel2Cutscene {
 
 	_updateApproach(delta) {
 		this._integrateShip(delta, PHASE.APPROACH)
-		const wide = smooth(this.phaseTime / PHASE_DURATION[PHASE.APPROACH])
+		const wide = smooth(
+			this.phaseTime / PHASE_DURATION[PHASE.APPROACH]
+		)
 		const cameraPosition = this.shipPosition
 			.clone()
 			.addScaledVector(this.flightRight, 24 + wide * 18)
@@ -1408,7 +1633,9 @@ export class Level1ToLevel2Cutscene {
 		this._setCinematicCamera(
 			CAMERA_MODE.SHIP_FOLLOW,
 			cameraPosition,
-			this.shipPosition.clone().addScaledVector(this.flightForward, 180),
+			this.shipPosition
+				.clone()
+				.addScaledVector(this.flightForward, 180),
 			3.2,
 			delta
 		)
@@ -1430,8 +1657,16 @@ export class Level1ToLevel2Cutscene {
 					.clone()
 					.addScaledVector(this.flightRight, 18)
 					.addScaledVector(this.flightUp, 8)
-					.addScaledVector(this.flightForward, -38),
-				this.shipPosition.clone().addScaledVector(this.flightForward, 60),
+					.addScaledVector(
+						this.flightForward,
+						-38
+					),
+				this.shipPosition
+					.clone()
+					.addScaledVector(
+						this.flightForward,
+						60
+					),
 				4,
 				delta,
 				p * 1.1
@@ -1446,9 +1681,13 @@ export class Level1ToLevel2Cutscene {
 				-92,
 				14
 			)
-			const lead = this.shipVelocity.lengthSq() > 1
-				? this.shipVelocity.clone().normalize().multiplyScalar(18)
-				: new THREE.Vector3()
+			const lead =
+				this.shipVelocity.lengthSq() > 1
+					? this.shipVelocity
+							.clone()
+							.normalize()
+							.multiplyScalar(18)
+					: new THREE.Vector3()
 			this._setCinematicCamera(
 				CAMERA_MODE.SURFACE_SKY,
 				anchor,
@@ -1460,7 +1699,8 @@ export class Level1ToLevel2Cutscene {
 		}
 
 		const surfaceDistance = this._distanceToPlanetSurface()
-		const malfunctionEstablished = this.phaseTime >= MALFUNCTION_MIN_SECONDS
+		const malfunctionEstablished =
+			this.phaseTime >= MALFUNCTION_MIN_SECONDS
 		const closeEnough = surfaceDistance <= EJECTION_SURFACE_DISTANCE
 		const fallbackWindow =
 			this.phaseTime >= MALFUNCTION_FALLBACK_SECONDS &&
@@ -1478,7 +1718,9 @@ export class Level1ToLevel2Cutscene {
 		this._enterPlanetPov()
 		this._integrateShip(delta, PHASE.EJECTION)
 		this._integratePilot(delta, 0)
-		const midpoint = this.shipPosition.clone().lerp(this.pilotPosition, 0.5)
+		const midpoint = this.shipPosition
+			.clone()
+			.lerp(this.pilotPosition, 0.5)
 		const anchor = this._surfaceCameraAnchor(
 			this.landingPoint,
 			88,
@@ -1535,7 +1777,9 @@ export class Level1ToLevel2Cutscene {
 			-48,
 			5.5
 		)
-		const target = this.pilotPosition.clone().add(new THREE.Vector3(0, 2.5, 0))
+		const target = this.pilotPosition
+			.clone()
+			.add(new THREE.Vector3(0, 2.5, 0))
 		this._setCinematicCamera(
 			CAMERA_MODE.SURFACE_PILOT,
 			anchor,
@@ -1558,8 +1802,14 @@ export class Level1ToLevel2Cutscene {
 		// not a ship teleport.
 		this.planet.material.opacity = 1
 		this.planet.material.transparent = true
-		this.planet.material.opacity = Math.max(0, 1 - this.phaseTime / 2)
-		this.planetAtmosphere.material.opacity = Math.max(0, 0.2 * (1 - this.phaseTime / 2))
+		this.planet.material.opacity = Math.max(
+			0,
+			1 - this.phaseTime / 2
+		)
+		this.planetAtmosphere.material.opacity = Math.max(
+			0,
+			0.2 * (1 - this.phaseTime / 2)
+		)
 		if (this.planet.material.opacity <= 0.01) {
 			this.planet.visible = false
 			this.planetAtmosphere.visible = false
@@ -1571,7 +1821,9 @@ export class Level1ToLevel2Cutscene {
 			-92,
 			10
 		)
-		const target = this.shipPosition.clone().add(new THREE.Vector3(0, 2, 0))
+		const target = this.shipPosition
+			.clone()
+			.add(new THREE.Vector3(0, 2, 0))
 		this._setCinematicCamera(
 			CAMERA_MODE.SURFACE_CRASH,
 			anchor,
@@ -1650,7 +1902,9 @@ export class Level1ToLevel2Cutscene {
 		this._setCinematicCamera(
 			CAMERA_MODE.SURFACE_PILOT,
 			anchor,
-			this.pilotPosition.clone().add(new THREE.Vector3(0, 2, 0)),
+			this.pilotPosition
+				.clone()
+				.add(new THREE.Vector3(0, 2, 0)),
 			3.5,
 			delta
 		)
@@ -1669,7 +1923,9 @@ export class Level1ToLevel2Cutscene {
 		)
 		this.parachute.position.y = -p * 1.8
 		this.parachute.position.z = p * 2.8
-		const midpoint = this.landingPoint.clone().lerp(this.crashSite, 0.32)
+		const midpoint = this.landingPoint
+			.clone()
+			.lerp(this.crashSite, 0.32)
 		this._setCinematicCamera(
 			CAMERA_MODE.REVEAL,
 			midpoint
@@ -1681,7 +1937,8 @@ export class Level1ToLevel2Cutscene {
 			2.4,
 			delta
 		)
-		if (this.phaseTime >= PHASE_DURATION[PHASE.REVEAL]) this._finish()
+		if (this.phaseTime >= PHASE_DURATION[PHASE.REVEAL])
+			this._finish()
 	}
 
 	skip() {
@@ -1691,11 +1948,12 @@ export class Level1ToLevel2Cutscene {
 			// planned sites so Level 2 still starts coherently.
 			this.crashSite.copy(this.crashGuidePoint)
 		}
-		this.landingPoint.y = alienTerrainHeight(
-			this.landingPoint.x,
-			this.landingPoint.z,
-			this.surfaceBaseY
-		) + 2.1
+		this.landingPoint.y =
+			alienTerrainHeight(
+				this.landingPoint.x,
+				this.landingPoint.z,
+				this.surfaceBaseY
+			) + 2.1
 		this.pilotLanded = true
 		this._triggerAlarm()
 		this._storeTransitionState()
@@ -1727,7 +1985,9 @@ export class Level1ToLevel2Cutscene {
 		this.skipEl?.remove()
 		this.comicEl?.remove()
 		this.controlAlertEl?.remove()
-		this.sceneManager.setRenderPipeline(this._base.renderPipeline || null)
+		this.sceneManager.setRenderPipeline(
+			this._base.renderPipeline || null
+		)
 		this.comicRenderer?.dispose()
 		clearScene(this.sceneManager.scene)
 		const scene = this.sceneManager.scene

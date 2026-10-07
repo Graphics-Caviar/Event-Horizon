@@ -529,7 +529,8 @@ export class Game {
 		this.gameState.status = STATUS.CUTSCENE
 		this.currentLevel = new Level1ToLevel2Cutscene(this, {
 			handoff,
-			onComplete: (transition) => this._startLevel2(transition),
+			onComplete: (transition) =>
+				this._startLevel2(transition),
 		})
 	}
 

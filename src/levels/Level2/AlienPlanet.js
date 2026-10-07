@@ -28,7 +28,8 @@ export class AlienPlanet {
 	) {
 		this.level = level
 		this.scene = level.sceneManager.scene
-		this.center = center?.clone?.() || new THREE.Vector3(0, baseY, 0)
+		this.center =
+			center?.clone?.() || new THREE.Vector3(0, baseY, 0)
 		this.baseY = baseY
 		this.size = size
 		this.playableMargin = 34
@@ -65,9 +66,7 @@ export class AlienPlanet {
 		const hD = this.heightAt(x, z - sample)
 		const hU = this.heightAt(x, z + sample)
 
-		return target
-			.set(hL - hR, sample * 2, hD - hU)
-			.normalize()
+		return target.set(hL - hR, sample * 2, hD - hU).normalize()
 	}
 
 	slopeDegreesAt(x, z) {
@@ -102,9 +101,20 @@ export class AlienPlanet {
 		const bounds = this.getPlayableBounds()
 		const beforeX = position.x
 		const beforeZ = position.z
-		position.x = clamp(position.x, bounds.minX + radius, bounds.maxX - radius)
-		position.z = clamp(position.z, bounds.minZ + radius, bounds.maxZ - radius)
-		return Math.abs(beforeX - position.x) > 1e-5 || Math.abs(beforeZ - position.z) > 1e-5
+		position.x = clamp(
+			position.x,
+			bounds.minX + radius,
+			bounds.maxX - radius
+		)
+		position.z = clamp(
+			position.z,
+			bounds.minZ + radius,
+			bounds.maxZ - radius
+		)
+		return (
+			Math.abs(beforeX - position.x) > 1e-5 ||
+			Math.abs(beforeZ - position.z) > 1e-5
+		)
 	}
 
 	/**
@@ -122,12 +132,16 @@ export class AlienPlanet {
 		for (let pass = 0; pass < 4; pass++) {
 			let adjusted = false
 			for (const collider of colliders) {
-				if (!collider || collider.enabled === false) continue
-				const minDistance = radius + Math.max(0, collider.radius || 0)
+				if (!collider || collider.enabled === false)
+					continue
+				const minDistance =
+					radius +
+					Math.max(0, collider.radius || 0)
 				const dx = position.x - collider.x
 				const dz = position.z - collider.z
 				const distanceSq = dx * dx + dz * dz
-				if (distanceSq >= minDistance * minDistance) continue
+				if (distanceSq >= minDistance * minDistance)
+					continue
 
 				let distance = Math.sqrt(distanceSq)
 				let nx
@@ -181,7 +195,12 @@ export class AlienPlanet {
 	_buildTerrain() {
 		const segments = 120
 		const geometry = this.level.own(
-			new THREE.PlaneGeometry(this.size, this.size, segments, segments)
+			new THREE.PlaneGeometry(
+				this.size,
+				this.size,
+				segments,
+				segments
+			)
 		)
 		const position = geometry.attributes.position
 		for (let i = 0; i < position.count; i++) {
@@ -189,7 +208,10 @@ export class AlienPlanet {
 			const localY = position.getY(i)
 			const worldX = this.center.x + localX
 			const worldZ = this.center.z - localY
-			position.setZ(i, this.heightAt(worldX, worldZ) - this.baseY)
+			position.setZ(
+				i,
+				this.heightAt(worldX, worldZ) - this.baseY
+			)
 		}
 		geometry.rotateX(-Math.PI / 2)
 		geometry.computeVertexNormals()
@@ -203,13 +225,19 @@ export class AlienPlanet {
 		)
 		this.terrain = new THREE.Mesh(geometry, material)
 		this.terrain.receiveShadow = true
-		this.terrain.position.set(this.center.x, this.baseY, this.center.z)
+		this.terrain.position.set(
+			this.center.x,
+			this.baseY,
+			this.center.z
+		)
 		this.terrain.userData.gameplaySurface = true
 		this.root.add(this.terrain)
 	}
 
 	_buildRocks() {
-		const geometry = this.level.own(new THREE.DodecahedronGeometry(1, 0))
+		const geometry = this.level.own(
+			new THREE.DodecahedronGeometry(1, 0)
+		)
 		const material = this.level.own(
 			new THREE.MeshStandardMaterial({
 				color: 0x241319,
@@ -221,8 +249,12 @@ export class AlienPlanet {
 		let attempts = 0
 		while (placed < 90 && attempts < 450) {
 			attempts++
-			const x = this.center.x + (Math.random() - 0.5) * this.size * 0.9
-			const z = this.center.z + (Math.random() - 0.5) * this.size * 0.9
+			const x =
+				this.center.x +
+				(Math.random() - 0.5) * this.size * 0.9
+			const z =
+				this.center.z +
+				(Math.random() - 0.5) * this.size * 0.9
 			const sx = 1.2 + Math.random() * 5
 			const sy = 0.7 + Math.random() * 4
 			const sz = 1.2 + Math.random() * 5
@@ -247,7 +279,9 @@ export class AlienPlanet {
 		const stemGeometry = this.level.own(
 			new THREE.CylinderGeometry(0.18, 0.4, 5, 7)
 		)
-		const glowGeometry = this.level.own(new THREE.SphereGeometry(0.6, 12, 8))
+		const glowGeometry = this.level.own(
+			new THREE.SphereGeometry(0.6, 12, 8)
+		)
 		const stemMaterial = this.level.own(
 			new THREE.MeshStandardMaterial({
 				color: 0x35132e,
@@ -262,8 +296,12 @@ export class AlienPlanet {
 		let attempts = 0
 		while (placed < 55 && attempts < 300) {
 			attempts++
-			const x = this.center.x + (Math.random() - 0.5) * this.size * 0.78
-			const z = this.center.z + (Math.random() - 0.5) * this.size * 0.78
+			const x =
+				this.center.x +
+				(Math.random() - 0.5) * this.size * 0.78
+			const z =
+				this.center.z +
+				(Math.random() - 0.5) * this.size * 0.78
 			const radius = 0.72
 			if (!this._isSpawnClear(x, z, radius + 1.25)) continue
 

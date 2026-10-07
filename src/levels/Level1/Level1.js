@@ -381,7 +381,11 @@ export class Level1 extends Level {
 			0,
 			1
 		)
-		const timeProgress = THREE.MathUtils.clamp(this.portalEntryTime / 1.35, 0, 1)
+		const timeProgress = THREE.MathUtils.clamp(
+			this.portalEntryTime / 1.35,
+			0,
+			1
+		)
 		const progress = Math.max(through, timeProgress * 0.72)
 		portal.setEntryProgress(progress)
 		portal.update(dt)
@@ -586,7 +590,8 @@ export class Level1 extends Level {
 			velocity,
 			shipKey: this.shipKey,
 			pilotKey: this.pilotKey,
-			cameraPosition: this.sceneManager.camera.position.clone(),
+			cameraPosition:
+				this.sceneManager.camera.position.clone(),
 		}
 	}
 

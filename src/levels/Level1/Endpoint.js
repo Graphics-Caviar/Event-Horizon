@@ -126,7 +126,12 @@ export class Endpoint {
 		// finish-line ring.
 		this.ripples = []
 		for (let i = 0; i < 4; i++) {
-			const geo = new THREE.TorusGeometry(24 + i * 17, 1.5, 10, 72)
+			const geo = new THREE.TorusGeometry(
+				24 + i * 17,
+				1.5,
+				10,
+				72
+			)
 			this.level.own(geo)
 			const mat = new THREE.MeshBasicMaterial({
 				color: i % 2 ? 0x8f72ff : 0x75efff,
@@ -181,7 +186,10 @@ export class Endpoint {
 
 	checkReached(shipPosition) {
 		if (this.reached) return false
-		if (shipPosition.distanceTo(this.position) < this.triggerRadius) {
+		if (
+			shipPosition.distanceTo(this.position) <
+			this.triggerRadius
+		) {
 			this.reached = true
 			return true
 		}
@@ -209,10 +217,15 @@ export class Endpoint {
 
 		for (let i = 0; i < this.ripples.length; i++) {
 			const ripple = this.ripples[i]
-			ripple.rotation.z += delta * (0.18 + i * 0.07) * (i % 2 ? -1 : 1)
-			const wave = 1 + Math.sin(this._t * 2.3 - i * 0.8) * 0.045
+			ripple.rotation.z +=
+				delta * (0.18 + i * 0.07) * (i % 2 ? -1 : 1)
+			const wave =
+				1 + Math.sin(this._t * 2.3 - i * 0.8) * 0.045
 			ripple.scale.setScalar(wave * (1 + entry * 0.08))
-			ripple.material.opacity = 0.20 + entry * 0.28 + Math.sin(this._t * 3 + i) * 0.05
+			ripple.material.opacity =
+				0.2 +
+				entry * 0.28 +
+				Math.sin(this._t * 3 + i) * 0.05
 		}
 
 		const pulse = 1 + Math.sin(this._t * 2.5) * 0.035 + entry * 0.11

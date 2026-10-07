@@ -125,8 +125,18 @@ export class ComicCutsceneRenderer {
 		})
 
 		this.screenScene = new THREE.Scene()
-		this.screenCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
-		this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material)
+		this.screenCamera = new THREE.OrthographicCamera(
+			-1,
+			1,
+			1,
+			-1,
+			0,
+			1
+		)
+		this.quad = new THREE.Mesh(
+			new THREE.PlaneGeometry(2, 2),
+			this.material
+		)
 		this.quad.frustumCulled = false
 		this.screenScene.add(this.quad)
 
@@ -138,18 +148,33 @@ export class ComicCutsceneRenderer {
 		this.uniforms.uMix.value = this.mix
 	}
 
-	setStyle({ edgeStrength, posterizeLevels, halftoneStrength, vignetteStrength, exposure, shadowLift } = {}) {
-		if (Number.isFinite(edgeStrength)) this.uniforms.uEdgeStrength.value = edgeStrength
-		if (Number.isFinite(posterizeLevels)) this.uniforms.uPosterizeLevels.value = posterizeLevels
-		if (Number.isFinite(halftoneStrength)) this.uniforms.uHalftoneStrength.value = halftoneStrength
-		if (Number.isFinite(vignetteStrength)) this.uniforms.uVignetteStrength.value = vignetteStrength
-		if (Number.isFinite(exposure)) this.uniforms.uExposure.value = exposure
-		if (Number.isFinite(shadowLift)) this.uniforms.uShadowLift.value = shadowLift
+	setStyle({
+		edgeStrength,
+		posterizeLevels,
+		halftoneStrength,
+		vignetteStrength,
+		exposure,
+		shadowLift,
+	} = {}) {
+		if (Number.isFinite(edgeStrength))
+			this.uniforms.uEdgeStrength.value = edgeStrength
+		if (Number.isFinite(posterizeLevels))
+			this.uniforms.uPosterizeLevels.value = posterizeLevels
+		if (Number.isFinite(halftoneStrength))
+			this.uniforms.uHalftoneStrength.value = halftoneStrength
+		if (Number.isFinite(vignetteStrength))
+			this.uniforms.uVignetteStrength.value = vignetteStrength
+		if (Number.isFinite(exposure))
+			this.uniforms.uExposure.value = exposure
+		if (Number.isFinite(shadowLift))
+			this.uniforms.uShadowLift.value = shadowLift
 	}
 
 	setSize() {
 		if (this._disposed) return
-		const size = this.renderer.getDrawingBufferSize(new THREE.Vector2())
+		const size = this.renderer.getDrawingBufferSize(
+			new THREE.Vector2()
+		)
 		const width = Math.max(1, Math.floor(size.x))
 		const height = Math.max(1, Math.floor(size.y))
 		this.target.setSize(width, height)
