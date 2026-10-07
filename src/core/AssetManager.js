@@ -38,7 +38,14 @@ export class AssetManager {
 					)
 				}
 				const source = await this._modelCache.get(path)
-				return source.clone(true)
+				const clone = source.clone(true)
+				// GLTF clones intentionally share geometry/material/texture resources
+				// with the cached source. Mark every node so clearScene() can detach
+				// the instance without disposing cache-owned GPU resources.
+				clone.traverse((node) => {
+					node.userData.__assetManagerShared = true
+				})
+				return clone
 			} catch (error) {
 				lastError = error
 				this._modelCache.delete(path)

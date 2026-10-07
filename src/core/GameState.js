@@ -6,6 +6,7 @@ export const STATUS = Object.freeze({
 	MENU: 'menu',
 	PLAYING: 'playing',
 	PAUSED: 'paused',
+	CUTSCENE: 'cutscene',
 	LEVEL_COMPLETE: 'level_complete',
 	GAME_OVER: 'game_over',
 })
@@ -27,6 +28,10 @@ export class GameState {
 		this.boostTimeRemaining = 0 // seconds of active nitrogen boost
 		this.elapsedTime = 0 // seconds since level start
 		this.distanceFromHazard = 0 // level-specific "progress" metric
+		this.alienAlert = false
+		this.crashSite = null
+		this.landingSite = null
+		this.surfaceBaseY = null
 		// playerName, selectedCharacter, selectedShip are intentionally NOT reset here —
 		// they are preserved across retries.
 	}

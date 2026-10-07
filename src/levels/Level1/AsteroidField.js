@@ -5,7 +5,7 @@ import { AssetManager } from '../../core/AssetManager'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
-const ASTEROID_MODELS = ['/public/assets/models/asteroids/asteroid_01.glb']
+const ASTEROID_MODELS = ['/assets/models/asteroids/asteroid_01.glb']
 
 function randomUnit() {
 	return new THREE.Vector3(
@@ -44,6 +44,11 @@ export class AsteroidField {
 		// as the ship escaped, the field ended up trailing behind it and the
 		// space ahead thinned out, making the late game trivially easy.
 		this.recycleDistance = -150
+		// Keep a fixed active corridor around the moving ship. An asteroid that
+		// is still 'ahead' can nevertheless be useless if it has drifted far
+		// sideways, which was another way the visible field could thin out.
+		this.recycleLateralDistance = this.spawnRadius * 1.15
+		this.recycleLateralDistanceSq = this.recycleLateralDistance ** 2
 		this.baseSpeed = 200
 		this.speedVariance = 100
 		this.assetManager = new AssetManager()
@@ -77,6 +82,7 @@ export class AsteroidField {
 		this._quat = new THREE.Quaternion()
 		this._scale = new THREE.Vector3()
 		this._center = new THREE.Vector3()
+		this._corridorOffset = new THREE.Vector3()
 
 		this.loaded = false
 		this._pendingClear = null
@@ -673,9 +679,7 @@ export class AsteroidField {
 			this.blackHole.planeNormal
 		)
 
-		const shipDistance = this.blackHole.getSignedDistance(
-			this.level.spaceship.position
-		)
+		const shipPosition = this.level.spaceship.position
 
 		// Normal asteroids
 		for (const a of this.asteroids) {
@@ -683,11 +687,7 @@ export class AsteroidField {
 
 			a.rotation += a.rotationSpeed * dt
 
-			if (
-				this.blackHole.getSignedDistance(a.position) -
-					shipDistance <
-				this.recycleDistance
-			) {
+			if (this._outsideActiveCorridor(a.position, shipPosition)) {
 				this.replaceAsteroid(a, tangent, bitangent)
 			}
 		}
@@ -706,11 +706,10 @@ export class AsteroidField {
 			)
 
 			if (
-				this.blackHole.getSignedDistance(
-					canister.position
-				) -
-					shipDistance <
-				this.recycleDistance
+				this._outsideActiveCorridor(
+					canister.position,
+					shipPosition
+				)
 			) {
 				this.replaceCanister(canister)
 			}
@@ -718,6 +717,24 @@ export class AsteroidField {
 
 		// Update the InstancedMeshes
 		this.updateInstanceMatrices()
+	}
+
+
+	_outsideActiveCorridor(position, shipPosition) {
+		const offset = this._corridorOffset.subVectors(
+			position,
+			shipPosition
+		)
+		const axial = offset.dot(this.blackHole.planeNormal)
+		if (axial < this.recycleDistance) return true
+
+		// Remove the component along the travel axis without allocating a new
+		// Vector3 every frame; what remains is the lateral corridor distance.
+		const lateralSq = Math.max(
+			0,
+			offset.lengthSq() - axial * axial
+		)
+		return lateralSq > this.recycleLateralDistanceSq
 	}
 
 	replaceAsteroid(asteroid, tangent, bitangent) {

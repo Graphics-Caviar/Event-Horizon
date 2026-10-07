@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { Level1 } from '../levels/Level1/Level1.js'
+import { Level2 } from '../levels/Level2/Level2.js'
+import { Level1ToLevel2Cutscene } from '../cutscenes/Level1ToLevel2Cutscene.js'
 import { SceneManager } from './SceneManager.js'
 import { AssetManager } from './AssetManager.js'
 import { GameState, STATUS } from './GameState.js'
@@ -450,6 +452,16 @@ export class Game {
 	 * result screen never waits on the network.
 	 */
 	async _onLevelEnd(result) {
+		// A successful escape is now a story transition rather than a results
+		// screen. Persist the Level 1 run in the background, then hand the exact
+		// exit transform/momentum into the cinematic. Failures keep the existing
+		// results/retry flow.
+		if (result.won && result.outcome === 'escaped') {
+			this._saveCompletedLevel1Run(result)
+			this._startLevel1ToLevel2Cutscene(result.handoff)
+			return
+		}
+
 		const status = this.backend?.status()
 		const canSave = Boolean(status?.ready && status?.signedIn)
 		this.levelScreens.showResults(
@@ -468,7 +480,6 @@ export class Game {
 		const scoreId = await this.backend.submitRun(this.gameState, {
 			completed: result.won,
 		})
-		// The player may already have moved on to a new run.
 		if (this.gameState.status === STATUS.PLAYING) return
 
 		if (!scoreId) {
@@ -485,6 +496,46 @@ export class Game {
 				: 'Score saved to the leaderboard',
 			tone: 'good',
 		})
+	}
+
+	_saveCompletedLevel1Run(result) {
+		const status = this.backend?.status()
+		if (!status?.ready || !status?.signedIn) return
+
+		// submitRun only needs these plain values. Snapshot them before the
+		// cinematic changes currentLevel/status so asynchronous network work
+		// cannot accidentally submit the Level 2 state instead.
+		const completedState = {
+			playerName: this.gameState.playerName,
+			score: result.score,
+			elapsedTime: result.time,
+			nitrogenCollected: this.gameState.nitrogenCollected,
+			currentLevel: 1,
+		}
+		void this.backend
+			.submitRun(completedState, { completed: true })
+			.catch((error) =>
+				console.warn(
+					'[Backend] Level 1 completion could not be saved:',
+					error?.message
+				)
+			)
+	}
+
+	_startLevel1ToLevel2Cutscene(handoff) {
+		this.levelScreens.hideAll()
+		this.menu.hideAll()
+		this.currentLevel?.dispose()
+		this.gameState.status = STATUS.CUTSCENE
+		this.currentLevel = new Level1ToLevel2Cutscene(this, {
+			handoff,
+			onComplete: (transition) => this._startLevel2(transition),
+		})
+	}
+
+	_startLevel2(transition = {}) {
+		this.currentLevel?.dispose()
+		this.currentLevel = new Level2(this, { transition })
 	}
 
 	/** Leave the level for the home page, restoring what the level cleared. */
