@@ -23,6 +23,7 @@ export class SceneManager {
 		)
 		this.renderer.setSize(window.innerWidth, window.innerHeight)
 		this.renderer.outputColorSpace = THREE.SRGBColorSpace
+		this.renderPipeline = null
 
 		this.addLights()
 
@@ -49,10 +50,26 @@ export class SceneManager {
 		this.camera.aspect = window.innerWidth / window.innerHeight
 		this.camera.updateProjectionMatrix()
 		this.renderer.setSize(window.innerWidth, window.innerHeight)
+		this.renderPipeline?.setSize?.()
+	}
+
+	setRenderPipeline(pipeline = null) {
+		this.renderPipeline = pipeline
+		this.renderPipeline?.setSize?.()
+	}
+
+	clearRenderPipeline(pipeline = null) {
+		if (!pipeline || this.renderPipeline === pipeline) {
+			this.renderPipeline = null
+		}
 	}
 
 	render() {
-		this.renderer.render(this.scene, this.camera)
+		if (this.renderPipeline?.render) {
+			this.renderPipeline.render(this.scene, this.camera)
+		} else {
+			this.renderer.render(this.scene, this.camera)
+		}
 		const { calls, triangles } = this.renderer.info.render
 		// console.info(
 		// 	`Calls: ${calls.toLocaleString('en-US').replace(/,/g, ' ')}\n` +

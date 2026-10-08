@@ -5,6 +5,11 @@ export function clearScene(scene) {
 		const object = scene.children[0]
 
 		object.traverse((child) => {
+			// Models returned by AssetManager clone the scene graph but share the
+			// cache's geometry/material/texture resources. Removing the instance is
+			// enough; disposing those shared resources would corrupt later clones.
+			if (child.userData?.__assetManagerShared) return
+
 			if (child.geometry) {
 				child.geometry.dispose()
 			}

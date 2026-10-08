@@ -150,6 +150,8 @@ export class Level1 extends Level {
 		this.warningBeepIn = 0
 		this.paused = false
 		this.ended = false
+		this.portalEntry = false
+		this.portalEntryTime = 0
 		this._endTimer = null
 		this.nitrogen = 0
 		this.nitrogenScore = 0
@@ -265,6 +267,11 @@ export class Level1 extends Level {
 			return
 		}
 
+		if (this.portalEntry) {
+			this._updatePortalEntry(delta)
+			return
+		}
+
 		const T = LEVEL1_TUNING
 		const dt = delta * this.timeScale
 		this.elapsedPlayTime += dt
@@ -309,17 +316,101 @@ export class Level1 extends Level {
 			)
 		)
 			return this._end('captured')
-		if (
-			distance >= T.escapeDistance ||
-			this.endpoint.checkReached(this.spaceship.position)
-		)
-			return this._end('escaped')
+		// The escape line is now a physical portal rather than an invisible z
+		// threshold. The player must actually fly into the visible opening; once
+		// inside, a short portal-entry beat carries the real ship through before
+		// the story cutscene takes ownership.
+		if (this.endpoint.checkReached(this.spaceship.position)) {
+			this._startPortalEntry()
+			return
+		}
 
 		this.audio?.setThrusterLevel(
 			this.spaceship.isThrusting ? 1 : 0.15
 		)
 		this._updateHud(distance)
 		this._warningBeep(distance, dt)
+	}
+
+	_startPortalEntry() {
+		if (this.portalEntry || this.ended) return
+		this.portalEntry = true
+		this.portalEntryTime = 0
+		this.endpoint.beginEntry()
+		this.spaceship.clearInput()
+		this.invulnerableFor = Number.POSITIVE_INFINITY
+		this.audio?.setThrusterLevel(1)
+
+		// Preserve the player's forward momentum, but guarantee enough speed for
+		// the portal swallow to read clearly on slower/coasting finishes.
+		const velocity = this.spaceship.velocity
+		if (velocity.z < 80) velocity.z = 80
+	}
+
+	_updatePortalEntry(delta) {
+		const dt = Math.min(delta * this.timeScale, 0.1)
+		this.portalEntryTime += dt
+		const ship = this.spaceship
+		const portal = this.endpoint
+
+		// Keep the world alive but calm while the portal takes over the shot.
+		this.asteroidField.updateAsteroidPhysics(delta, 0.32)
+		this.blackHole.updateBlackHoleDisk(delta, 0.32)
+		this.skybox.update()
+
+		// Magnetic-looking portal attraction: only the lateral components are
+		// corrected, so the ship still travels through using its own momentum.
+		const toCenter = portal.position.clone().sub(ship.position)
+		toCenter.z = 0
+		ship.velocity.addScaledVector(toCenter, 2.8 * dt)
+		ship.velocity.x *= Math.exp(-2.4 * dt)
+		ship.velocity.y *= Math.exp(-2.4 * dt)
+		ship.velocity.z = THREE.MathUtils.lerp(
+			ship.velocity.z,
+			185,
+			1 - Math.exp(-3.2 * dt)
+		)
+
+		ship.position.addScaledVector(ship.velocity, dt)
+		ship.shipGroup.position.copy(ship.position)
+		ship.updateFlightEffects(delta, this.timeScale)
+		ship.updateCamera(delta, this.timeScale)
+
+		const through = THREE.MathUtils.clamp(
+			(ship.position.z - portal.position.z + 35) / 210,
+			0,
+			1
+		)
+		const timeProgress = THREE.MathUtils.clamp(
+			this.portalEntryTime / 1.35,
+			0,
+			1
+		)
+		const progress = Math.max(through, timeProgress * 0.72)
+		portal.setEntryProgress(progress)
+		portal.update(dt)
+
+		// The portal compresses the visible ship as it crosses the energy plane.
+		// This is visual only; the handoff still keeps its real transform/velocity.
+		const swallow = THREE.MathUtils.smoothstep(through, 0.18, 1)
+		const scale = THREE.MathUtils.lerp(1, 0.08, swallow)
+		ship.shipGroup.scale.setScalar(scale)
+
+		const camera = this.sceneManager.camera
+		const targetFov = 60 + progress * 18
+		camera.fov = THREE.MathUtils.lerp(
+			camera.fov,
+			targetFov,
+			1 - Math.exp(-5 * dt)
+		)
+		camera.updateProjectionMatrix()
+
+		this.audio?.setThrusterLevel(0.7 + progress * 0.3)
+		this._updateHud(LEVEL1_TUNING.escapeDistance)
+
+		if (through >= 0.98 || this.portalEntryTime >= 1.55) {
+			this._end('escaped')
+		}
 	}
 
 	_onHit(asteroid) {
@@ -359,6 +450,7 @@ export class Level1 extends Level {
 		this.spaceship.applyNitrogenBoost()
 		this.asteroidField.replaceCanister(canister)
 		this.nitrogen++
+		this.state.nitrogenCollected = this.nitrogen
 		this.hud.updateBoost(5)
 		this.nitrogenScore += 1000
 	}
@@ -470,11 +562,37 @@ export class Level1 extends Level {
 			hull,
 			progress: won ? 1 : this._progress(this.bestDistance),
 			level: 1,
+			handoff: won ? this._createCinematicHandoff() : null,
 		}
 		this._endTimer = setTimeout(
 			() => this.onEnd(result),
-			T.endDelaySeconds * 1000
+			(won ? 0.18 : T.endDelaySeconds) * 1000
 		)
+	}
+
+	_createCinematicHandoff() {
+		const ship = this.spaceship
+		const quaternion = ship.shipGroup.quaternion.clone()
+		const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(
+			quaternion
+		)
+		const velocity = ship.velocity.clone()
+		// A player can technically coast across the escape line almost stopped.
+		// The cinematic still inherits their direction, but guarantees enough
+		// momentum for a readable continuous approach shot.
+		if (velocity.lengthSq() < 35 * 35) {
+			velocity.copy(forward).multiplyScalar(85)
+		}
+
+		return {
+			position: ship.position.clone(),
+			quaternion,
+			velocity,
+			shipKey: this.shipKey,
+			pilotKey: this.pilotKey,
+			cameraPosition:
+				this.sceneManager.camera.position.clone(),
+		}
 	}
 
 	dispose() {

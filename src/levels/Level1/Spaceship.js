@@ -19,7 +19,7 @@ const SHIP_LENGTH = 16
  * Starfighter backwards. Uncorrected, all three flew backwards or sideways.
  * If a model file is replaced, re-check its entry here.
  */
-const MODEL_YAW = {
+export const MODEL_YAW = {
 	vanguard: Math.PI, // authored nose towards +z
 	starfighter: -Math.PI / 2, // authored nose towards -x
 	aegis: Math.PI, // authored nose towards +z
