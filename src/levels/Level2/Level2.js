@@ -4,7 +4,7 @@ import { STATUS } from '../../core/GameState.js'
 import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
-import { AlienPlanet, alienTerrainHeight } from './AlienPlanet.js'
+import { AlienPlanet } from './AlienPlanet.js'
 
 const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 16
@@ -108,10 +108,9 @@ export class Level2 extends Level {
 		this.wreckRoot.name = 'crashed-spaceship'
 		this.wreckRoot.position.copy(this.crashSite)
 		this.wreckRoot.position.y =
-			alienTerrainHeight(
+			this.planet.heightAt(
 				this.crashSite.x,
-				this.crashSite.z,
-				this.baseY
+				this.crashSite.z
 			) + 1.5
 		this.wreckRoot.rotation.set(0.18, 0.75, -0.42)
 		this.addObject(this.wreckRoot)
@@ -411,11 +410,8 @@ export class Level2 extends Level {
 
 		root.position.copy(this.roverSite)
 		root.position.y =
-			alienTerrainHeight(
-				root.position.x,
-				root.position.z,
-				this.baseY
-			) + 0.5
+			this.planet.heightAt(root.position.x, root.position.z) +
+			0.5
 		root.rotation.y = -0.55
 
 		const beacon = new THREE.PointLight(0x5ef2ff, 4, 65)
@@ -425,6 +421,12 @@ export class Level2 extends Level {
 	}
 
 	_fit(model, target) {
+		model.traverse((child) => {
+			if (child.isMesh) {
+				child.castShadow = true
+				child.receiveShadow = true
+			}
+		})
 		model.updateMatrixWorld(true)
 		let box = new THREE.Box3().setFromObject(model)
 		const size = box.getSize(new THREE.Vector3())
@@ -506,10 +508,9 @@ export class Level2 extends Level {
 
 	_syncPlayerToTerrain() {
 		this.playerRoot.position.y =
-			alienTerrainHeight(
+			this.planet.heightAt(
 				this.playerRoot.position.x,
-				this.playerRoot.position.z,
-				this.baseY
+				this.playerRoot.position.z
 			) + 2.2
 	}
 
@@ -726,6 +727,7 @@ export class Level2 extends Level {
 	}
 
 	update(delta) {
+		this.planet.update(delta)
 		if (this.wreckFlame) {
 			const pulse =
 				0.88 +

@@ -923,9 +923,34 @@ button:hover {
 }
 
 .credits-text {
+	max-height: 60vh;
+	overflow-y: auto;
+	padding-right: 8px;
 	font-size: 13px;
 	line-height: 1.85;
 	color: rgba(220, 232, 245, 0.8);
+}
+.credits-text h4 {
+	margin: 20px 0 10px;
+	font-size: 12px;
+	letter-spacing: 1px;
+	color: var(--cyan);
+}
+.credits-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+.credits-list li {
+	margin-bottom: 14px;
+}
+.credits-list a {
+	color: var(--cyan);
+	text-underline-offset: 3px;
+}
+.credits-list small {
+	display: block;
+	color: rgba(220, 232, 245, 0.6);
 }
 .credits-text .role {
 	color: var(--cyan);
