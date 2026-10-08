@@ -1,6 +1,7 @@
 export class Menu {
 	constructor({
 		onPlay,
+		onTestLevel2,
 		onLeaderboard,
 		onSignOut,
 		audioManager,
@@ -31,6 +32,26 @@ export class Menu {
 		this.levelCards = [
 			...document.querySelectorAll('.level-card[data-level]'),
 		]
+		const level1Card = document.querySelector(
+			'.level-card[data-level="1"]'
+		)
+		level1Card?.addEventListener('click', () => this.onPlay())
+		level1Card?.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter' || event.key === ' ') {
+				event.preventDefault()
+				this.onPlay()
+			}
+		})
+		const level2Card = document.querySelector(
+			'.level-card[data-level="2"]'
+		)
+		level2Card?.addEventListener('click', () => onTestLevel2?.())
+		level2Card?.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter' || event.key === ' ') {
+				event.preventDefault()
+				onTestLevel2?.()
+			}
+		})
 		this.accountEl = document.getElementById('menu-account')
 		this.accountGuestEl =
 			document.getElementById('menu-account-guest')
@@ -136,7 +157,11 @@ export class Menu {
 		)
 		for (const card of this.levelCards) {
 			const level = Number(card.dataset.level)
-			card.classList.toggle('is-locked', level > unlocked)
+			// Level 2 is temporarily available for direct gameplay testing.
+			card.classList.toggle(
+				'is-locked',
+				level !== 2 && level > unlocked
+			)
 		}
 	}
 
@@ -183,12 +208,20 @@ export class Menu {
 	_openCreditsModal() {
 		this._openModal(`
       <h3>CREDITS</h3>
-      <div class="credits-text">
-        <div><span class="role">Design &amp; Development</span> — Graphics & Cavier</div>
-        <div><span class="role">Engine</span> — three.js</div>
+      <div class="credits-text" tabindex="0" aria-label="Project and technology credits">
+        <div><span class="role">Design &amp; Development</span> — Graphics &amp; Cavier</div>
         <div><span class="role">Built for</span> — Course project</div>
-      </div>
-    `)
+        <h4>THIRD-PARTY TECHNOLOGY</h4>
+        <ul class="credits-list">
+          <li><a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> — mrdoob and contributors. 3D rendering, model loading, and procedural noise utilities. <small>MIT license</small></li>
+          <li><a href="https://firebase.google.com/" target="_blank" rel="noopener noreferrer">Firebase</a> — Google and contributors. Authentication, cloud saves, leaderboards, and analytics. <small>JavaScript SDK: Apache-2.0 license</small></li>
+          <li><a href="https://rapier.rs/" target="_blank" rel="noopener noreferrer">Rapier</a> — Dimforge and contributors. Physics library included in the project's physics module. <small>Apache-2.0 license</small></li>
+          <li><a href="https://github.com/google/draco" target="_blank" rel="noopener noreferrer">Draco</a> — Google and contributors. Compressed 3D model decoding support in the launch-bay asset loader.</li>
+          <li><a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> — Evan You and contributors. Development server and production builds. <small>MIT license</small></li>
+          <li><a href="https://prettier.io/" target="_blank" rel="noopener noreferrer">Prettier</a> — James Long and contributors. Code formatting. <small>MIT license</small></li>
+          <li><a href="https://fonts.google.com/" target="_blank" rel="noopener noreferrer">Google Fonts</a> — Orbitron, Rajdhani, and Share Tech Mono typefaces used by the launch-bay interface.</li>
+        </ul>
+      </div>`)
 	}
 
 	_openExitModal() {

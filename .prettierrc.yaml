@@ -5,3 +5,4 @@ tabWidth: 8
 bracketSpacing: true
 htmlWhitespaceSensitivity: 'ignore'
 useTabs: true
+endOfLine: 'auto'

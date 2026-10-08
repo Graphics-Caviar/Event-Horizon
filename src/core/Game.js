@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { Level1 } from '../levels/Level1/Level1.js'
+import { clearScene } from './Level.js'
 import { Level2 } from '../levels/Level2/Level2.js'
 import { Level1ToLevel2Cutscene } from '../cutscenes/Level1ToLevel2Cutscene.js'
 import { SceneManager } from './SceneManager.js'
@@ -69,6 +70,7 @@ export class Game {
 
 		this.menu = new Menu({
 			onPlay: () => this._onPlay(),
+			onTestLevel2: () => this._testLevel2(),
 			onLeaderboard: () => this._showLeaderboard(),
 			onSignOut: () => this._signOut(),
 			audioManager: this.audio,
@@ -532,6 +534,18 @@ export class Game {
 			onComplete: (transition) =>
 				this._startLevel2(transition),
 		})
+	}
+
+	/** Direct menu entry for testing the current Level 2 implementation. */
+	_testLevel2() {
+		this.menu.hideAll()
+		this.levelScreens.hideAll()
+		this.menuBackground?.dispose()
+		this.menuBackground = null
+		clearScene(this.sceneManager.scene)
+		this.gameState.reset()
+		document.activeElement?.blur?.()
+		this._startLevel2()
 	}
 
 	_startLevel2(transition = {}) {

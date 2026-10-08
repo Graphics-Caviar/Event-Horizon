@@ -121,6 +121,9 @@ export class CharacterSelect {
 	}
 
 	_setTab(tab) {
+		// Leaving pilot details must restore the shared navigation buttons.
+		this.continueBtn.classList.remove('pilot-detail-footer-hidden')
+		this.backBtn.classList.remove('pilot-detail-footer-hidden')
 		this.activeTab = tab
 		this.tabPilotBtn.classList.toggle('active', tab === 'pilot')
 		this.tabShipBtn.classList.toggle('active', tab === 'ship')
