@@ -5,6 +5,7 @@ import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
 import { AlienPlanet } from './AlienPlanet.js'
+import { Rover } from './Rover.js'
 
 const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 16
@@ -33,7 +34,9 @@ const clamp01 = (value) => Math.max(0, Math.min(1, value))
  * - player elevation follows the procedural surface;
  * - steep uphill movement is rejected and very steep ground causes sliding;
  * - the finite terrain has a playable boundary;
- * - rocks, vegetation, wreck/debris and the rover have XZ collision volumes.
+ * - rocks, vegetation and wreck debris have XZ collision volumes;
+ * - the exploration rover is boardable (E when close) and drivable with
+ *   WASD, using the same slope/bounds/collision rules as the on-foot pilot.
  *
  * Alien combat remains deliberately out of scope for this cinematic milestone.
  */
@@ -125,16 +128,20 @@ export class Level2 extends Level {
 		this._buildWreckEffects()
 		this._loadWreck()
 
-		this.rover = this._buildRoverMarker()
-		this.addObject(this.rover)
-		this._registerGameplayCollider(
-			this.rover.position.x,
-			this.rover.position.z,
+		this.rover = new Rover(this, {
+			position: this.roverSite,
+			heading: -0.55,
+		})
+		this.rover.collider = this._registerGameplayCollider(
+			this.rover.group.position.x,
+			this.rover.group.position.z,
 			6.8,
 			'rover',
-			this.rover
+			this.rover.group
 		)
 
+		this.boarded = false
+		this._eWasDown = false
 		this.keys = new Set()
 		this._onKeyDown = (e) => this.keys.add(e.code)
 		this._onKeyUp = (e) => this.keys.delete(e.code)
@@ -370,56 +377,6 @@ export class Level2 extends Level {
 		}
 	}
 
-	_buildRoverMarker() {
-		const root = new THREE.Group()
-		root.name = 'exploration-rover-marker'
-		const bodyMaterial = this.own(
-			new THREE.MeshStandardMaterial({
-				color: 0x263943,
-				metalness: 0.65,
-				roughness: 0.4,
-			})
-		)
-		const wheelMaterial = this.own(
-			new THREE.MeshStandardMaterial({
-				color: 0x111316,
-				roughness: 0.9,
-			})
-		)
-		const body = new THREE.Mesh(
-			this.own(new THREE.BoxGeometry(7.5, 2.2, 11)),
-			bodyMaterial
-		)
-		body.position.y = 2.4
-		root.add(body)
-
-		const wheelGeometry = this.own(
-			new THREE.CylinderGeometry(1.35, 1.35, 1, 14)
-		)
-		for (const z of [-3.8, 0, 3.8]) {
-			for (const x of [-4.2, 4.2]) {
-				const wheel = new THREE.Mesh(
-					wheelGeometry,
-					wheelMaterial
-				)
-				wheel.rotation.z = Math.PI / 2
-				wheel.position.set(x, 1.25, z)
-				root.add(wheel)
-			}
-		}
-
-		root.position.copy(this.roverSite)
-		root.position.y =
-			this.planet.heightAt(root.position.x, root.position.z) +
-			0.5
-		root.rotation.y = -0.55
-
-		const beacon = new THREE.PointLight(0x5ef2ff, 4, 65)
-		beacon.position.set(0, 5, 0)
-		root.add(beacon)
-		return root
-	}
-
 	_fit(model, target) {
 		model.traverse((child) => {
 			if (child.isMesh) {
@@ -456,6 +413,7 @@ export class Level2 extends Level {
 		})
 		this.objectiveEl.innerHTML =
 			'<strong>SURVIVE THE LANDING</strong><br><span style="font-size:12px;opacity:.8">The crash alerted the planet. Reach the exploration rover.</span>'
+		this._objectiveKey = 'default'
 		document.body.appendChild(this.objectiveEl)
 	}
 
@@ -685,6 +643,38 @@ export class Level2 extends Level {
 		)
 	}
 
+	_toggleBoardRover() {
+		if (!this.boarded) {
+			const dx =
+				this.playerRoot.position.x -
+				this.rover.group.position.x
+			const dz =
+				this.playerRoot.position.z -
+				this.rover.group.position.z
+			if (Math.hypot(dx, dz) > 9) return
+			this.boarded = true
+			this.rover.inputEnabled = true
+			this.rover.speed = 0
+			return
+		}
+
+		this.boarded = false
+		this.rover.inputEnabled = false
+		this.rover.speed = 0
+		const exit = this.rover.getExitPosition(new THREE.Vector3())
+		if (this.rover.collider) this.rover.collider.enabled = false
+		this.planet.clampToBounds(exit, PLAYER_RADIUS)
+		this.planet.resolveCircleCollisions(
+			exit,
+			PLAYER_RADIUS,
+			this.gameplayColliders
+		)
+		if (this.rover.collider) this.rover.collider.enabled = true
+		this.playerRoot.position.x = exit.x
+		this.playerRoot.position.z = exit.z
+		this._syncPlayerToTerrain()
+	}
+
 	_updatePlayerMovement(delta) {
 		const move = new THREE.Vector3(
 			(this.keys.has('KeyD') ? 1 : 0) -
@@ -737,25 +727,72 @@ export class Level2 extends Level {
 			this.wreckSmoke.rotation.y += delta * 0.12
 		}
 
-		this._updatePlayerMovement(delta)
+		const eDown = this.keys.has('KeyE')
+		if (eDown && !this._eWasDown) this._toggleBoardRover()
+		this._eWasDown = eDown
+
+		this.rover.update(delta)
+		if (this.rover.blockedBySlope) {
+			this._showMovementFeedback('TOO STEEP FOR THE ROVER')
+		}
+
+		if (this.boarded) {
+			this.rover.getSeatPosition(this.playerRoot.position)
+			this.playerRoot.rotation.y = this.rover.heading
+		} else {
+			this._updatePlayerMovement(delta)
+		}
 		this._updateMovementFeedback(delta)
 
 		const camera = this.sceneManager.camera
-		const desired = this.playerRoot.position
-			.clone()
-			.add(new THREE.Vector3(10, 8, 18))
+		const focus = this.boarded
+			? this.rover.group.position
+			: this.playerRoot.position
+		const desired = this.boarded
+			? focus
+					.clone()
+					.addScaledVector(
+						this.rover.forwardVector(
+							new THREE.Vector3()
+						),
+						-26
+					)
+					.add(new THREE.Vector3(0, 12, 0))
+			: focus.clone().add(new THREE.Vector3(10, 8, 18))
 		camera.position.lerp(desired, 1 - Math.exp(-5 * delta))
 		camera.lookAt(
-			this.playerRoot.position
+			focus
 				.clone()
-				.add(new THREE.Vector3(0, 1.8, 0))
+				.add(
+					new THREE.Vector3(
+						0,
+						this.boarded ? 3.5 : 1.8,
+						0
+					)
+				)
 		)
 
-		const dx = this.playerRoot.position.x - this.rover.position.x
-		const dz = this.playerRoot.position.z - this.rover.position.z
-		if (this.objectiveEl && Math.hypot(dx, dz) < 16) {
-			this.objectiveEl.innerHTML =
-				'<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Vehicle systems are not enabled in this cinematic milestone yet.</span>'
+		const dx =
+			this.playerRoot.position.x - this.rover.group.position.x
+		const dz =
+			this.playerRoot.position.z - this.rover.group.position.z
+		const roverDistance = Math.hypot(dx, dz)
+		const objectiveKey = this.boarded
+			? 'boarded'
+			: roverDistance < 9
+				? 'board'
+				: roverDistance < 16
+					? 'located'
+					: 'default'
+		if (this.objectiveEl && objectiveKey !== this._objectiveKey) {
+			this._objectiveKey = objectiveKey
+			const objectiveText = {
+				default: '<strong>SURVIVE THE LANDING</strong><br><span style="font-size:12px;opacity:.8">The crash alerted the planet. Reach the exploration rover.</span>',
+				located: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Get closer to board the rover.</span>',
+				board: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Press E to board the rover.</span>',
+				boarded: '<strong>ROVER ONLINE</strong><br><span style="font-size:12px;opacity:.8">WASD to drive · E to exit.</span>',
+			}
+			this.objectiveEl.innerHTML = objectiveText[objectiveKey]
 		}
 	}
 
