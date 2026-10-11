@@ -5,6 +5,7 @@ import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
 import { AlienPlanet } from './AlienPlanet.js'
+import { Hazards } from './Hazards.js'
 
 const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 16
@@ -145,6 +146,9 @@ export class Level2 extends Level {
 		this._buildObjective()
 		this._buildMovementFeedback()
 		this._setupCamera()
+
+		this.gravitySystem = () => {}
+		this.hazards = new Hazards(this, {gravity = this.gravitySystem})
 	}
 
 	_findWalkableRoverSite(origin) {
@@ -728,6 +732,7 @@ export class Level2 extends Level {
 
 	update(delta) {
 		this.planet.update(delta)
+		this.hazards.update(delta)
 		if (this.wreckFlame) {
 			const pulse =
 				0.88 +
@@ -765,6 +770,7 @@ export class Level2 extends Level {
 		this.objectiveEl?.remove()
 		this.feedbackEl?.remove()
 		this.gameplayColliders.length = 0
+		this.hazards?.dispose()
 		this.planet?.dispose()
 		super.dispose()
 	}
