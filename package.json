@@ -14,8 +14,8 @@
 	"scripts": {
 		"build": "vite build",
 		"dev": "vite",
-		"format": "prettier --write .",
-		"format:check": "prettier --check .",
+		"format": "prettier --write '**/*.js' '**/*.html' '**/*.json'",
+		"format:check": "prettier --check '**/*.js' '**/*.html' '**/*.json'",
 		"preview": "vite preview",
 		"seed": "node scripts/seedFirestore.js",
 		"test:backend": "node scripts/testBackend.js"
