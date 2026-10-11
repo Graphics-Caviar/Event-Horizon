@@ -1,3 +1,5 @@
+import { GravityStorm } from './GravityStorm.js'
+
 /**
  * Every hazard Level 2 can throw at the player, keyed by name.
  *
@@ -9,7 +11,9 @@
  *   static spawnWeight                // optional, relative chance (default 1)
  * and add it here. Nothing else needs to change.
  */
-export const HAZARD_TYPES = Object.freeze({})
+export const HAZARD_TYPES = Object.freeze({
+	gravityStorm: GravityStorm,
+})
 
 const CONFIG = {
 	firstRollDelay: 15,
