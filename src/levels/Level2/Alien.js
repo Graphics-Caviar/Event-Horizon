@@ -32,7 +32,7 @@ export const ALIENS = {
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/alien-flying-predator.glb',
 		],
         stats: {
-			speed: 20,
+			speed: 25,
 			hp: 5
 		},
     }
@@ -56,7 +56,9 @@ export class Alien {
 		this.launchTimer = 5;
 		this.launchDuration = 2;
 		this.diving = false;
-		this.diveTimer = 
+		this.diveTimer = 8;
+		this.turnabout = false;
+		this.diveTarget = new THREE.Vector3(0, 0, 0)
 		this.orbitAngle = 0;
 		this.orbitRadius = 12;
 		this.orbitSpeed = 1.5;
@@ -100,16 +102,75 @@ export class Alien {
 					this.position.z = this.target.position.z + this.orbitRadius * Math.sin(this.orbitAngle);
 					const direction = new THREE.Vector3(-Math.sin(this.orbitAngle), 0, Math.cos(this.orbitAngle));	
 					this.alienGroup.rotation.y =  Math.atan2(direction.x, direction.z) - Math.PI/2;
+					this.diveTimer = Math.max(0, this.diveTimer - dt)
+					if(this.diveTimer == 0){
+						this.diving = true
+						this.diveTimer = 8
+						this.diveTarget.copy(target)
+						this.turnabout = false
+						this.orbiting = false;
+					} 
 				} else {
 					this.alienGroup.rotation.y = Math.atan2(target.x - this.position.x, target.z - this.position.z)
 					this.velocity.set(0, 0, this.type.stats.speed).applyQuaternion(this.alienGroup.quaternion)
 				}
 				
+			} else {
+				this.velocity.set(0, 0, 0);
+    			const step = this.type.stats.speed * dt;
+				if (!this.turnabout) {
+					this.alienGroup.lookAt(this.diveTarget);
+					if (this.position.distanceTo(this.diveTarget) <= step) {
+						this.position.copy(this.diveTarget);
+						this.turnabout = true;
+					} else {
+						this.moveTowards(this.diveTarget, step);
+					}
+				} else {
+					const returnTarget = target.clone().add(
+						new THREE.Vector3(0, 10.2, 0)
+					);
+					this.alienGroup.lookAt(returnTarget);
+					if (this.position.distanceTo(returnTarget) <= step) {
+						this.position.copy(returnTarget);
+						this.diving = false;
+						this.turnabout = false;
+					} else {
+						this.moveTowards(returnTarget, step);
+					}
+				}
 			}
 		}
 		this.position.addScaledVector(this.velocity, dt)
 		this.syncToTerrain();
-		this.alienGroup.position.copy(this.position)
+		const terrainHeight = this.planet.heightAt(
+			this.position.x,
+			this.position.z
+		);
+
+		const shouldCollide =
+			this.type.name !== "flyer" ||
+			(this.diving && this.position.y <= terrainHeight + 3);
+
+		if (shouldCollide) {
+			const colliderRadius =
+				this.type.name === "runner" ? 1.5 : 2;
+
+			this.planet.clampToBounds(
+				this.position,
+				colliderRadius
+			);
+
+			this.planet.resolveCircleCollisions(
+				this.position,
+				colliderRadius,
+				this.planet.level.gameplayColliders
+			);
+
+			this.syncToTerrain();
+		}
+
+		this.alienGroup.position.copy(this.position);
 	}
 
 	syncToTerrain() {
@@ -144,6 +205,19 @@ export class Alien {
 				'[Level2] Alien model failed to load.',
 				error?.message
 			)
+		}
+	}
+
+	moveTowards(target, maxDistance) {
+		const direction = target.clone().sub(this.position);
+		const distance = direction.length();
+
+		if (distance <= maxDistance) {
+			this.position.copy(target);
+		} else {
+			this.position.add(
+				direction.normalize().multiplyScalar(maxDistance)
+			);
 		}
 	}
 }

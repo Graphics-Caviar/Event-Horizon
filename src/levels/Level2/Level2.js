@@ -153,6 +153,8 @@ export class Level2 extends Level {
 		this._buildObjective()
 		this._buildMovementFeedback()
 		this._setupCamera()
+		this.enemyList = []
+
 		this.testEnemy = new Alien(this.playerRoot, 2, this.assetManager, this.planet)
 		this.testEnemy.position.copy(this.landingSite)
 		this.testEnemy.position.z -= 50
@@ -164,6 +166,30 @@ export class Level2 extends Level {
 			) + 1;
 		this.testEnemy.alienGroup.position.copy(this.testEnemy.position)
 		this.addObject(this.testEnemy.alienGroup);
+		
+
+		this.testEnemy2 = new Alien(this.playerRoot, 1, this.assetManager, this.planet)
+		this.testEnemy2.position.copy(this.landingSite)
+		this.testEnemy2.position.y =
+			this.planet.heightAt(
+				this.landingSite.x,
+				this.landingSite.z
+			) + 1;
+		this.testEnemy2.alienGroup.position.copy(this.testEnemy2.position)
+		this.addObject(this.testEnemy2.alienGroup);
+
+		this.testEnemy3 = new Alien(this.playerRoot, 0, this.assetManager, this.planet)
+		this.testEnemy3.position.copy(this.landingSite)
+		this.testEnemy3.position.y =
+			this.planet.heightAt(
+				this.landingSite.x,
+				this.landingSite.z
+			) + 1;
+		this.testEnemy3.alienGroup.position.copy(this.testEnemy3.position)
+		this.addObject(this.testEnemy3.alienGroup);
+		this.enemyList.push(this.testEnemy)
+		this.enemyList.push(this.testEnemy2)
+		this.enemyList.push(this.testEnemy3)
 	}
 
 	_findWalkableRoverSite(origin) {
@@ -755,7 +781,9 @@ export class Level2 extends Level {
 			this._updatePlayerMovement(delta)
 		}
 		this._updateMovementFeedback(delta)
-		this.testEnemy.updatePhysics(delta)
+		for(let i of this.enemyList){
+			i.updatePhysics(delta)
+		}
 
 		const camera = this.sceneManager.camera
 		const focus = this.boarded
