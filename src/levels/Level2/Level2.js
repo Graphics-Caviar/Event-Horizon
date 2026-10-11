@@ -5,6 +5,7 @@ import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
 import { AlienPlanet } from './AlienPlanet.js'
+import { Alien } from './Alien.js'
 
 const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 16
@@ -145,6 +146,17 @@ export class Level2 extends Level {
 		this._buildObjective()
 		this._buildMovementFeedback()
 		this._setupCamera()
+		this.testEnemy = new Alien(this.playerRoot, 2, this.assetManager, this.planet)
+		this.testEnemy.position.copy(this.landingSite)
+		this.testEnemy.position.z -= 50
+		this.testEnemy.position.x -= 50
+		this.testEnemy.position.y =
+			this.planet.heightAt(
+				this.landingSite.x,
+				this.landingSite.z
+			) + 1;
+		this.testEnemy.alienGroup.position.copy(this.testEnemy.position)
+		this.addObject(this.testEnemy.alienGroup);
 	}
 
 	_findWalkableRoverSite(origin) {
@@ -739,6 +751,7 @@ export class Level2 extends Level {
 
 		this._updatePlayerMovement(delta)
 		this._updateMovementFeedback(delta)
+		this.testEnemy.updatePhysics(delta)
 
 		const camera = this.sceneManager.camera
 		const desired = this.playerRoot.position
