@@ -154,42 +154,8 @@ export class Level2 extends Level {
 		this._buildMovementFeedback()
 		this._setupCamera()
 		this.enemyList = []
-
-		this.testEnemy = new Alien(this.playerRoot, 2, this.assetManager, this.planet)
-		this.testEnemy.position.copy(this.landingSite)
-		this.testEnemy.position.z -= 50
-		this.testEnemy.position.x -= 50
-		this.testEnemy.position.y =
-			this.planet.heightAt(
-				this.landingSite.x,
-				this.landingSite.z
-			) + 1;
-		this.testEnemy.alienGroup.position.copy(this.testEnemy.position)
-		this.addObject(this.testEnemy.alienGroup);
+		this.spawnTimer = 0
 		
-
-		this.testEnemy2 = new Alien(this.playerRoot, 1, this.assetManager, this.planet)
-		this.testEnemy2.position.copy(this.landingSite)
-		this.testEnemy2.position.y =
-			this.planet.heightAt(
-				this.landingSite.x,
-				this.landingSite.z
-			) + 1;
-		this.testEnemy2.alienGroup.position.copy(this.testEnemy2.position)
-		this.addObject(this.testEnemy2.alienGroup);
-
-		this.testEnemy3 = new Alien(this.playerRoot, 0, this.assetManager, this.planet)
-		this.testEnemy3.position.copy(this.landingSite)
-		this.testEnemy3.position.y =
-			this.planet.heightAt(
-				this.landingSite.x,
-				this.landingSite.z
-			) + 1;
-		this.testEnemy3.alienGroup.position.copy(this.testEnemy3.position)
-		this.addObject(this.testEnemy3.alienGroup);
-		this.enemyList.push(this.testEnemy)
-		this.enemyList.push(this.testEnemy2)
-		this.enemyList.push(this.testEnemy3)
 	}
 
 	_findWalkableRoverSite(origin) {
@@ -325,6 +291,29 @@ export class Level2 extends Level {
 		)
 		mesh.rotation.x = -Math.PI / 2
 		return mesh
+	}
+
+	_spawnEnemy(type) {
+		function getRandomPointInCircle(center, radius) {
+			const angle = Math.random() * Math.PI * 2;
+			const x = center.x + Math.cos(angle) * radius;
+			const z = center.z + Math.sin(angle) * radius;
+
+			return { x, z };
+		}
+		const testEnemy = new Alien(this.playerRoot, type, this.assetManager, this.planet)
+		testEnemy.position.copy(this.playerRoot.position)
+		const point = getRandomPointInCircle(this.playerRoot.position, 50)
+		testEnemy.position.z = point.z
+		testEnemy.position.x = point.x
+		testEnemy.position.y =
+			this.planet.heightAt(
+				this.landingSite.x,
+				this.landingSite.z
+			) + 1;
+		testEnemy.alienGroup.position.copy(testEnemy.position)
+		this.addObject(testEnemy.alienGroup);
+		this.enemyList.push(testEnemy)
 	}
 
 	_registerGameplayCollider(x, z, radius, type, object = null) {
@@ -755,6 +744,7 @@ export class Level2 extends Level {
 	}
 
 	update(delta) {
+		
 		this.planet.update(delta)
 		if (this.wreckFlame) {
 			const pulse =
@@ -781,6 +771,12 @@ export class Level2 extends Level {
 			this._updatePlayerMovement(delta)
 		}
 		this._updateMovementFeedback(delta)
+		this.spawnTimer = Math.min(this.spawnTimer + delta, 15);
+		if(this.spawnTimer == 15){
+			this.spawnTimer = 0;
+			this._spawnEnemy(Math.floor(Math.random() * (2 - 0 + 1)) + 0)
+		}
+
 		for(let i of this.enemyList){
 			i.updatePhysics(delta)
 		}
