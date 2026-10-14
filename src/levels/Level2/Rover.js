@@ -150,7 +150,11 @@ export class Rover {
 				this.planet.heightAt(p.x, p.z)) /
 			LOOKAHEAD
 
-		this.speed -= grade * SLOPE_ACCELERATION * delta
+		const g = this.level.hazards.gravityMultiplierAt(
+			this.group.position
+		)
+		this.speed -=
+			grade * SLOPE_ACCELERATION * Math.max(0, g) * delta
 		this.speed = THREE.MathUtils.clamp(
 			this.speed,
 			-MAX_REVERSE_SPEED,
@@ -174,7 +178,10 @@ export class Rover {
 	}
 
 	_move(delta) {
-		const distance = this.speed * delta
+		const factor = this.level.hazards.speedFactorAt(
+			this.group.position
+		)
+		const distance = this.speed * factor * delta
 		if (Math.abs(distance) < 1e-4) return
 
 		// The rover must not collide with its own footprint collider.

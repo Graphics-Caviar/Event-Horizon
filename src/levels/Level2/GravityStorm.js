@@ -1,12 +1,21 @@
 import * as THREE from 'three'
 
-// Every storm rolls one of these. `multiplier` is what gets handed to
-// setGravityInZone(); negative values push things upward. The colour is purely
-// a readability cue: cool = light/reversed, hot = heavy.
+// Every storm rolls one of these, picked by `weight` (higher = more common).
+// `multiplier` scales gravity inside the zone: 1 = normal, 0 = none, negative
+// = reversed. The colour is purely a readability cue: cool = light/reversed,
+// warm = heavy. Rare, extreme storms get the low weights.
 const VARIANTS = [
-	{ label: 'reversed', multiplier: -1, color: 0x9a64ff, weight: 1 },
-	{ label: 'weightless', multiplier: 0.15, color: 0x4fd8ff, weight: 2 },
-	{ label: 'crushing', multiplier: 3, color: 0xff5a2a, weight: 2 },
+	// Light: things move faster / float
+	{ name: 'Featherfall', multiplier: 0.5, color: 0xbfe9ff, weight: 6 },
+	{ name: 'Lunar Drift', multiplier: 0.15, color: 0x4fd8ff, weight: 5 },
+	{ name: 'Null Zone', multiplier: 0, color: 0x6a7bff, weight: 3 },
+	{ name: 'Updraft', multiplier: -0.5, color: 0x4fffc0, weight: 3 },
+	{ name: 'Inversion', multiplier: -1, color: 0x9a64ff, weight: 2 },
+	// Heavy: things move slower
+	{ name: 'Leaden Squall', multiplier: 2, color: 0xffc247, weight: 6 },
+	{ name: 'Crushing Gale', multiplier: 4, color: 0xff5a2a, weight: 4 },
+	{ name: 'Collapse', multiplier: 10, color: 0xd7263d, weight: 2 },
+	{ name: 'Singularity', multiplier: 30, color: 0xb5179e, weight: 1 },
 ]
 
 const RADIUS_RANGE = [22, 34]
@@ -14,9 +23,10 @@ const ACTIVE_RANGE = [10, 18] // seconds the gravity zone is live
 const FORM_TIME = 4 // warning: cloud grows, ring blinks, gravity untouched
 const FADE_TIME = 3 // cloud dissipates, gravity already restored
 
-// Spawn ring around the player so storms are seen coming, not dropped on them.
-const SPAWN_DISTANCE = [55, 150]
-const SPAWN_ATTEMPTS = 24
+// A storm forms on top of the player: its centre lands somewhere within this
+// fraction of its radius from them, so they always start inside the zone
+// (1 would allow the very edge, which terrain height could push just outside).
+const SPAWN_OFFSET = 0.9
 
 const BODY_PUFFS = 38
 const CORE_PUFFS = 6
@@ -56,31 +66,56 @@ function makePuffTexture() {
  *
  * Lifecycle: forming -> active -> dissipating -> done
  *  - forming:     visual warning only (cloud grows, ground ring blinks)
- *  - active:      setGravityInZone(center, radius, multiplier) is applied
- *  - dissipating: gravity is restored (multiplier 1) and the cloud fades
+ *  - active:      the storm is listed in GravityStorm.active, so movement code
+ *                 can query it (see GravityStorm.getMultiplierAt)
+ *  - dissipating: removed from GravityStorm.active, the cloud fades
  *
  * The zone is a sphere centred on the terrain surface, so the ground ring is
  * a fair picture of where gravity is altered. The cloud itself floats above
  * the zone and is purely visual (no collider).
  *
- * Gravity is only ever touched through `_setGravity`, so if the teammate's
- * API changes (zone handles, a clear method, ...) that is the one place to edit.
+ * There is no gravity system: storms only publish their zone. Anything that
+ * wants to react (rover, on-foot pilot) asks via Hazards.gravityMultiplierAt().
  */
 export class GravityStorm {
 	/** Relative chance of being picked by Hazards. */
 	static spawnWeight = 1
 
-	constructor(level, { gravity = null } = {}) {
+	/**
+	 * Storms whose zone is live right now (the 'active' phase only), each
+	 * exposing `name`, `center` (Vector3), `radius` and `multiplier`.
+	 */
+	static active = []
+
+	/**
+	 * Gravity multiplier at a world position ({x, y, z}, e.g. a Vector3).
+	 * 1 when outside every zone. If zones overlap, the one deviating most
+	 * from normal gravity wins.
+	 */
+	static getMultiplierAt(position) {
+		let result = 1
+		for (const storm of GravityStorm.active) {
+			if (!storm.contains(position)) continue
+			if (
+				Math.abs(storm.multiplier - 1) >
+				Math.abs(result - 1)
+			)
+				result = storm.multiplier
+		}
+		return result
+	}
+
+	constructor(level) {
 		this.level = level
-		this.gravity = gravity
 		this.phase = 'forming'
 		this.elapsed = 0 // time spent in the current phase
-		this.gravityApplied = false
 		this.flash = 0
 		this.flashTimer = rand(1, 2.5)
 		this.time = 0
 
 		this.variant = pickWeighted(VARIANTS)
+		this.name = this.variant.name
+		this.multiplier = this.variant.multiplier
 		this.radius = rand(...RADIUS_RANGE)
 		this.activeDuration = rand(...ACTIVE_RANGE)
 		this.center = this._pickCenter()
@@ -88,7 +123,7 @@ export class GravityStorm {
 
 		this._disposables = []
 		this.group = new THREE.Group()
-		this.group.name = `gravity-storm-${this.variant.label}`
+		this.group.name = `gravity-storm-${this.variant.name}`
 		this.group.position.set(
 			this.center.x,
 			this.center.y + this.radius * 0.55,
@@ -104,29 +139,16 @@ export class GravityStorm {
 		return this.phase === 'done'
 	}
 
-	/** Random spot in the playable area, a short walk away from the player. */
+	/** Random point within the storm's reach of the player, so they start inside it. */
 	_pickCenter() {
-		const { planet, playerRoot } = this.level
-		const origin = playerRoot.position
-		let x = origin.x
-		let z = origin.z
-		for (let i = 0; i < SPAWN_ATTEMPTS; i++) {
-			const angle = rand(0, Math.PI * 2)
-			const distance = rand(...SPAWN_DISTANCE)
-			x = origin.x + Math.cos(angle) * distance
-			z = origin.z + Math.sin(angle) * distance
-			if (planet.isInsideBounds(x, z, this.radius + 4)) break
-			// Never found a spot (player hugging the edge): head for map centre.
-			if (i === SPAWN_ATTEMPTS - 1) {
-				const toCenter = new THREE.Vector2(
-					planet.center.x - origin.x,
-					planet.center.z - origin.z
-				).setLength(SPAWN_DISTANCE[0])
-				x = origin.x + toCenter.x
-				z = origin.z + toCenter.y
-			}
-		}
-		return new THREE.Vector3(x, planet.heightAt(x, z), z)
+		const origin = this.level.playerRoot.position
+		// sqrt keeps the offset uniform over the disc instead of bunched at the middle.
+		const distance =
+			Math.sqrt(Math.random()) * this.radius * SPAWN_OFFSET
+		const angle = rand(0, Math.PI * 2)
+		const x = origin.x + Math.cos(angle) * distance
+		const z = origin.z + Math.sin(angle) * distance
+		return new THREE.Vector3(x, this.level.planet.heightAt(x, z), z)
 	}
 
 	_track(resource) {
@@ -264,21 +286,11 @@ export class GravityStorm {
 		this.level.sceneManager.scene.add(this.ring)
 	}
 
-	/** The only place that talks to the gravity system. */
-	_setGravity(multiplier) {
-		if (!this.gravity?.setGravityInZone) {
-			if (!GravityStorm._warned) {
-				GravityStorm._warned = true
-				console.warn(
-					'[GravityStorm] No gravity system with setGravityInZone(); running visuals only.'
-				)
-			}
-			return
-		}
-		this.gravity.setGravityInZone(
-			this.center.clone(),
-			this.radius,
-			multiplier
+	/** True if the point lies inside this storm's gravity sphere. */
+	contains(position) {
+		return (
+			this.center.distanceToSquared(position) <=
+			this.radius * this.radius
 		)
 	}
 
@@ -286,17 +298,15 @@ export class GravityStorm {
 		this.phase = phase
 		this.elapsed = 0
 		if (phase === 'active') {
-			this._setGravity(this.variant.multiplier)
-			this.gravityApplied = true
+			GravityStorm.active.push(this)
 		} else if (phase === 'dissipating') {
-			this._restoreGravity()
+			this._unregister()
 		}
 	}
 
-	_restoreGravity() {
-		if (!this.gravityApplied) return
-		this.gravityApplied = false
-		this._setGravity(1)
+	_unregister() {
+		const i = GravityStorm.active.indexOf(this)
+		if (i !== -1) GravityStorm.active.splice(i, 1)
 	}
 
 	/** scale: cloud size factor, intensity: overall opacity 0..1 */
@@ -373,8 +383,8 @@ export class GravityStorm {
 
 	dispose() {
 		if (this.phase === 'done') return
-		// A storm cut short (level exit) must not leave gravity altered.
-		this._restoreGravity()
+		// A storm cut short (level exit) must not stay in the registry.
+		this._unregister()
 		this.phase = 'done'
 		this.group.removeFromParent()
 		this.ring.removeFromParent()

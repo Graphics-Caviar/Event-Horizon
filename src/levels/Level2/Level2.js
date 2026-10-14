@@ -9,9 +9,14 @@ import { Hazards } from './Hazards.js'
 import { Rover } from './Rover.js'
 
 const PLAYER_RADIUS = 0.9
-const MAX_WALK_SLOPE = 16
+const MAX_WALK_SLOPE = 60
 const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
+
+const BASE_GRAVITY = 30
+const JUMP_HEIGHT = 1.6
+const MIN_GRAVITY_MULT = 0.1
+const JUMP_SPEED = Math.sqrt(2 * BASE_GRAVITY * JUMP_HEIGHT)
 
 const vec3From = (value, fallback = new THREE.Vector3()) => {
 	if (value?.isVector3) return value.clone()
@@ -148,14 +153,15 @@ export class Level2 extends Level {
 		this._onKeyUp = (e) => this.keys.delete(e.code)
 		window.addEventListener('keydown', this._onKeyDown)
 		window.addEventListener('keyup', this._onKeyUp)
+		this.airborne = false
+		this.verticalVelocity = 0
 
 		this.feedbackTimer = 0
 		this._buildObjective()
 		this._buildMovementFeedback()
 		this._setupCamera()
 
-		this.gravitySystem = () => {}
-		this.hazards = new Hazards(this, {gravity = this.gravitySystem})
+		this.hazards = new Hazards(this)
 	}
 
 	_findWalkableRoverSite(origin) {
@@ -522,9 +528,13 @@ export class Level2 extends Level {
 		)
 		const effectiveSlope = Math.max(gradeDegrees, surfaceSlope)
 
-		const blockedBySlope =
+		let blockedBySlope =
 			(rising && effectiveSlope > MAX_WALK_SLOPE) ||
 			(!allowSteepDownhill && effectiveSlope > MAX_WALK_SLOPE)
+		const g = this.hazards.gravityMultiplierAt(
+			this.playerRoot.position
+		)
+		if (g < 1) blockedBySlope = false
 
 		return {
 			ok: !blockedBySlope,
@@ -637,7 +647,10 @@ export class Level2 extends Level {
 		if (downhill.lengthSq() < 1e-7) return
 
 		const strength = clamp01((slope - SLIDE_START_SLOPE) / 18)
-		const slideSpeed = 2.2 + strength * 7.5
+		const g = this.hazards.gravityMultiplierAt(
+			this.playerRoot.position
+		)
+		const slideSpeed = (2.2 + strength * 7.5) * Math.max(0, g)
 		this._movePlayerDirection(
 			downhill.normalize(),
 			slideSpeed * delta,
@@ -662,6 +675,8 @@ export class Level2 extends Level {
 			return
 		}
 
+		this.airborne = false
+		this.verticalVelocity = 0
 		this.boarded = false
 		this.rover.inputEnabled = false
 		this.rover.speed = 0
@@ -677,6 +692,30 @@ export class Level2 extends Level {
 		this.playerRoot.position.x = exit.x
 		this.playerRoot.position.z = exit.z
 		this._syncPlayerToTerrain()
+	}
+
+	_updatePlayerVertical(delta) {
+		const pos = this.playerRoot.position
+		const floor = this.planet.heightAt(pos.x, pos.z) + 2.2
+		if (!this.airborne) {
+			pos.y = floor
+			if (!this.keys.has('Space')) return
+			this.airborne = true
+			this.verticalVelocity = JUMP_SPEED
+		}
+		const mult = Math.max(
+			this.hazards.gravityMultiplierAt(pos),
+			MIN_GRAVITY_MULT
+		)
+		this.verticalVelocity -= BASE_GRAVITY * mult * delta
+		pos.y += this.verticalVelocity * delta
+		if (pos.y <= floor) {
+			pos.y = floor // never sink into a rising slope
+			if (this.verticalVelocity <= 0) {
+				this.airborne = false
+				this.verticalVelocity = 0
+			}
+		}
 	}
 
 	_updatePlayerMovement(delta) {
@@ -697,9 +736,12 @@ export class Level2 extends Level {
 			const slopePenalty =
 				1 - Math.min(0.28, currentSlope / 180)
 			const baseSpeed = this.keys.has('ShiftLeft') ? 20 : 12
+			const factor = this.hazards.speedFactorAt(
+				this.playerRoot.position
+			)
 			const moved = this._movePlayerDirection(
 				move,
-				baseSpeed * slopePenalty * delta
+				baseSpeed * slopePenalty * factor * delta
 			)
 			if (moved)
 				this.playerRoot.rotation.y = Math.atan2(
@@ -708,8 +750,8 @@ export class Level2 extends Level {
 				)
 		}
 
-		this._applySlopeSlide(delta)
-		this._syncPlayerToTerrain()
+		if (!this.airborne) this._applySlopeSlide(delta)
+		this._updatePlayerVertical(delta)
 	}
 
 	_updateMovementFeedback(delta) {
