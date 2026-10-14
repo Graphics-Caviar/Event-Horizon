@@ -1,24 +1,36 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
-// The public/assets folders only contain placeholder .txt files right now
-// (no models/textures have been added to the repo yet), so everything in
-// this build is procedural THREE geometry/materials. This file centralises
-// that so we don't duplicate geometry/material setup across levels, and
-// so swapping in real GLTF models later only means editing this file.
-//
-// TODO (once real assets land in public/assets/...): add a loadModel(path)
-// helper here using THREE.GLTFLoader and have Spaceship/Rover/Character
-// prefer a loaded model over the procedural fallback.
+// Cache parsed assets across the hangar, cinematic and gameplay scenes.
 
 export class AssetManager {
 	constructor() {
 		this._starfieldTexture = null
 		this.gltfLoader = new GLTFLoader()
 		this._modelCache = new Map()
+		this._readyModels = new Map()
 	}
 
-	async loadModel(pathOrPaths) {
+	_cloneModel(source) {
+		const clone = source.clone(true)
+		clone.traverse((node) => {
+			node.userData.__assetManagerShared = true
+		})
+		return clone
+	}
+
+	getCachedModel(pathOrPaths) {
+		const paths = Array.isArray(pathOrPaths)
+			? pathOrPaths
+			: [pathOrPaths]
+		for (const path of paths) {
+			const source = this._readyModels.get(path)
+			if (source) return this._cloneModel(source)
+		}
+		return null
+	}
+
+	async preloadModel(pathOrPaths) {
 		const paths = Array.isArray(pathOrPaths)
 			? pathOrPaths
 			: [pathOrPaths]
@@ -31,21 +43,17 @@ export class AssetManager {
 						path,
 						this.gltfLoader
 							.loadAsync(path)
-							.then(
-								(gltf) =>
+							.then((gltf) => {
+								this._readyModels.set(
+									path,
 									gltf.scene
-							)
+								)
+								return gltf.scene
+							})
 					)
 				}
-				const source = await this._modelCache.get(path)
-				const clone = source.clone(true)
-				// GLTF clones intentionally share geometry/material/texture resources
-				// with the cached source. Mark every node so clearScene() can detach
-				// the instance without disposing cache-owned GPU resources.
-				clone.traverse((node) => {
-					node.userData.__assetManagerShared = true
-				})
-				return clone
+				await this._modelCache.get(path)
+				return
 			} catch (error) {
 				lastError = error
 				this._modelCache.delete(path)
@@ -56,6 +64,13 @@ export class AssetManager {
 		}
 
 		throw lastError || new Error('No model path supplied')
+	}
+
+	async loadModel(pathOrPaths) {
+		const cached = this.getCachedModel(pathOrPaths)
+		if (cached) return cached
+		await this.preloadModel(pathOrPaths)
+		return this.getCachedModel(pathOrPaths)
 	}
 
 	createAsteroidGeometry(seed = Math.random()) {

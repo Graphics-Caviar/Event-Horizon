@@ -1,58 +1,168 @@
 import * as THREE from 'three'
+import RAPIER from '@dimforge/rapier3d-compat'
 
 const UP = new THREE.Vector3(0, 1, 0)
-
-const COLLIDER_RADIUS = 6.8
 const WHEEL_RADIUS = 1.35
-const CLEARANCE = 0.5
+const COLLIDER_RADIUS = 6.8
+const STEP = 1 / 120
+const REST_LENGTH = 1.4
+let rapierReady
 
-const MAX_FORWARD_SPEED = 18
-const MAX_REVERSE_SPEED = 6
-const ACCELERATION = 14
-const REVERSE_ACCELERATION = ACCELERATION * 0.6
-const BRAKE_DECELERATION = 30
-const COAST_DRAG = 1.2
-const TURN_RATE = 1.5
-const STEER_SMOOTHING = 8
-const WHEEL_STEER_ANGLE = 0.45
-
-const SLOPE_ACCELERATION = 22
-const MAX_DRIVE_SLOPE = 22
-const LOOKAHEAD = 2.5
-const MOMENTUM_ESCAPE_SPEED = 8
-const MAX_STEP = 0.8
-
-/**
- * Player-drivable exploration rover. Kinematic, like the on-foot pilot:
- * elevation comes from the terrain height function, movement is validated
- * against slope, bounds and XZ colliders, and there is no physics world.
- * The Rapier vehicle controller this file started as needed collider
- * ground the procedural planet does not provide.
- */
+/** A dynamic chassis with six independent ray-cast suspension springs. */
 export class Rover {
 	constructor(level, { position, heading = 0 } = {}) {
 		this.level = level
 		this.planet = level.planet
-
 		this.heading = heading
 		this.speed = 0
 		this.steer = 0
 		this.inputEnabled = false
 		this.blockedBySlope = false
 		this.collider = null
-
+		this.accumulator = 0
 		this._forward = new THREE.Vector3()
-		this._normal = new THREE.Vector3()
-		this._quatAlign = new THREE.Quaternion()
-		this._quatYaw = new THREE.Quaternion()
-
 		this.group = new THREE.Group()
 		this.group.name = 'exploration-rover'
 		this.wheels = []
 		this._buildChassis()
 		this.group.position.copy(position)
-		this._syncToTerrain()
+		this.group.position.y =
+			this.planet.heightAt(position.x, position.z) + 1
+		this.group.rotation.y = heading
 		level.addObject(this.group)
+		this.ready = (rapierReady ??= RAPIER.init())
+			.then(() => {
+				if (!this.disposed) this._initPhysics()
+			})
+			.catch((error) => {
+				this.physicsError = error
+				console.error(
+					'[Level2] Rover physics failed to initialize',
+					error
+				)
+			})
+	}
+
+	_initPhysics() {
+		this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
+		this.world.timestep = STEP
+		// Copy the exact rendered triangles, including the carved crater/lava floors.
+		const terrain = this.planet.terrain
+		this.world.createCollider(
+			RAPIER.ColliderDesc.trimesh(
+				new Float32Array(
+					terrain.geometry.attributes.position
+						.array
+				),
+				new Uint32Array(terrain.geometry.index.array)
+			)
+				.setTranslation(
+					terrain.position.x,
+					terrain.position.y,
+					terrain.position.z
+				)
+				.setFriction(0.9)
+		)
+		for (const obstacle of [
+			...this.planet.colliders,
+			...this.level.gameplayColliders,
+		]) {
+			if (
+				obstacle.type === 'rover' ||
+				obstacle.enabled === false
+			)
+				continue
+			const box = obstacle.object
+				? new THREE.Box3().setFromObject(
+						obstacle.object
+					)
+				: null
+			const bottom =
+				this.planet.heightAt(obstacle.x, obstacle.z) - 1
+			const top = Math.max(
+				bottom + 2,
+				box?.max.y ?? bottom + 4
+			)
+			this.world.createCollider(
+				RAPIER.ColliderDesc.cylinder(
+					(top - bottom) / 2,
+					obstacle.radius
+				)
+					.setTranslation(
+						obstacle.x,
+						(top + bottom) / 2,
+						obstacle.z
+					)
+					.setFriction(0.8)
+			)
+		}
+		const bounds = this.planet.getPlayableBounds()
+		for (const x of [bounds.minX, bounds.maxX]) {
+			this.world.createCollider(
+				RAPIER.ColliderDesc.cuboid(
+					1,
+					500,
+					this.planet.size
+				).setTranslation(
+					x,
+					this.planet.baseY,
+					this.planet.center.z
+				)
+			)
+		}
+		for (const z of [bounds.minZ, bounds.maxZ]) {
+			this.world.createCollider(
+				RAPIER.ColliderDesc.cuboid(
+					this.planet.size,
+					500,
+					1
+				).setTranslation(
+					this.planet.center.x,
+					this.planet.baseY,
+					z
+				)
+			)
+		}
+		// Body origin is the low centre of mass, 2.4 m above the visual group origin.
+		const p = this.group.position
+		this.body = this.world.createRigidBody(
+			RAPIER.RigidBodyDesc.dynamic()
+				.setTranslation(p.x, p.y + 2.4, p.z)
+				.setRotation(this.group.quaternion)
+				.setLinearDamping(0.12)
+				.setAngularDamping(1.2)
+				.setCcdEnabled(true)
+		)
+		this.world.createCollider(
+			RAPIER.ColliderDesc.cuboid(3.75, 1.1, 5.5)
+				.setMass(900)
+				.setFriction(0.6)
+				.setRestitution(0),
+			this.body
+		)
+		this.vehicle = this.world.createVehicleController(this.body)
+		this.vehicle.indexUpAxis = 1
+		this.vehicle.setIndexForwardAxis = 2
+		for (let i = 0; i < this.wheels.length; i++) {
+			const wheel = this.wheels[i]
+			this.vehicle.addWheel(
+				{ x: wheel.x, y: 0, z: wheel.z },
+				{ x: 0, y: -1, z: 0 },
+				{ x: -1, y: 0, z: 0 },
+				REST_LENGTH,
+				WHEEL_RADIUS
+			)
+			this.vehicle.setWheelSuspensionStiffness(i, 32)
+			this.vehicle.setWheelSuspensionCompression(i, 4.4)
+			this.vehicle.setWheelSuspensionRelaxation(i, 5.2)
+			this.vehicle.setWheelMaxSuspensionTravel(i, 0.9)
+			this.vehicle.setWheelMaxSuspensionForce(i, 12000)
+			this.vehicle.setWheelFrictionSlip(i, 2)
+			this.vehicle.setWheelSideFrictionStiffness(i, 1)
+		}
+		// Populate scene queries before the first suspension ray casts.
+		this.world.step()
+		this._syncVisuals()
 	}
 
 	forwardVector(target = new THREE.Vector3()) {
@@ -64,173 +174,189 @@ export class Rover {
 	}
 
 	getSeatPosition(target = new THREE.Vector3()) {
-		target.copy(this.group.position)
-		target.y += 5
-		return target.addScaledVector(
-			this.forwardVector(this._forward),
-			0.8
-		)
+		return target
+			.set(0, 4, 0.8)
+			.applyQuaternion(this.group.quaternion)
+			.add(this.group.position)
 	}
 
 	getExitPosition(target = new THREE.Vector3()) {
-		const right = target
+		return target
 			.set(-Math.cos(this.heading), 0, Math.sin(this.heading))
 			.multiplyScalar(COLLIDER_RADIUS + 2.4)
-		return right.add(this.group.position)
+			.add(this.group.position)
 	}
 
 	update(delta) {
-		if (this.inputEnabled) {
-			this._updateDriving(delta)
-		} else {
-			// Parking brake: hold completely — no slope creep while parked.
-			this.steer = THREE.MathUtils.damp(
-				this.steer,
-				0,
-				STEER_SMOOTHING,
-				delta
-			)
-			this.speed = 0
+		if (!this.vehicle || this.disposed) return
+		this.accumulator += Math.min(Math.max(delta, 0), 0.1)
+		while (this.accumulator >= STEP) {
+			this._step()
+			this.accumulator -= STEP
 		}
-
-		if (this.inputEnabled) this._applySlope(delta)
-		this._move(delta)
-		this._syncToTerrain()
-		this._animateWheels(delta)
-
+		this._syncVisuals()
 		if (this.collider) {
 			this.collider.x = this.group.position.x
 			this.collider.z = this.group.position.z
 		}
 	}
 
-	_updateDriving(delta) {
+	_step() {
 		const keys = this.level.keys
-		const steerTarget =
-			(keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0)
+		const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(
+			this.body.rotation()
+		)
+		this.speed = forward.dot(this.body.linvel())
+		const left = this.inputEnabled && keys.has('KeyA')
+		const right = this.inputEnabled && keys.has('KeyD')
 		this.steer = THREE.MathUtils.damp(
 			this.steer,
-			steerTarget,
-			STEER_SMOOTHING,
-			delta
+			Number(left) - Number(right),
+			8,
+			STEP
 		)
-
-		// Reversing flips the steering, like a real car.
-		if (Math.abs(this.speed) > 0.15) {
-			const direction = this.speed > 0 ? 1 : -1
-			this.heading +=
-				this.steer * TURN_RATE * direction * delta
+		const gas = this.inputEnabled && keys.has('KeyW')
+		const reverse = this.inputEnabled && keys.has('KeyS')
+		const braking =
+			(reverse && this.speed > 0.5) ||
+			(gas && this.speed < -0.5)
+		let force = 0
+		if (!braking) {
+			if (gas && this.speed < 18) force = 2100
+			else if (reverse && this.speed > -6) force = -1300
 		}
-
-		if (keys.has('KeyW')) {
-			this.speed += ACCELERATION * delta
-		} else if (keys.has('KeyS')) {
-			if (this.speed > 0.5)
-				this.speed -= BRAKE_DECELERATION * delta
-			else this.speed -= REVERSE_ACCELERATION * delta
-		} else {
-			this.speed = THREE.MathUtils.damp(
-				this.speed,
+		if (gas || reverse || left || right) this.body.wakeUp()
+		for (let i = 0; i < this.wheels.length; i++) {
+			// A centre ray alone treats the tire as a point on inclined ground.
+			// Project the cylinder's support radius onto the suspension direction.
+			const wheel = this.wheels[i]
+			const rotation = this.body.rotation()
+			const up = UP.clone().applyQuaternion(rotation)
+			const center = new THREE.Vector3(
+				wheel.x,
+				-REST_LENGTH,
+				wheel.z
+			)
+				.applyQuaternion(rotation)
+				.add(this.body.translation())
+			const normal = this.planet.normalAt(
+				center.x,
+				center.z,
+				0.5
+			)
+			const angle = wheel.z > 3 ? this.steer * 0.45 : 0
+			const axle = new THREE.Vector3(
+				Math.cos(angle),
 				0,
-				COAST_DRAG,
-				delta
+				-Math.sin(angle)
+			).applyQuaternion(rotation)
+			const axial = Math.abs(normal.dot(axle))
+			const support =
+				WHEEL_RADIUS *
+					Math.sqrt(
+						Math.max(0, 1 - axial * axial)
+					) +
+				0.5 * axial
+			this.vehicle.setWheelRadius(
+				i,
+				THREE.MathUtils.clamp(
+					support / Math.max(0.4, normal.dot(up)),
+					WHEEL_RADIUS,
+					3
+				)
+			)
+			this.vehicle.setWheelEngineForce(i, force)
+			this.vehicle.setWheelBrake(
+				i,
+				!this.inputEnabled
+					? 180
+					: braking
+						? 100
+						: !gas && !reverse
+							? 5
+							: 0
+			)
+			this.vehicle.setWheelSteering(
+				i,
+				this.wheels[i].z > 3 ? this.steer * 0.45 : 0
 			)
 		}
+		this.vehicle.updateVehicle(
+			STEP,
+			RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC
+		)
+		this.world.step()
 	}
 
-	_applySlope(delta) {
-		// Sample the grade in the direction of travel: positive = uphill.
-		const sign = this.speed < -0.15 ? -1 : 1
-		const forward = this.forwardVector(this._forward)
-		const p = this.group.position
-		const aheadX = p.x + forward.x * LOOKAHEAD * sign
-		const aheadZ = p.z + forward.z * LOOKAHEAD * sign
-		const grade =
-			(this.planet.heightAt(aheadX, aheadZ) -
-				this.planet.heightAt(p.x, p.z)) /
-			LOOKAHEAD
-
-		this.speed -= grade * SLOPE_ACCELERATION * delta
-		this.speed = THREE.MathUtils.clamp(
-			this.speed,
-			-MAX_REVERSE_SPEED,
-			MAX_FORWARD_SPEED
+	_syncVisuals() {
+		this.group.quaternion.copy(this.body.rotation())
+		this.group.position.copy(this.body.translation())
+		this.group.position.addScaledVector(
+			UP.clone().applyQuaternion(this.group.quaternion),
+			-2.4
 		)
-
-		this.blockedBySlope = false
-		if (this.speed <= 0.25) return
-		const uphillDegrees = THREE.MathUtils.radToDeg(
-			Math.atan(Math.max(0, grade))
-		)
-		// A running start carries through short steep patches; crawling
-		// uphill into a wall does not.
-		if (
-			uphillDegrees > MAX_DRIVE_SLOPE &&
-			this.speed < MOMENTUM_ESCAPE_SPEED
-		) {
-			this.speed = 0
-			this.blockedBySlope = true
-		}
-	}
-
-	_move(delta) {
-		const distance = this.speed * delta
-		if (Math.abs(distance) < 1e-4) return
-
-		// The rover must not collide with its own footprint collider.
-		if (this.collider) this.collider.enabled = false
-
-		const forward = this.forwardVector(this._forward)
-		const sign = Math.sign(distance)
-		let remaining = Math.abs(distance)
-		while (remaining > 1e-6) {
-			const step = Math.min(remaining, MAX_STEP)
-			const candidate = this.group.position.clone()
-			candidate.x += forward.x * step * sign
-			candidate.z += forward.z * step * sign
-			this.planet.clampToBounds(candidate, COLLIDER_RADIUS)
-			this.planet.resolveCircleCollisions(
-				candidate,
-				COLLIDER_RADIUS,
-				this.level.gameplayColliders
+		const forward = this._forward
+			.set(0, 0, 1)
+			.applyQuaternion(this.group.quaternion)
+		this.heading = Math.atan2(forward.x, forward.z)
+		for (let i = 0; i < this.wheels.length; i++) {
+			const wheel = this.wheels[i]
+			wheel.pivot.position.y =
+				2.4 -
+				(this.vehicle.wheelSuspensionLength(i) ??
+					REST_LENGTH)
+			wheel.pivot.rotation.y =
+				this.vehicle.wheelSteering(i) ?? 0
+			wheel.mesh.rotation.set(0, 0, Math.PI / 2)
+			wheel.mesh.rotateY(this.vehicle.wheelRotation(i) ?? 0)
+			// At sharp triangle edges, account for the full tire width and tread,
+			// not just the centre ray. Move only along the suspension's local axis.
+			const up = UP.clone().applyQuaternion(
+				this.group.quaternion
 			)
-
-			const moved = Math.hypot(
-				candidate.x - this.group.position.x,
-				candidate.z - this.group.position.z
-			)
-			this.group.position.x = candidate.x
-			this.group.position.z = candidate.z
-			remaining -= step
-			if (moved < step * 0.6) {
-				this.speed = 0
-				break
+			if (up.y > 0.3) {
+				const vertex = new THREE.Vector3()
+				const positions =
+					wheel.mesh.geometry.attributes.position
+				for (let pass = 0; pass < 4; pass++) {
+					wheel.mesh.updateWorldMatrix(
+						true,
+						false
+					)
+					let lift = 0
+					for (
+						let v = 0;
+						v < positions.count;
+						v++
+					) {
+						vertex.fromBufferAttribute(
+							positions,
+							v
+						).applyMatrix4(
+							wheel.mesh.matrixWorld
+						)
+						lift = Math.max(
+							lift,
+							this.planet.heightAt(
+								vertex.x,
+								vertex.z
+							) +
+								0.03 -
+								vertex.y
+						)
+					}
+					if (lift < 0.001) break
+					wheel.pivot.position.y += lift / up.y
+				}
 			}
 		}
-
-		if (this.collider) this.collider.enabled = true
 	}
 
-	_syncToTerrain() {
-		const p = this.group.position
-		p.y = this.planet.heightAt(p.x, p.z) + CLEARANCE
-		this.planet.normalAt(p.x, p.z, 1.6, this._normal)
-		this._quatAlign.setFromUnitVectors(UP, this._normal)
-		this._quatYaw.setFromAxisAngle(UP, this.heading)
-		this.group.quaternion
-			.copy(this._quatAlign)
-			.multiply(this._quatYaw)
-	}
-
-	_animateWheels(delta) {
-		const spin = (this.speed * delta) / WHEEL_RADIUS
-		for (const wheel of this.wheels) {
-			wheel.mesh.rotateY(spin)
-			if (wheel.steerPivot) {
-				wheel.steerPivot.rotation.y =
-					this.steer * WHEEL_STEER_ANGLE
-			}
-		}
+	dispose() {
+		this.disposed = true
+		this.world?.free()
+		this.world = null
+		this.vehicle = null
 	}
 
 	_buildChassis() {
@@ -248,46 +374,31 @@ export class Rover {
 		body.position.y = 2.4
 		body.castShadow = body.receiveShadow = true
 		this.group.add(body)
-
-		const wheelGeometry = level.own(
+		const geometry = level.own(
 			new THREE.CylinderGeometry(
 				WHEEL_RADIUS,
 				WHEEL_RADIUS,
 				1,
-				14
+				24
 			)
 		)
-		const wheelMaterial = level.own(
+		const material = level.own(
 			new THREE.MeshStandardMaterial({
 				color: 0x111316,
 				roughness: 0.9,
 			})
 		)
-		for (const z of [-3.8, 0, 3.8]) {
+		for (const z of [-3.8, 0, 3.8])
 			for (const x of [-4.2, 4.2]) {
-				const mesh = new THREE.Mesh(
-					wheelGeometry,
-					wheelMaterial
-				)
+				const pivot = new THREE.Group()
+				pivot.position.set(x, 1.35, z)
+				const mesh = new THREE.Mesh(geometry, material)
 				mesh.rotation.z = Math.PI / 2
 				mesh.castShadow = true
-				if (z > 3) {
-					const steerPivot = new THREE.Group()
-					steerPivot.position.set(x, 1.25, z)
-					steerPivot.add(mesh)
-					this.group.add(steerPivot)
-					this.wheels.push({ mesh, steerPivot })
-				} else {
-					mesh.position.set(x, 1.25, z)
-					this.group.add(mesh)
-					this.wheels.push({
-						mesh,
-						steerPivot: null,
-					})
-				}
+				pivot.add(mesh)
+				this.group.add(pivot)
+				this.wheels.push({ mesh, pivot, x, z })
 			}
-		}
-
 		const beacon = new THREE.PointLight(0x5ef2ff, 4, 65)
 		beacon.position.set(0, 5, 0)
 		this.group.add(beacon)
