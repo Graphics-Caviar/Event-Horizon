@@ -6,6 +6,21 @@ const WHEEL_RADIUS = 1.35
 const COLLIDER_RADIUS = 6.8
 const STEP = 1 / 120
 const REST_LENGTH = 1.4
+const GRAVITY = 9.81
+
+// Drive tuning. Gravity storms scale these through level.hazards.
+const ENGINE_FORCE = 2100
+const REVERSE_FORCE = 1300
+const MAX_FORWARD_SPEED = 25
+const MAX_REVERSE_SPEED = 10
+// Wheel brake used to shed speed when a storm lowers the limit under a rover
+// that is already going faster than the new limit.
+const OVERSPEED_BRAKE = 2
+// Slope pull is scaled by the storm's gravity multiplier, capped so the
+// heaviest storms drag the rover down hills instead of launching it.
+const MAX_SLOPE_GRAVITY = 4
+// How far (m) to sample the terrain when measuring the slope under the chassis.
+const SLOPE_SAMPLE = 3
 let rapierReady
 
 /** A dynamic chassis with six independent ray-cast suspension springs. */
@@ -18,6 +33,10 @@ export class Rover {
 		this.steer = 0
 		this.inputEnabled = false
 		this.blockedBySlope = false
+		// Set every frame from level.hazards (1 = unaffected).
+		this.speedFactor = 1
+		this.gravityScale = 1
+		this._slopeNormal = new THREE.Vector3()
 		this.collider = null
 		this.accumulator = 0
 		this._forward = new THREE.Vector3()
@@ -44,7 +63,7 @@ export class Rover {
 	}
 
 	_initPhysics() {
-		this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
+		this.world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 })
 		this.world.timestep = STEP
 		// Copy the exact rendered triangles, including the carved crater/lava floors.
 		const terrain = this.planet.terrain
@@ -189,6 +208,7 @@ export class Rover {
 
 	update(delta) {
 		if (!this.vehicle || this.disposed) return
+		this._readHazards()
 		this.accumulator += Math.min(Math.max(delta, 0), 0.1)
 		while (this.accumulator >= STEP) {
 			this._step()
@@ -199,6 +219,67 @@ export class Rover {
 			this.collider.x = this.group.position.x
 			this.collider.z = this.group.position.z
 		}
+	}
+
+	/**
+	 * Sample the active gravity storm (if any) at the rover. Done once per
+	 * frame rather than per physics substep. A level without hazards leaves
+	 * both values at 1.
+	 */
+	_readHazards() {
+		const hazards = this.level.hazards
+		if (!hazards) {
+			this.speedFactor = 1
+			this.gravityScale = 1
+			return
+		}
+		const at = this.group.position
+		this.speedFactor = hazards.speedFactorAt(at)
+		// Reversed gravity just switches the slope pull off (as for the
+		// on-foot pilot) instead of flinging the chassis upwards.
+		this.gravityScale = THREE.MathUtils.clamp(
+			hazards.gravityMultiplierAt(at),
+			0,
+			MAX_SLOPE_GRAVITY
+		)
+	}
+
+	/**
+	 * Rapier's world gravity already pulls the chassis down a slope at 1x.
+	 * Add (or cancel) the difference so the slope-parallel pull equals
+	 * gravityScale x normal. Only the along-slope part is touched, so
+	 * suspension load and traction stay the same in every storm.
+	 */
+	_applySlopeGravity() {
+		const delta = this.gravityScale - 1
+		if (Math.abs(delta) < 1e-3) return
+		let contact = 0
+		for (let i = 0; i < this.wheels.length; i++)
+			if (this.vehicle.wheelIsInContact(i)) contact++
+		if (contact === 0) return
+		const at = this.body.translation()
+		const n = this.planet.normalAt(
+			at.x,
+			at.z,
+			SLOPE_SAMPLE,
+			this._slopeNormal
+		)
+		// Gravity's component along the ground is g * (ny*nx, ny*ny - 1, ny*nz):
+		// it points down-slope, and is zero on flat ground.
+		const k =
+			GRAVITY *
+			delta *
+			(contact / this.wheels.length) *
+			this.body.mass() *
+			STEP
+		this.body.applyImpulse(
+			{
+				x: k * n.y * n.x,
+				y: k * (n.y * n.y - 1),
+				z: k * n.y * n.z,
+			},
+			true
+		)
 	}
 
 	_step() {
@@ -220,10 +301,19 @@ export class Rover {
 		const braking =
 			(reverse && this.speed > 0.5) ||
 			(gas && this.speed < -0.5)
+		// Heavy gravity lowers both the engine's push and the speed limit;
+		// light gravity raises them (see Hazards.speedFactorAt).
+		const maxForward = MAX_FORWARD_SPEED * this.speedFactor
+		const maxReverse = MAX_REVERSE_SPEED * this.speedFactor
+		const overspeed =
+			this.speedFactor < 1 &&
+			(this.speed > maxForward || this.speed < -maxReverse)
 		let force = 0
 		if (!braking) {
-			if (gas && this.speed < 18) force = 2100
-			else if (reverse && this.speed > -6) force = -1300
+			if (gas && this.speed < maxForward)
+				force = ENGINE_FORCE * this.speedFactor
+			else if (reverse && this.speed > -maxReverse)
+				force = -REVERSE_FORCE * this.speedFactor
 		}
 		if (gas || reverse || left || right) this.body.wakeUp()
 		for (let i = 0; i < this.wheels.length; i++) {
@@ -272,15 +362,18 @@ export class Rover {
 					? 180
 					: braking
 						? 100
-						: !gas && !reverse
-							? 5
-							: 0
+						: overspeed
+							? OVERSPEED_BRAKE
+							: !gas && !reverse
+								? 5
+								: 0
 			)
 			this.vehicle.setWheelSteering(
 				i,
 				this.wheels[i].z > 3 ? this.steer * 0.45 : 0
 			)
 		}
+		this._applySlopeGravity()
 		this.vehicle.updateVehicle(
 			STEP,
 			RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC

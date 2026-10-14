@@ -6,11 +6,12 @@ import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
 import { AlienPlanet } from './AlienPlanet.js'
 import { Rover } from './Rover.js'
+import { Hazards } from './Hazards.js'
 import { PilotWalk, orientPilot } from './PilotWalk.js'
 import { constrainTerrainCamera } from './TerrainCamera.js'
 
 const PLAYER_RADIUS = 0.9
-const MAX_WALK_SLOPE = 16
+const MAX_WALK_SLOPE = 60
 const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
 
@@ -165,6 +166,8 @@ export class Level2 extends Level {
 		this._buildObjective()
 		this._buildMovementFeedback()
 		this._setupCamera()
+
+		this.hazards = new Hazards(this)
 	}
 
 	_findWalkableRoverSite(origin) {
@@ -563,9 +566,13 @@ export class Level2 extends Level {
 		)
 		const effectiveSlope = Math.max(gradeDegrees, surfaceSlope)
 
-		const blockedBySlope =
+		let blockedBySlope =
 			(rising && effectiveSlope > MAX_WALK_SLOPE) ||
 			(!allowSteepDownhill && effectiveSlope > MAX_WALK_SLOPE)
+		const g = this.hazards.gravityMultiplierAt(
+			this.playerRoot.position
+		)
+		if (g < 1) blockedBySlope = false
 
 		return {
 			ok: !blockedBySlope,
@@ -678,7 +685,10 @@ export class Level2 extends Level {
 		if (downhill.lengthSq() < 1e-7) return
 
 		const strength = clamp01((slope - SLIDE_START_SLOPE) / 18)
-		const slideSpeed = 2.2 + strength * 7.5
+		const g = this.hazards.gravityMultiplierAt(
+			this.playerRoot.position
+		)
+		const slideSpeed = (2.2 + strength * 7.5) * Math.max(0, g)
 		this._movePlayerDirection(
 			downhill.normalize(),
 			slideSpeed * delta,
@@ -752,10 +762,16 @@ export class Level2 extends Level {
 			)
 			const slopePenalty =
 				1 - Math.min(0.28, currentSlope / 180)
-			const baseSpeed = this.keys.has('ShiftLeft') ? 5.6 : 2.8
+			const baseSpeed = this.keys.has('ShiftLeft') ? 8.6 : 4.5
+			const speed =
+				baseSpeed *
+				slopePenalty *
+				this.hazards.speedFactorAt(
+					this.playerRoot.position
+				)
 			const moved = this._movePlayerDirection(
 				move,
-				baseSpeed * slopePenalty * delta
+				speed * delta
 			)
 			if (moved) {
 				const targetYaw = Math.atan2(move.x, move.z)
@@ -798,6 +814,7 @@ export class Level2 extends Level {
 
 	update(delta) {
 		this.planet.update(delta)
+		this.hazards.update(delta)
 		if (this.wreckFlame) {
 			const pulse =
 				0.88 +
@@ -899,6 +916,7 @@ export class Level2 extends Level {
 		this.feedbackEl?.remove()
 		this.rover?.dispose()
 		this.gameplayColliders.length = 0
+		this.hazards?.dispose()
 		this.planet?.dispose()
 		super.dispose()
 	}
