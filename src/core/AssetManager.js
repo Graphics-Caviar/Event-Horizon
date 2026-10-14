@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
 // The public/assets folders only contain placeholder .txt files right now
 // (no models/textures have been added to the repo yet), so everything in
@@ -29,16 +30,17 @@ export class AssetManager {
 				if (!this._modelCache.has(path)) {
 					this._modelCache.set(
 						path,
-						this.gltfLoader
-							.loadAsync(path)
-							.then(
-								(gltf) =>
-									gltf.scene
-							)
+						this.gltfLoader.loadAsync(path)
 					)
 				}
-				const source = await this._modelCache.get(path)
-				const clone = source.clone(true)
+				const gltf = await this._modelCache.get(path)
+				// SkeletonUtils.clone rebinds skinned meshes (bone remapping) which
+				// a plain .clone() cannot; unrigged meshes clone identically.
+				const clone = skeletonClone(gltf.scene)
+				// Clips stay reachable from the instance so characters can drive
+				// an AnimationMixer when a model actually ships animations.
+				clone.userData.animations =
+					gltf.animations || []
 				// GLTF clones intentionally share geometry/material/texture resources
 				// with the cached source. Mark every node so clearScene() can detach
 				// the instance without disposing cache-owned GPU resources.

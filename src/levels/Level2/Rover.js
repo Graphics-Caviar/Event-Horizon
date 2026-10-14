@@ -6,6 +6,12 @@ const COLLIDER_RADIUS = 6.8
 const WHEEL_RADIUS = 1.35
 const CLEARANCE = 0.5
 
+// Authored rover GLB (static single mesh: ~1.5M tris, no wheel nodes).
+const DEFAULT_MODEL = '/assets/models/rover/sci-fi-exploration-rover.glb'
+const MODEL_FIT_LENGTH = 11 // matches the placeholder's footprint
+const MODEL_GROUND_SINK = 0.45 // tyre contact at the clearance height
+const MODEL_PIVOT_YAW = 0 // rotate if the GLB does not face +Z
+
 const MAX_FORWARD_SPEED = 18
 const MAX_REVERSE_SPEED = 6
 const ACCELERATION = 14
@@ -30,7 +36,10 @@ const MAX_STEP = 0.8
  * ground the procedural planet does not provide.
  */
 export class Rover {
-	constructor(level, { position, heading = 0 } = {}) {
+	constructor(
+		level,
+		{ position, heading = 0, model = DEFAULT_MODEL } = {}
+	) {
 		this.level = level
 		this.planet = level.planet
 
@@ -40,6 +49,8 @@ export class Rover {
 		this.inputEnabled = false
 		this.blockedBySlope = false
 		this.collider = null
+		this.model = null
+		this._seatHeight = 5
 
 		this._forward = new THREE.Vector3()
 		this._normal = new THREE.Vector3()
@@ -49,10 +60,16 @@ export class Rover {
 		this.group = new THREE.Group()
 		this.group.name = 'exploration-rover'
 		this.wheels = []
+		// Placeholder chassis until (unless) the GLB arrives; the swap
+		// replaces this whole group.
+		this.chassisGroup = new THREE.Group()
+		this.chassisGroup.name = 'rover-chassis'
+		this.group.add(this.chassisGroup)
 		this._buildChassis()
 		this.group.position.copy(position)
 		this._syncToTerrain()
 		level.addObject(this.group)
+		if (model) this._loadModel(model)
 	}
 
 	forwardVector(target = new THREE.Vector3()) {
@@ -65,7 +82,7 @@ export class Rover {
 
 	getSeatPosition(target = new THREE.Vector3()) {
 		target.copy(this.group.position)
-		target.y += 5
+		target.y += this._seatHeight
 		return target.addScaledVector(
 			this.forwardVector(this._forward),
 			0.8
@@ -233,6 +250,44 @@ export class Rover {
 		}
 	}
 
+	/**
+	 * Prefer the authored GLB over the placeholder chassis when it loads.
+	 * The model is one static mesh (no wheel nodes), so the procedural
+	 * wheel spin retires together with the placeholder.
+	 */
+	async _loadModel(path) {
+		try {
+			const model =
+				await this.level.assetManager.loadModel(path)
+			if (!this.group.parent) return // level torn down mid-load
+			this.level._fit(model, MODEL_FIT_LENGTH)
+			model.updateMatrixWorld(true)
+			const box = new THREE.Box3().setFromObject(model)
+			const height = box.max.y - box.min.y
+			// Sink the tyres slightly so ground contact reads at CLEARANCE.
+			model.position.y += -box.min.y - MODEL_GROUND_SINK
+			// Taller than the placeholder: lift the seat above its roof.
+			this._seatHeight = Math.max(
+				5,
+				height - MODEL_GROUND_SINK + 0.5
+			)
+			const pivot = new THREE.Group()
+			pivot.name = 'rover-chassis'
+			pivot.rotation.y = MODEL_PIVOT_YAW
+			pivot.add(model)
+			this.chassisGroup.removeFromParent()
+			this.chassisGroup = pivot
+			this.group.add(pivot)
+			this.wheels.length = 0
+			this.model = model
+		} catch (error) {
+			console.warn(
+				'[Rover] Model unavailable; keeping the placeholder:',
+				error?.message
+			)
+		}
+	}
+
 	_buildChassis() {
 		const level = this.level
 		const body = new THREE.Mesh(
@@ -247,7 +302,7 @@ export class Rover {
 		)
 		body.position.y = 2.4
 		body.castShadow = body.receiveShadow = true
-		this.group.add(body)
+		this.chassisGroup.add(body)
 
 		const wheelGeometry = level.own(
 			new THREE.CylinderGeometry(
@@ -275,11 +330,11 @@ export class Rover {
 					const steerPivot = new THREE.Group()
 					steerPivot.position.set(x, 1.25, z)
 					steerPivot.add(mesh)
-					this.group.add(steerPivot)
+					this.chassisGroup.add(steerPivot)
 					this.wheels.push({ mesh, steerPivot })
 				} else {
 					mesh.position.set(x, 1.25, z)
-					this.group.add(mesh)
+					this.chassisGroup.add(mesh)
 					this.wheels.push({
 						mesh,
 						steerPivot: null,

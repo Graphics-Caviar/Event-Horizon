@@ -98,7 +98,7 @@ export class Game {
 		// Pause and results overlays for whichever level is running.
 		this.levelScreens = new LevelScreens({
 			onResume: () => this.currentLevel?.setPaused?.(false),
-			onRestart: () => this._startLevel1(),
+			onRestart: () => this._restartLevel(),
 			onQuit: () => this._exitLevelToMenu(),
 		})
 		this.hangarScene = null
@@ -434,6 +434,7 @@ export class Game {
 
 	/** Start (or restart) Level 1 with the pilot and ship from the hangar. */
 	_startLevel1() {
+		this._activeLevelNumber = 1
 		this.levelScreens.hideAll()
 		this.menu.hideAll()
 		this.currentLevel?.dispose()
@@ -549,8 +550,18 @@ export class Game {
 	}
 
 	_startLevel2(transition = {}) {
+		this._activeLevelNumber = 2
 		this.currentLevel?.dispose()
-		this.currentLevel = new Level2(this, { transition })
+		this.currentLevel = new Level2(this, {
+			transition,
+			onEnd: (result) => this._onLevelEnd(result),
+		})
+	}
+
+	/** Results-screen retry: relaunch whichever level was just played. */
+	_restartLevel() {
+		if (this._activeLevelNumber === 2) this._testLevel2()
+		else this._startLevel1()
 	}
 
 	/** Leave the level for the home page, restoring what the level cleared. */

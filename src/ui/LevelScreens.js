@@ -10,6 +10,11 @@ const OUTCOMES = {
 		subtitle: 'You broke free of the singularity. For now.',
 		tone: 'good',
 	},
+	transited: {
+		title: 'PORTAL TRANSIT',
+		subtitle: 'You crossed the gate. The Void of Gods waits beyond.',
+		tone: 'good',
+	},
 	captured: {
 		title: 'LOST TO THE SINGULARITY',
 		subtitle: 'The pull was too strong. Keep thrusting away from the hole.',
