@@ -1,11 +1,12 @@
 {
 	"dependencies": {
+		"@dimforge/rapier3d-compat": "^0.20.0",
 		"firebase": "^10.14.1",
-		"three": "^0.160.0",
-		"@dimforge/rapier3d-compat": "^0.20.0"
+		"three": "^0.160.0"
 	},
 	"description": "Event Horizon: Escape from Singularity - 3D browser action game with Three.js and Firebase backend",
 	"devDependencies": {
+		"meshoptimizer": "^1.3.0",
 		"prettier": "^3.9.6",
 		"vite": "^5.4.11"
 	},
@@ -14,11 +15,14 @@
 	"scripts": {
 		"build": "vite build",
 		"dev": "vite",
-		"format": "prettier --write .",
-		"format:check": "prettier --check .",
+		"format": "prettier --write '**/*.js' '**/*.html' '**/*.json'",
+		"format:check": "prettier --check '**/*.js' '**/*.html' '**/*.json'",
 		"preview": "vite preview",
+		"optimize:pilots": "node scripts/optimize-pilots.mjs",
 		"seed": "node scripts/seedFirestore.js",
-		"test:backend": "node scripts/testBackend.js"
+		"test:backend": "node scripts/testBackend.js",
+		"test:level2": "node scripts/check-rover.mjs",
+		"test:pilots": "node scripts/check-pilot-loading.mjs"
 	},
 	"type": "module",
 	"version": "1.0.0"

@@ -28,7 +28,7 @@ const shortestAngle = (target, current) => {
  * they walk, bank into turns and align to the terrain; the flying predator
  * orbits a landmark at altitude with a hover bob and banked turns. If a
  * rigged model with clips ever replaces these files this class can adopt a
- * mixer the same way PilotMotion does.
+ * mixer the same way PilotWalk does.
  *
  * Behaviour is deliberately non-combat: aliens stop and face the pilot
  * inside their notice range, then resume wandering once left alone.

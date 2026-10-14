@@ -2,24 +2,44 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
-// The public/assets folders only contain placeholder .txt files right now
-// (no models/textures have been added to the repo yet), so everything in
-// this build is procedural THREE geometry/materials. This file centralises
-// that so we don't duplicate geometry/material setup across levels, and
-// so swapping in real GLTF models later only means editing this file.
-//
-// TODO (once real assets land in public/assets/...): add a loadModel(path)
-// helper here using THREE.GLTFLoader and have Spaceship/Rover/Character
-// prefer a loaded model over the procedural fallback.
+// Cache parsed assets across the hangar, cinematic and gameplay scenes.
 
 export class AssetManager {
 	constructor() {
 		this._starfieldTexture = null
 		this.gltfLoader = new GLTFLoader()
 		this._modelCache = new Map()
+		this._readyModels = new Map()
 	}
 
-	async loadModel(pathOrPaths) {
+	_cloneModel(gltf) {
+		// SkeletonUtils.clone rebinds skinned meshes (bone remapping) which
+		// a plain .clone() cannot; unrigged meshes clone identically.
+		const clone = skeletonClone(gltf.scene)
+		// Clips stay reachable from the instance so characters can drive
+		// an AnimationMixer when a model actually ships animations.
+		clone.userData.animations = gltf.animations || []
+		// GLTF clones intentionally share geometry/material/texture resources
+		// with the cached source. Mark every node so clearScene() can detach
+		// the instance without disposing cache-owned GPU resources.
+		clone.traverse((node) => {
+			node.userData.__assetManagerShared = true
+		})
+		return clone
+	}
+
+	getCachedModel(pathOrPaths) {
+		const paths = Array.isArray(pathOrPaths)
+			? pathOrPaths
+			: [pathOrPaths]
+		for (const path of paths) {
+			const gltf = this._readyModels.get(path)
+			if (gltf) return this._cloneModel(gltf)
+		}
+		return null
+	}
+
+	async preloadModel(pathOrPaths) {
 		const paths = Array.isArray(pathOrPaths)
 			? pathOrPaths
 			: [pathOrPaths]
@@ -30,24 +50,22 @@ export class AssetManager {
 				if (!this._modelCache.has(path)) {
 					this._modelCache.set(
 						path,
-						this.gltfLoader.loadAsync(path)
+						this.gltfLoader
+							.loadAsync(path)
+							.then((gltf) => {
+								// The full parse (scene + clips) is what
+								// gets cached; instances are cloned off
+								// it on demand.
+								this._readyModels.set(
+									path,
+									gltf
+								)
+								return gltf
+							})
 					)
 				}
-				const gltf = await this._modelCache.get(path)
-				// SkeletonUtils.clone rebinds skinned meshes (bone remapping) which
-				// a plain .clone() cannot; unrigged meshes clone identically.
-				const clone = skeletonClone(gltf.scene)
-				// Clips stay reachable from the instance so characters can drive
-				// an AnimationMixer when a model actually ships animations.
-				clone.userData.animations =
-					gltf.animations || []
-				// GLTF clones intentionally share geometry/material/texture resources
-				// with the cached source. Mark every node so clearScene() can detach
-				// the instance without disposing cache-owned GPU resources.
-				clone.traverse((node) => {
-					node.userData.__assetManagerShared = true
-				})
-				return clone
+				await this._modelCache.get(path)
+				return
 			} catch (error) {
 				lastError = error
 				this._modelCache.delete(path)
@@ -58,6 +76,13 @@ export class AssetManager {
 		}
 
 		throw lastError || new Error('No model path supplied')
+	}
+
+	async loadModel(pathOrPaths) {
+		const cached = this.getCachedModel(pathOrPaths)
+		if (cached) return cached
+		await this.preloadModel(pathOrPaths)
+		return this.getCachedModel(pathOrPaths)
 	}
 
 	createAsteroidGeometry(seed = Math.random()) {
