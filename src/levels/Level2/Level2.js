@@ -5,7 +5,7 @@ import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
 import { AlienPlanet } from './AlienPlanet.js'
-import { Rover } from './Rover.js'
+import { Rover, MAX_FORWARD_SPEED } from './Rover.js'
 import { Hazards } from './Hazards.js'
 import { DustParticles } from './DustParticles.js'
 import { Alien, ALIEN_MODELS } from './Alien.js'
@@ -35,6 +35,10 @@ const AIR_CONTROL = 0.35 // input authority while airborne
 const AIR_DRAG = 0.12 // horizontal decay while airborne without input
 const PIVOT_ANGLE = 0.5 // min facing error before turning in place
 const PORTAL_ARRIVE_RADIUS = 8 // XZ distance that counts as reaching the gate
+// On-foot footstep dust cadence, in metres of measured travel.
+const FOOTSTEP_STRIDE = 2.4
+// Scratch up-axis for the camera-relative input frame.
+const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 const vec3From = (value, fallback = new THREE.Vector3()) => {
 	if (value?.isVector3) return value.clone()
@@ -172,6 +176,13 @@ export class Level2 extends Level {
 		this._verticalSpeed = 0
 		this._jumpWasDown = false
 		this._feetScratch = new THREE.Vector3()
+		// Reused per frame: the camera-relative input basis and the
+		// footstep-dust origin.
+		this._camForward = new THREE.Vector3(0, 0, -1)
+		this._camRight = new THREE.Vector3(1, 0, 0)
+		this._inputScratch = new THREE.Vector3()
+		this._dustScratch = new THREE.Vector3()
+		this._footstepDistance = 0
 		const pilot =
 			CHARACTERS[this.state.selectedCharacter] ||
 			CHARACTERS.zara
@@ -1039,6 +1050,11 @@ export class Level2 extends Level {
 			this._airborne = false
 			this._verticalSpeed = 0
 			this._jumpWasDown = this.keys.has('Space')
+			// The pilot rides inside the cockpit from here on: hide them
+			// exactly like Level 1 hides the pilot in the ship, so the
+			// chase camera follows the rover alone.
+			this.playerRoot.visible = false
+			this.audio?.playHatch()
 			return
 		}
 
@@ -1061,18 +1077,57 @@ export class Level2 extends Level {
 		this.playerRoot.position.x = exit.x
 		this.playerRoot.position.z = exit.z
 		this._syncPlayerToTerrain()
+		this.playerRoot.visible = true
+		this.audio?.playHatch()
+	}
+
+	/**
+	 * Drive the rover engine loop: idle while parked, revving with
+	 * throttle and rolling speed while driving. AudioManager owns the
+	 * synthesis; this only decides how hard the engine works.
+	 */
+	_updateRoverAudio() {
+		if (!this.boarded) {
+			this.audio?.stopRoverEngine()
+			return
+		}
+		this.audio?.startRoverEngine()
+		const throttle =
+			this.keys.has('KeyW') || this.keys.has('KeyS') ? 1 : 0
+		const speedRatio = clamp01(
+			Math.abs(this.rover.speed) / MAX_FORWARD_SPEED
+		)
+		this.audio?.setRoverEngineLevel(
+			clamp01(Math.max(speedRatio, throttle * 0.5))
+		)
 	}
 
 	_updatePlayerMovement(delta) {
 		const startX = this.playerRoot.position.x
 		const startZ = this.playerRoot.position.z
-		const input = new THREE.Vector3(
+		const inputX =
 			(this.keys.has('KeyD') ? 1 : 0) -
-				(this.keys.has('KeyA') ? 1 : 0),
-			0,
+			(this.keys.has('KeyA') ? 1 : 0)
+		const inputZ =
 			(this.keys.has('KeyS') ? 1 : 0) -
-				(this.keys.has('KeyW') ? 1 : 0)
-		)
+			(this.keys.has('KeyW') ? 1 : 0)
+		// Map WASD onto the camera's own frame so W always walks up the
+		// screen. The chase camera looks down a fixed diagonal, so world
+		// axes put "forward" ~30° off the view and the walk read as
+		// drifting sideways.
+		const input = this._inputScratch.set(0, 0, 0)
+		if (inputX !== 0 || inputZ !== 0) {
+			this.sceneManager.camera.getWorldDirection(
+				this._camForward
+			)
+			this._camForward.y = 0
+			if (this._camForward.lengthSq() < 1e-6)
+				this._camForward.set(0, 0, -1)
+			else this._camForward.normalize()
+			this._camRight.crossVectors(this._camForward, WORLD_UP)
+			input.addScaledVector(this._camRight, inputX)
+			input.addScaledVector(this._camForward, -inputZ)
+		}
 		const hasInput = input.lengthSq() > 0
 		if (hasInput) input.normalize()
 
@@ -1250,16 +1305,33 @@ export class Level2 extends Level {
 			this._syncPlayerToTerrain()
 		}
 
+		// Footfall dust: one small puff per stride of measured travel
+		// (walking, sprinting or sliding), sized by how fast the pilot
+		// is actually moving; landings keep their own bigger burst.
+		const travelled = Math.hypot(
+			this.playerRoot.position.x - startX,
+			this.playerRoot.position.z - startZ
+		)
+		const groundSpeed = Math.max(speed, this._slideSpeed)
+		if (!this._airborne) {
+			this._footstepDistance += travelled
+		}
+		if (
+			!this._airborne &&
+			groundSpeed > 1.5 &&
+			this._footstepDistance >= FOOTSTEP_STRIDE
+		) {
+			this._footstepDistance %= FOOTSTEP_STRIDE
+			this._dustScratch.copy(this.playerRoot.position)
+			this._dustScratch.y -= this.pilotWalk?.footOffset ?? 0
+			this.dust.spawnFoot(this._dustScratch, {
+				ratio: clamp01(groundSpeed / RUN_SPEED),
+			})
+		}
+
 		// Feed the measured travel distance to the shader gait so the
 		// stride rate tracks the actual ground speed.
-		this.pilotWalk?.update(
-			delta,
-			Math.hypot(
-				this.playerRoot.position.x - startX,
-				this.playerRoot.position.z - startZ
-			),
-			false
-		)
+		this.pilotWalk?.update(delta, travelled, false)
 	}
 
 	_updateMovementFeedback(delta) {
@@ -1330,6 +1402,7 @@ export class Level2 extends Level {
 		this._eWasDown = eDown
 
 		this.rover.update(delta)
+		this._updateRoverAudio()
 		// Throttled: while grinding against a steep bank the message would
 		// otherwise be re-asserted every frame. Tells the driver how to
 		// recover instead of just reporting the block.
@@ -1340,6 +1413,9 @@ export class Level2 extends Level {
 		}
 
 		if (this.boarded) {
+			// The pilot itself is hidden in the cockpit while driving
+			// (see _toggleBoardRover); keeping the walk layer warm parks
+			// the seated pose for the frame the hatch opens again.
 			this.pilotWalk?.update(delta, 0, true)
 			this.rover.getSeatPosition(this.playerRoot.position)
 			this.playerRoot.rotation.y = this.rover.heading
@@ -1466,6 +1542,7 @@ export class Level2 extends Level {
 		this.objectiveEl?.remove()
 		this.feedbackEl?.remove()
 		this.rover?.dispose()
+		this.audio?.stopRoverEngine()
 		this.gameplayColliders.length = 0
 		this.hazards?.dispose()
 		this.planet?.dispose()

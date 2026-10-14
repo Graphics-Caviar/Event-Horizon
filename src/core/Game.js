@@ -401,6 +401,8 @@ export class Game {
 			storageService: storage,
 		})
 		this.characterSelect.show()
+		// Soft ambient pad while the player is in the hangar/launch bay.
+		this.audio.startHangarMusic()
 	}
 
 	_backToMenu() {
@@ -412,6 +414,7 @@ export class Game {
 			this.hangarScene.dispose()
 			this.hangarScene = null
 		}
+		this.audio.stopHangarMusic()
 		this.menuBackground = new MenuBackground(
 			this.sceneManager,
 			this.assetManager
@@ -446,6 +449,7 @@ export class Game {
 			this.hangarScene.dispose()
 			this.hangarScene = null
 		}
+		this.audio.stopHangarMusic()
 
 		this._startLevel1()
 	}
