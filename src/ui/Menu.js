@@ -215,7 +215,7 @@ export class Menu {
         <ul class="credits-list">
           <li><a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> — mrdoob and contributors. 3D rendering, model loading, and procedural noise utilities. <small>MIT license</small></li>
           <li><a href="https://firebase.google.com/" target="_blank" rel="noopener noreferrer">Firebase</a> — Google and contributors. Authentication, cloud saves, leaderboards, and analytics. <small>JavaScript SDK: Apache-2.0 license</small></li>
-          <li><a href="https://rapier.rs/" target="_blank" rel="noopener noreferrer">Rapier</a> — Dimforge and contributors. Physics library included in the project's physics module. <small>Apache-2.0 license</small></li>
+          <li><a href="https://rapier.rs/" target="_blank" rel="noopener noreferrer">Rapier Physics Engine</a> — Dimforge and contributors. Level 2 rover gravity, terrain collisions, and six-wheel suspension. <small>Apache-2.0 license</small></li>
           <li><a href="https://github.com/google/draco" target="_blank" rel="noopener noreferrer">Draco</a> — Google and contributors. Compressed 3D model decoding support in the launch-bay asset loader.</li>
           <li><a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> — Evan You and contributors. Development server and production builds. <small>MIT license</small></li>
           <li><a href="https://prettier.io/" target="_blank" rel="noopener noreferrer">Prettier</a> — James Long and contributors. Code formatting. <small>MIT license</small></li>
