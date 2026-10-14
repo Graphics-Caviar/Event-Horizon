@@ -155,7 +155,7 @@ export class Level2 extends Level {
 		this._setupCamera()
 		this.enemyList = []
 		this.spawnTimer = 0
-		
+		this.playerHP = 5;
 	}
 
 	_findWalkableRoverSite(origin) {
@@ -777,8 +777,24 @@ export class Level2 extends Level {
 			this._spawnEnemy(Math.floor(Math.random() * (2 - 0 + 1)) + 0)
 		}
 
-		for(let i of this.enemyList){
-			i.updatePhysics(delta)
+		for (const enemy of this.enemyList) {
+			enemy.updatePhysics(delta);
+
+			for (const enemy of this.enemyList) {
+				enemy.updatePhysics(delta);
+
+				if (enemy.collisionCooldown > 0) continue;
+
+				if (enemy.checkPlayerCollision(this.playerRoot)) {
+					this.playerHP = Math.max(0, this.playerHP - 1);
+					enemy.collisionCooldown = 1;
+					console.log(this.playerHP)
+				} else if (enemy.checkRoverCollision(this.rover)) {
+					this.playerHP = Math.max(0, this.playerHP - 1);
+					enemy.collisionCooldown = 1;
+					console.log(this.playerHP)
+				}
+			}
 		}
 
 		const camera = this.sceneManager.camera

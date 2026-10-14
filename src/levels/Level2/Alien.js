@@ -10,7 +10,7 @@ export const ALIENS = {
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/alien-predator.glb',
 		],
         stats: {
-			speed: 10,
+			speed: 6,
 			hp: 5
 		},
     },
@@ -65,6 +65,7 @@ export class Alien {
 		this.orbiting = false;
 		this.velocity = new THREE.Vector3(0, 0, 0)
         this.loadModel(this.type.model)
+		this.collisionCooldown = 0;
     }
 
 	updatePhysics(delta) {
@@ -117,7 +118,7 @@ export class Alien {
 				
 			} else {
 				this.velocity.set(0, 0, 0);
-    			const step = this.type.stats.speed * dt;
+    			const step = 10 * dt;
 				if (!this.turnabout) {
 					this.alienGroup.lookAt(this.diveTarget);
 					if (this.position.distanceTo(this.diveTarget) <= step) {
@@ -169,7 +170,10 @@ export class Alien {
 
 			this.syncToTerrain();
 		}
-
+		this.collisionCooldown = Math.max(
+			0,
+			this.collisionCooldown - delta
+		);
 		this.alienGroup.position.copy(this.position);
 	}
 
@@ -206,6 +210,26 @@ export class Alien {
 				error?.message
 			)
 		}
+	}
+
+	checkPlayerCollision(player, playerRadius = 0.9) {
+		const dx = this.position.x - player.position.x;
+		const dz = this.position.z - player.position.z;
+		const dy = this.position.y - player.position.y;
+
+		const enemyRadius = this.type.name === "runner" ? 1.5 : 2;
+
+		return Math.hypot(dx, dz) <= enemyRadius + playerRadius && dy <= enemyRadius + playerRadius;
+	}
+
+	checkRoverCollision(rover, roverRadius = 8) {
+		const dx = this.position.x - rover.group.position.x;
+		const dz = this.position.z - rover.group.position.z;
+		const dy = this.position.y - rover.group.position.y;
+
+		const enemyRadius = this.type.name === "runner" ? 1.5 : 2;
+
+		return Math.hypot(dx, dz) <= enemyRadius + roverRadius && dy <= enemyRadius + 1;
 	}
 
 	moveTowards(target, maxDistance) {

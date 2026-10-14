@@ -6,7 +6,7 @@ const COLLIDER_RADIUS = 6.8
 const WHEEL_RADIUS = 1.35
 const CLEARANCE = 0.5
 
-const MAX_FORWARD_SPEED = 18
+const MAX_FORWARD_SPEED = 25
 const MAX_REVERSE_SPEED = 6
 const ACCELERATION = 14
 const REVERSE_ACCELERATION = ACCELERATION * 0.6
@@ -292,4 +292,6 @@ export class Rover {
 		beacon.position.set(0, 5, 0)
 		this.group.add(beacon)
 	}
+
+	
 }
