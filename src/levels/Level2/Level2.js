@@ -6,6 +6,8 @@ import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
 import { AlienPlanet } from './AlienPlanet.js'
 import { Rover } from './Rover.js'
+import { PilotWalk, orientPilot } from './PilotWalk.js'
+import { constrainTerrainCamera } from './TerrainCamera.js'
 
 const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 16
@@ -36,7 +38,7 @@ const clamp01 = (value) => Math.max(0, Math.min(1, value))
  * - the finite terrain has a playable boundary;
  * - rocks, vegetation and wreck debris have XZ collision volumes;
  * - the exploration rover is boardable (E when close) and drivable with
- *   WASD, using the same slope/bounds/collision rules as the on-foot pilot.
+ *   WASD, using a Rapier chassis and independent wheel suspension.
  *
  * Alien combat remains deliberately out of scope for this cinematic milestone.
  */
@@ -61,9 +63,10 @@ export class Level2 extends Level {
 				.clone()
 				.add(new THREE.Vector3(120, 0, 90))
 		)
+		// Park within the 9 m boarding range, clear of the pilot's collider.
 		this.roverSite = this.landingSite
 			.clone()
-			.add(new THREE.Vector3(95, 0, -55))
+			.add(new THREE.Vector3(-4, 0, -7.5))
 
 		const center = this.landingSite
 			.clone()
@@ -104,8 +107,14 @@ export class Level2 extends Level {
 		this.playerRoot.position.copy(this.landingSite)
 		this._syncPlayerToTerrain()
 		this.addObject(this.playerRoot)
-		this._setPilot(this._fallbackPilot())
-		this._loadPilot()
+		const pilot = CHARACTERS[this.state.selectedCharacter] || CHARACTERS.zara
+		const cachedPilot = this.assetManager.getCachedModel(pilot.gameplayModel || pilot.model)
+		if (cachedPilot) {
+			this._installPilot(cachedPilot, pilot.key)
+		} else {
+			this._setPilot(this._fallbackPilot())
+			this._loadPilot()
+		}
 
 		this.wreckRoot = new THREE.Group()
 		this.wreckRoot.name = 'crashed-spaceship'
@@ -156,7 +165,7 @@ export class Level2 extends Level {
 
 	_findWalkableRoverSite(origin) {
 		const candidate = origin.clone()
-		const radii = [0, 8, 16, 24, 32]
+		const radii = [0, 2, 4, 8, 12, 16]
 		for (const radius of radii) {
 			const samples = radius === 0 ? 1 : 16
 			for (let i = 0; i < samples; i++) {
@@ -185,6 +194,12 @@ export class Level2 extends Level {
 					MAX_WALK_SLOPE - 1
 				)
 					continue
+				const landingDistance = Math.hypot(
+					candidate.x - this.landingSite.x,
+					candidate.z - this.landingSite.z
+				)
+				// Terrain adjustment must keep immediate boarding possible.
+				if (landingDistance < 7.9 || landingDistance > 8.8) continue
 				const crashDx = candidate.x - this.crashSite.x
 				const crashDz = candidate.z - this.crashSite.z
 				if (Math.hypot(crashDx, crashDz) < 25) continue
@@ -200,17 +215,22 @@ export class Level2 extends Level {
 			CHARACTERS.zara
 		try {
 			const model = await this.assetManager.loadModel(
-				config.model
+				config.gameplayModel || config.model
 			)
 			if (!this.playerRoot.parent) return
-			this._fit(model, 3.2)
-			this._setPilot(model)
+			this._installPilot(model, config.key)
 		} catch (error) {
 			console.warn(
 				'[Level2] Pilot model unavailable:',
 				error?.message
 			)
 		}
+	}
+
+	_installPilot(model, key) {
+		const oriented = orientPilot(model, key)
+		this._fit(oriented, 3.2)
+		this._setPilot(oriented, key)
 	}
 
 	async _loadWreck() {
@@ -235,10 +255,12 @@ export class Level2 extends Level {
 		}
 	}
 
-	_setPilot(model) {
+	_setPilot(model, character = 'zara') {
 		this.pilotModel?.removeFromParent()
 		this.pilotModel = model
+		this.pilotWalk = new PilotWalk(this, model, character)
 		this.playerRoot.add(model)
+		if (!this.boarded) this._syncPlayerToTerrain()
 	}
 
 	_setWreck(model) {
@@ -249,28 +271,36 @@ export class Level2 extends Level {
 
 	_fallbackPilot() {
 		const group = new THREE.Group()
-		const body = new THREE.Mesh(
-			this.own(
-				new THREE.CylinderGeometry(0.55, 0.7, 2.2, 10)
-			),
-			this.own(
-				new THREE.MeshStandardMaterial({
-					color: 0x4c6070,
-					metalness: 0.35,
-					roughness: 0.55,
-				})
-			)
+		const suit = this.own(
+			new THREE.MeshStandardMaterial({
+				color: 0x4c6070,
+				roughness: 0.55,
+			})
 		)
+		const part = (w, h, d, x, y, z = 0) => {
+			const mesh = new THREE.Mesh(
+				this.own(new THREE.BoxGeometry(w, h, d)),
+				suit
+			)
+			mesh.position.set(x, y, z)
+			group.add(mesh)
+		}
+		part(0.85, 1.05, 0.5, 0, 1.95)
+		for (const side of [-1, 1]) {
+			part(0.32, 1.4, 0.36, side * 0.25, 0.7)
+			part(0.34, 0.18, 0.6, side * 0.25, 0.09, 0.1)
+			part(0.25, 1.05, 0.3, side * 0.6, 1.9)
+		}
 		const head = new THREE.Mesh(
-			this.own(new THREE.SphereGeometry(0.48, 12, 10)),
+			this.own(new THREE.SphereGeometry(0.35, 12, 10)),
 			this.own(
 				new THREE.MeshStandardMaterial({
 					color: 0xc48d71,
 				})
 			)
 		)
-		head.position.y = 1.45
-		group.add(body, head)
+		head.position.y = 2.85
+		group.add(head)
 		return group
 	}
 
@@ -456,6 +486,13 @@ export class Level2 extends Level {
 				.clone()
 				.add(new THREE.Vector3(10, 8, 18))
 		)
+		constrainTerrainCamera(
+			camera.position,
+			this.playerRoot.position
+				.clone()
+				.add(new THREE.Vector3(0, 1.8, 0)),
+			this.planet
+		)
 		camera.lookAt(
 			this.playerRoot.position
 				.clone()
@@ -469,7 +506,7 @@ export class Level2 extends Level {
 			this.planet.heightAt(
 				this.playerRoot.position.x,
 				this.playerRoot.position.z
-			) + 2.2
+			) + (this.pilotWalk?.footOffset ?? 0)
 	}
 
 	_validateMovementCandidate(
@@ -645,6 +682,14 @@ export class Level2 extends Level {
 
 	_toggleBoardRover() {
 		if (!this.boarded) {
+			if (!this.rover.vehicle) {
+				this._showMovementFeedback(
+					this.rover.physicsError
+						? 'ROVER PHYSICS UNAVAILABLE — RELOAD TO RETRY'
+						: 'ROVER INITIALIZING'
+				)
+				return
+			}
 			const dx =
 				this.playerRoot.position.x -
 				this.rover.group.position.x
@@ -676,13 +721,20 @@ export class Level2 extends Level {
 	}
 
 	_updatePlayerMovement(delta) {
-		const move = new THREE.Vector3(
-			(this.keys.has('KeyD') ? 1 : 0) -
-				(this.keys.has('KeyA') ? 1 : 0),
-			0,
-			(this.keys.has('KeyS') ? 1 : 0) -
-				(this.keys.has('KeyW') ? 1 : 0)
-		)
+		const startX = this.playerRoot.position.x
+		const startZ = this.playerRoot.position.z
+		const forward = new THREE.Vector3(-10, 0, -18).normalize()
+		const right = new THREE.Vector3(-forward.z, 0, forward.x)
+		const move = forward
+			.multiplyScalar(
+				(this.keys.has('KeyW') ? 1 : 0) -
+					(this.keys.has('KeyS') ? 1 : 0)
+			)
+			.addScaledVector(
+				right,
+				(this.keys.has('KeyD') ? 1 : 0) -
+					(this.keys.has('KeyA') ? 1 : 0)
+			)
 
 		if (move.lengthSq() > 0) {
 			move.normalize()
@@ -692,18 +744,38 @@ export class Level2 extends Level {
 			)
 			const slopePenalty =
 				1 - Math.min(0.28, currentSlope / 180)
-			const baseSpeed = this.keys.has('ShiftLeft') ? 20 : 12
+			const baseSpeed = this.keys.has('ShiftLeft') ? 5.6 : 2.8
 			const moved = this._movePlayerDirection(
 				move,
 				baseSpeed * slopePenalty * delta
 			)
-			if (moved)
-				this.playerRoot.rotation.y = Math.atan2(
-					move.x,
-					move.z
+			if (moved) {
+				const targetYaw = Math.atan2(move.x, move.z)
+				const difference = Math.atan2(
+					Math.sin(
+						targetYaw -
+							this.playerRoot.rotation
+								.y
+					),
+					Math.cos(
+						targetYaw -
+							this.playerRoot.rotation
+								.y
+					)
 				)
+				this.playerRoot.rotation.y +=
+					difference * (1 - Math.exp(-12 * delta))
+			}
 		}
 
+		this.pilotWalk?.update(
+			delta,
+			Math.hypot(
+				this.playerRoot.position.x - startX,
+				this.playerRoot.position.z - startZ
+			),
+			false
+		)
 		this._applySlopeSlide(delta)
 		this._syncPlayerToTerrain()
 	}
@@ -737,6 +809,7 @@ export class Level2 extends Level {
 		}
 
 		if (this.boarded) {
+			this.pilotWalk?.update(delta, 0, true)
 			this.rover.getSeatPosition(this.playerRoot.position)
 			this.playerRoot.rotation.y = this.rover.heading
 		} else {
@@ -760,6 +833,19 @@ export class Level2 extends Level {
 					.add(new THREE.Vector3(0, 12, 0))
 			: focus.clone().add(new THREE.Vector3(10, 8, 18))
 		camera.position.lerp(desired, 1 - Math.exp(-5 * delta))
+		constrainTerrainCamera(
+			camera.position,
+			focus
+				.clone()
+				.add(
+					new THREE.Vector3(
+						0,
+						this.boarded ? 3.5 : 1.8,
+						0
+					)
+				),
+			this.planet
+		)
 		camera.lookAt(
 			focus
 				.clone()
@@ -784,10 +870,12 @@ export class Level2 extends Level {
 				: roverDistance < 16
 					? 'located'
 					: 'default'
-		if (this.objectiveEl && objectiveKey !== this._objectiveKey) {
-			this._objectiveKey = objectiveKey
+		const distanceLabel = Math.ceil(roverDistance)
+		const displayKey = `${objectiveKey}:${distanceLabel}`
+		if (this.objectiveEl && displayKey !== this._objectiveKey) {
+			this._objectiveKey = displayKey
 			const objectiveText = {
-				default: '<strong>SURVIVE THE LANDING</strong><br><span style="font-size:12px;opacity:.8">The crash alerted the planet. Reach the exploration rover.</span>',
+				default: `<strong>REACH THE ROVER · ${distanceLabel} m</strong><br><span style="font-size:12px;opacity:.8">WASD to walk · Left Shift to sprint · E to board when close.</span>`,
 				located: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Get closer to board the rover.</span>',
 				board: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Press E to board the rover.</span>',
 				boarded: '<strong>ROVER ONLINE</strong><br><span style="font-size:12px;opacity:.8">WASD to drive · E to exit.</span>',
@@ -801,6 +889,7 @@ export class Level2 extends Level {
 		window.removeEventListener('keyup', this._onKeyUp)
 		this.objectiveEl?.remove()
 		this.feedbackEl?.remove()
+		this.rover?.dispose()
 		this.gameplayColliders.length = 0
 		this.planet?.dispose()
 		super.dispose()
