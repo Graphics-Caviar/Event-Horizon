@@ -5,9 +5,12 @@ import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { MODEL_YAW } from '../Level1/Spaceship.js'
 import { AlienPlanet } from './AlienPlanet.js'
-import { Alien } from './Alien.js'
-import { Rover } from './Rover.js'
+import { Rover, MAX_FORWARD_SPEED } from './Rover.js'
 import { Hazards } from './Hazards.js'
+import { DustParticles } from './DustParticles.js'
+import { Alien, ALIEN_MODELS } from './Alien.js'
+import { Portal } from './Portal.js'
+import { WaypointGuide } from './WaypointGuide.js'
 import { PilotWalk, orientPilot } from './PilotWalk.js'
 import { constrainTerrainCamera } from './TerrainCamera.js'
 
@@ -15,6 +18,27 @@ const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 60
 const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
+
+// On-foot locomotion feel. The pilot carries momentum instead of snapping
+// to a fixed speed and turns through its body; the measured ground speed
+// and turn rate then drive the procedural gait in PilotWalk.
+const WALK_SPEED = 12
+const RUN_SPEED = 20
+const MOVE_ACCEL_DAMP = 6.5 // approach rate while input is held
+const MOVE_BRAKE_DAMP = 9.5 // decay rate once input is released
+const TURN_DAMP = 11 // heading approach rate while moving
+const U_TURN_DAMP = 16 // ... and on reversals, so 180s stay playable
+const U_TURN_ANGLE = 2 // radians; beyond this a turn counts as a reversal
+const JUMP_SPEED = 10.5 // takeoff vertical speed (units/s)
+const GRAVITY = 30 // keeps the hop ~1.7 units high
+const AIR_CONTROL = 0.35 // input authority while airborne
+const AIR_DRAG = 0.12 // horizontal decay while airborne without input
+const PIVOT_ANGLE = 0.5 // min facing error before turning in place
+const PORTAL_ARRIVE_RADIUS = 8 // XZ distance that counts as reaching the gate
+// On-foot footstep dust cadence, in metres of measured travel.
+const FOOTSTEP_STRIDE = 2.4
+// Scratch up-axis for the camera-relative input frame.
+const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 const vec3From = (value, fallback = new THREE.Vector3()) => {
 	if (value?.isVector3) return value.clone()
@@ -31,6 +55,14 @@ const vec3From = (value, fallback = new THREE.Vector3()) => {
 
 const clamp01 = (value) => Math.max(0, Math.min(1, value))
 
+/** Signed shortest angular distance from the current heading to the target. */
+const shortestAngle = (target, current) => {
+	let diff = (target - current) % (Math.PI * 2)
+	if (diff > Math.PI) diff -= Math.PI * 2
+	if (diff < -Math.PI) diff += Math.PI * 2
+	return diff
+}
+
 /**
  * Level 2 gameplay hand-off.
  *
@@ -40,17 +72,23 @@ const clamp01 = (value) => Math.max(0, Math.min(1, value))
  * - the finite terrain has a playable boundary;
  * - rocks, vegetation and wreck debris have XZ collision volumes;
  * - the exploration rover is boardable (E when close) and drivable with
- *   WASD, using a Rapier chassis and independent wheel suspension.
+ *   WASD, using a Rapier chassis and independent wheel suspension;
+ * - the on-foot pilot carries momentum, leans into acceleration and turns,
+ *   and plays a procedural idle/walk/run gait on its static mesh;
+ * - a yellow guide line leads to the rover, then retargets to the escape
+ *   portal once the rover is boarded — reaching the portal wins the level.
  *
  * Alien combat remains deliberately out of scope for this cinematic milestone.
  */
 export class Level2 extends Level {
-	constructor(game, { transition = {} } = {}) {
+	constructor(game, { transition = {}, onEnd = null } = {}) {
 		super(game, 2)
 		this.state = game.gameState
 		this.state.currentLevel = 2
 		this.state.status = STATUS.PLAYING
 		this.transition = transition
+		this.onEnd = onEnd
+		this.audio = game.audio
 		this.baseY = Number.isFinite(this.state.surfaceBaseY)
 			? this.state.surfaceBaseY
 			: -140
@@ -65,10 +103,16 @@ export class Level2 extends Level {
 				.clone()
 				.add(new THREE.Vector3(120, 0, 90))
 		)
-		// Park within the 9 m boarding range, clear of the pilot's collider.
+		// The rover waits out across the flats, a short hike from the
+		// landing site and clear of the pilot's collider.
 		this.roverSite = this.landingSite
 			.clone()
-			.add(new THREE.Vector3(-4, 0, -7.5))
+			.add(new THREE.Vector3(95, 0, -55))
+		// The escape portal waits across the valley, well away from the
+		// rover and the wreck, so reaching it means a real traversal.
+		this.portalSite = this.landingSite
+			.clone()
+			.add(new THREE.Vector3(-150, 0, 135))
 
 		const center = this.landingSite
 			.clone()
@@ -96,19 +140,49 @@ export class Level2 extends Level {
 					z: this.roverSite.z,
 					radius: 46,
 				},
+				{
+					x: this.portalSite.x,
+					z: this.portalSite.z,
+					radius: 40,
+				},
 			],
 		})
 
-		// Keep the rover objective reachable even when the procedural height
-		// function happens to put the nominal marker on one of the steepest
-		// ridges. The large clear zone above leaves this search area obstacle-free.
-		this.roverSite.copy(this._findWalkableRoverSite(this.roverSite))
+		// Keep the objectives reachable even when the procedural height
+		// function happens to put a nominal marker on one of the steepest
+		// ridges. The large clear zones above leave both search areas
+		// obstacle-free.
+		this.roverSite.copy(this._findWalkableSite(this.roverSite))
+		this.portalSite.copy(this._findWalkableSite(this.portalSite))
 
 		this.playerRoot = new THREE.Group()
 		this.playerRoot.name = 'level2-pilot'
 		this.playerRoot.position.copy(this.landingSite)
 		this._syncPlayerToTerrain()
 		this.addObject(this.playerRoot)
+		this.dust = new DustParticles(this)
+		// Momentum-based on-foot locomotion state (see
+		// _updatePlayerMovement); the gait layer consumes it every frame.
+		this.velocity = new THREE.Vector3()
+		this._speed = 0
+		this._prevSpeed = 0
+		this._accel = 0
+		this._turnRate = 0
+		this._slideSpeed = 0
+		this._slideDir = new THREE.Vector3()
+		this._groundNormal = new THREE.Vector3(0, 1, 0)
+		this._slopeDegrees = 0
+		this._airborne = false
+		this._verticalSpeed = 0
+		this._jumpWasDown = false
+		this._feetScratch = new THREE.Vector3()
+		// Reused per frame: the camera-relative input basis and the
+		// footstep-dust origin.
+		this._camForward = new THREE.Vector3(0, 0, -1)
+		this._camRight = new THREE.Vector3(1, 0, 0)
+		this._inputScratch = new THREE.Vector3()
+		this._dustScratch = new THREE.Vector3()
+		this._footstepDistance = 0
 		const pilot =
 			CHARACTERS[this.state.selectedCharacter] ||
 			CHARACTERS.zara
@@ -154,29 +228,59 @@ export class Level2 extends Level {
 			'rover',
 			this.rover.group
 		)
+		// The portal gate is its own destination marker (it has its own
+		// beacon visuals), so its guide line runs without a second beacon.
+		this.portal = new Portal(this, {
+			position: this.portalSite,
+			faceTowards: this.landingSite,
+		})
+		this.guide = new WaypointGuide(this, {
+			getTarget: () => this.rover.group.position,
+			name: 'rover',
+		})
+		this.portalGuide = new WaypointGuide(this, {
+			getTarget: () => this.portal.group.position,
+			beacon: false,
+			arriveDistance: 10,
+			name: 'portal',
+		})
+		this.aliens = []
+		this._alienTimers = []
+		this._spawnAliens()
 
 		this.boarded = false
+		this._hasBoarded = false
+		this.completed = false
+		this.elapsedPlayTime = 0
+		this._endTimer = null
 		this._eWasDown = false
+		this._lastBoardToggle = 0
 		this.keys = new Set()
 		this._onKeyDown = (e) => this.keys.add(e.code)
 		this._onKeyUp = (e) => this.keys.delete(e.code)
+		// Losing focus mid-hold never delivers the matching keyup, which
+		// would leave the key stuck in the Set (frozen movement, and the
+		// E toggle's edge detection blocked forever).
+		this._onBlur = () => this.keys.clear()
 		window.addEventListener('keydown', this._onKeyDown)
 		window.addEventListener('keyup', this._onKeyUp)
+		window.addEventListener('blur', this._onBlur)
 
 		this.feedbackTimer = 0
 		this._buildObjective()
 		this._buildMovementFeedback()
 		this._setupCamera()
-		this.enemyList = []
-		this.spawnTimer = 0
-		this.playerHP = 5;
-
 		this.hazards = new Hazards(this)
+		this.playerHP = 5;
+		// Dev-only handle so automated smoke tests can inspect and drive
+		// the level without a visible viewport; stripped from production
+		// builds because import.meta.env.DEV is a static false there.
+		if (import.meta.env.DEV) window.__level2 = this
 	}
 
-	_findWalkableRoverSite(origin) {
+	_findWalkableSite(origin) {
 		const candidate = origin.clone()
-		const radii = [0, 2, 4, 8, 12, 16]
+		const radii = [0, 8, 16, 24, 32]
 		for (const radius of radii) {
 			const samples = radius === 0 ? 1 : 16
 			for (let i = 0; i < samples; i++) {
@@ -205,16 +309,6 @@ export class Level2 extends Level {
 					MAX_WALK_SLOPE - 1
 				)
 					continue
-				const landingDistance = Math.hypot(
-					candidate.x - this.landingSite.x,
-					candidate.z - this.landingSite.z
-				)
-				// Terrain adjustment must keep immediate boarding possible.
-				if (
-					landingDistance < 7.9 ||
-					landingDistance > 8.8
-				)
-					continue
 				const crashDx = candidate.x - this.crashSite.x
 				const crashDz = candidate.z - this.crashSite.z
 				if (Math.hypot(crashDx, crashDz) < 25) continue
@@ -222,6 +316,229 @@ export class Level2 extends Level {
 			}
 		}
 		return origin.clone()
+	}
+
+	_alienSpotValid(x, z, radius) {
+		if (!this.planet.isInsideBounds(x, z, 12)) return false
+		if (this.planet.slopeDegreesAt(x, z) > 20) return false
+		// _isSpawnClear already fences off the lava channel and the
+		// landing/crash/rover clear zones.
+		return this.planet._isSpawnClear(x, z, radius)
+	}
+
+	_findAlienSpot(origin, radius) {
+		const candidate = origin.clone()
+		for (const r of [0, 12, 24, 36, 48, 60]) {
+			const samples = r === 0 ? 1 : 12
+			for (let i = 0; i < samples; i++) {
+				const angle =
+					samples === 1
+						? 0
+						: (i / samples) * Math.PI * 2
+				candidate.set(
+					origin.x + Math.cos(angle) * r,
+					0,
+					origin.z + Math.sin(angle) * r
+				)
+				if (
+					this._alienSpotValid(
+						candidate.x,
+						candidate.z,
+						radius
+					)
+				)
+					return candidate.clone()
+			}
+		}
+		return null
+	}
+
+	/**
+	 * Ambient alien life. Loads are staggered so the three ~37 MB GLBs do
+	 * not all parse in the same frame; each alien pops in when ready.
+	 * The planet is meant to feel inhabited, so the roster is a crowd —
+	 * distance culling in Alien.update keeps only the nearby bodies on
+	 * the render list.
+	 */
+	_spawnAliens() {
+		const midRover = this.landingSite
+			.clone()
+			.lerp(this.roverSite, 0.45)
+		const midCrash = this.landingSite
+			.clone()
+			.lerp(this.crashSite, 0.6)
+		const midPortal = this.landingSite
+			.clone()
+			.lerp(this.portalSite, 0.5)
+		const midRoverPortal = this.roverSite
+			.clone()
+			.lerp(this.portalSite, 0.5)
+		const defs = [
+			// Predator packs patrol the routes between the landmarks.
+			{
+				path: ALIEN_MODELS.predator,
+				kind: 'ground',
+				home: midRover
+					.clone()
+					.add(new THREE.Vector3(-30, 0, -34)),
+				fit: 5.4,
+				speed: 4.4,
+				radius: 2,
+			},
+			{
+				path: ALIEN_MODELS.predator,
+				kind: 'ground',
+				home: this.crashSite
+					.clone()
+					.add(new THREE.Vector3(-58, 0, -30)),
+				fit: 5.4,
+				speed: 3.8,
+				radius: 2,
+			},
+			{
+				path: ALIEN_MODELS.predator,
+				kind: 'ground',
+				home: this.roverSite
+					.clone()
+					.add(new THREE.Vector3(-26, 0, 46)),
+				fit: 5.2,
+				speed: 4.1,
+				radius: 2,
+			},
+			{
+				path: ALIEN_MODELS.predator,
+				kind: 'ground',
+				home: this.portalSite
+					.clone()
+					.add(new THREE.Vector3(-44, 0, -26)),
+				fit: 5.6,
+				speed: 4.6,
+				radius: 2,
+			},
+			{
+				path: ALIEN_MODELS.predator,
+				kind: 'ground',
+				home: this.landingSite
+					.clone()
+					.add(new THREE.Vector3(52, 0, -78)),
+				fit: 5.3,
+				speed: 3.6,
+				radius: 2,
+			},
+			{
+				path: ALIEN_MODELS.predator,
+				kind: 'ground',
+				home: midCrash
+					.clone()
+					.add(new THREE.Vector3(40, 0, 30)),
+				fit: 5.5,
+				speed: 4.2,
+				radius: 2,
+			},
+			{
+				path: ALIEN_MODELS.predator,
+				kind: 'ground',
+				home: midPortal
+					.clone()
+					.add(new THREE.Vector3(36, 0, -18)),
+				fit: 5.4,
+				speed: 3.9,
+				radius: 2,
+			},
+			// Armored brutes guard the objectives.
+			{
+				path: ALIEN_MODELS.brute,
+				kind: 'ground',
+				home: this.portalSite
+					.clone()
+					.add(new THREE.Vector3(30, 0, 40)),
+				fit: 6.6,
+				speed: 3.1,
+				radius: 2.7,
+			},
+			{
+				path: ALIEN_MODELS.brute,
+				kind: 'ground',
+				home: this.crashSite
+					.clone()
+					.add(new THREE.Vector3(54, 0, 44)),
+				fit: 6.4,
+				speed: 2.9,
+				radius: 2.7,
+			},
+			{
+				path: ALIEN_MODELS.brute,
+				kind: 'ground',
+				home: midRoverPortal
+					.clone()
+					.add(new THREE.Vector3(-20, 0, 24)),
+				fit: 6.8,
+				speed: 3.2,
+				radius: 2.7,
+			},
+			// Flying predators circle different landmarks at different
+			// heights so the sky never feels scripted.
+			{
+				path: ALIEN_MODELS.flying,
+				kind: 'flyer',
+				home: this.crashSite.clone(),
+				fit: 7.5,
+				altitude: 34,
+				orbitRadius: 52,
+				orbitSpeed: 0.16,
+			},
+			{
+				path: ALIEN_MODELS.flying,
+				kind: 'flyer',
+				home: this.landingSite.clone(),
+				fit: 6.5,
+				altitude: 44,
+				orbitRadius: 74,
+				orbitSpeed: -0.1,
+			},
+			{
+				path: ALIEN_MODELS.flying,
+				kind: 'flyer',
+				home: this.portalSite.clone(),
+				fit: 7,
+				altitude: 40,
+				orbitRadius: 60,
+				orbitSpeed: 0.13,
+			},
+			{
+				path: ALIEN_MODELS.flying,
+				kind: 'flyer',
+				home: midPortal.clone(),
+				fit: 6.8,
+				altitude: 52,
+				orbitRadius: 84,
+				orbitSpeed: -0.08,
+			},
+		]
+
+		defs.forEach((def, index) => {
+			if (def.kind === 'ground') {
+				const spot = this._findAlienSpot(
+					def.home,
+					def.radius
+				)
+				if (!spot) {
+					console.warn(
+						'[Level2] No clear spot for an alien; skipped.'
+					)
+					return
+				}
+				def.home.copy(spot)
+			}
+			const alien = new Alien(this, def)
+			this.aliens.push(alien)
+			this._alienTimers.push(
+				setTimeout(
+					() => alien.load(),
+					600 + index * 550
+				)
+			)
+		})
 	}
 
 	async _loadPilot() {
@@ -332,29 +649,6 @@ export class Level2 extends Level {
 		)
 		mesh.rotation.x = -Math.PI / 2
 		return mesh
-	}
-
-	_spawnEnemy(type) {
-		function getRandomPointInCircle(center, radius) {
-			const angle = Math.random() * Math.PI * 2;
-			const x = center.x + Math.cos(angle) * radius;
-			const z = center.z + Math.sin(angle) * radius;
-
-			return { x, z };
-		}
-		const testEnemy = new Alien(this.playerRoot, type, this.assetManager, this.planet)
-		testEnemy.position.copy(this.playerRoot.position)
-		const point = getRandomPointInCircle(this.playerRoot.position, 50)
-		testEnemy.position.z = point.z
-		testEnemy.position.x = point.x
-		testEnemy.position.y =
-			this.planet.heightAt(
-				this.landingSite.x,
-				this.landingSite.z
-			) + 1;
-		testEnemy.alienGroup.position.copy(testEnemy.position)
-		this.addObject(testEnemy.alienGroup);
-		this.enemyList.push(testEnemy)
 	}
 
 	_registerGameplayCollider(x, z, radius, type, object = null) {
@@ -480,7 +774,7 @@ export class Level2 extends Level {
 			pointerEvents: 'none',
 		})
 		this.objectiveEl.innerHTML =
-			'<strong>SURVIVE THE LANDING</strong><br><span style="font-size:12px;opacity:.8">The crash alerted the planet. Reach the exploration rover.</span>'
+			'<strong>SURVIVE THE LANDING</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide beam to the exploration rover.</span>'
 		this._objectiveKey = 'default'
 		document.body.appendChild(this.objectiveEl)
 	}
@@ -524,18 +818,15 @@ export class Level2 extends Level {
 				.clone()
 				.add(new THREE.Vector3(10, 8, 18))
 		)
+		this._lookAt = this.playerRoot.position
+			.clone()
+			.add(new THREE.Vector3(0, 1.8, 0))
 		constrainTerrainCamera(
 			camera.position,
-			this.playerRoot.position
-				.clone()
-				.add(new THREE.Vector3(0, 1.8, 0)),
+			this._lookAt.clone(),
 			this.planet
 		)
-		camera.lookAt(
-			this.playerRoot.position
-				.clone()
-				.add(new THREE.Vector3(0, 1.8, 0))
-		)
+		camera.lookAt(this._lookAt)
 		camera.updateProjectionMatrix()
 	}
 
@@ -697,35 +988,44 @@ export class Level2 extends Level {
 		return moved
 	}
 
+	/**
+	 * Steep ground carries the pilot downhill. Returns the slide speed that
+	 * was actually applied this frame (0 = standing firm), so the gait
+	 * layer can sell the loss of footing.
+	 */
 	_applySlopeSlide(delta) {
 		const slope = this.planet.slopeDegreesAt(
 			this.playerRoot.position.x,
 			this.playerRoot.position.z
 		)
-		if (slope <= SLIDE_START_SLOPE) return
+		if (slope <= SLIDE_START_SLOPE) return 0
 
 		const normal = this.planet.normalAt(
 			this.playerRoot.position.x,
 			this.playerRoot.position.z
 		)
 		const downhill = new THREE.Vector3(normal.x, 0, normal.z)
-		if (downhill.lengthSq() < 1e-7) return
+		if (downhill.lengthSq() < 1e-7) return 0
 
 		const strength = clamp01((slope - SLIDE_START_SLOPE) / 18)
 		const g = this.hazards.gravityMultiplierAt(
 			this.playerRoot.position
 		)
 		const slideSpeed = (2.2 + strength * 7.5) * Math.max(0, g)
-		this._movePlayerDirection(
-			downhill.normalize(),
-			slideSpeed * delta,
-			{
-				sliding: true,
-			}
-		)
+		this._slideDir.copy(downhill).normalize()
+		this._movePlayerDirection(this._slideDir, slideSpeed * delta, {
+			sliding: true,
+		})
+		return slideSpeed
 	}
 
 	_toggleBoardRover() {
+		// Debounce: duplicated synthetic key events must not flap the
+		// board state through two toggles in one user action.
+		const now = performance.now()
+		if (now - this._lastBoardToggle < 300) return
+		this._lastBoardToggle = now
+
 		if (!this.boarded) {
 			if (!this.rover.vehicle) {
 				this._showMovementFeedback(
@@ -743,14 +1043,28 @@ export class Level2 extends Level {
 				this.rover.group.position.z
 			if (Math.hypot(dx, dz) > 9) return
 			this.boarded = true
+			this._hasBoarded = true
 			this.rover.inputEnabled = true
 			this.rover.speed = 0
+			this.velocity.set(0, 0, 0)
+			this._airborne = false
+			this._verticalSpeed = 0
+			this._jumpWasDown = this.keys.has('Space')
+			// The pilot rides inside the cockpit from here on: hide them
+			// exactly like Level 1 hides the pilot in the ship, so the
+			// chase camera follows the rover alone.
+			this.playerRoot.visible = false
+			this.audio?.playHatch()
 			return
 		}
 
 		this.boarded = false
 		this.rover.inputEnabled = false
 		this.rover.speed = 0
+		this.velocity.set(0, 0, 0)
+		this._airborne = false
+		this._verticalSpeed = 0
+		this._jumpWasDown = this.keys.has('Space')
 		const exit = this.rover.getExitPosition(new THREE.Vector3())
 		if (this.rover.collider) this.rover.collider.enabled = false
 		this.planet.clampToBounds(exit, PLAYER_RADIUS)
@@ -763,72 +1077,261 @@ export class Level2 extends Level {
 		this.playerRoot.position.x = exit.x
 		this.playerRoot.position.z = exit.z
 		this._syncPlayerToTerrain()
+		this.playerRoot.visible = true
+		this.audio?.playHatch()
+	}
+
+	/**
+	 * Drive the rover engine loop: idle while parked, revving with
+	 * throttle and rolling speed while driving. AudioManager owns the
+	 * synthesis; this only decides how hard the engine works.
+	 */
+	_updateRoverAudio() {
+		if (!this.boarded) {
+			this.audio?.stopRoverEngine()
+			return
+		}
+		this.audio?.startRoverEngine()
+		const throttle =
+			this.keys.has('KeyW') || this.keys.has('KeyS') ? 1 : 0
+		const speedRatio = clamp01(
+			Math.abs(this.rover.speed) / MAX_FORWARD_SPEED
+		)
+		this.audio?.setRoverEngineLevel(
+			clamp01(Math.max(speedRatio, throttle * 0.5))
+		)
 	}
 
 	_updatePlayerMovement(delta) {
 		const startX = this.playerRoot.position.x
 		const startZ = this.playerRoot.position.z
-		const forward = new THREE.Vector3(-10, 0, -18).normalize()
-		const right = new THREE.Vector3(-forward.z, 0, forward.x)
-		const move = forward
-			.multiplyScalar(
-				(this.keys.has('KeyW') ? 1 : 0) -
-					(this.keys.has('KeyS') ? 1 : 0)
+		const inputX =
+			(this.keys.has('KeyD') ? 1 : 0) -
+			(this.keys.has('KeyA') ? 1 : 0)
+		const inputZ =
+			(this.keys.has('KeyS') ? 1 : 0) -
+			(this.keys.has('KeyW') ? 1 : 0)
+		// Map WASD onto the camera's own frame so W always walks up the
+		// screen. The chase camera looks down a fixed diagonal, so world
+		// axes put "forward" ~30° off the view and the walk read as
+		// drifting sideways.
+		const input = this._inputScratch.set(0, 0, 0)
+		if (inputX !== 0 || inputZ !== 0) {
+			this.sceneManager.camera.getWorldDirection(
+				this._camForward
 			)
-			.addScaledVector(
-				right,
-				(this.keys.has('KeyD') ? 1 : 0) -
-					(this.keys.has('KeyA') ? 1 : 0)
-			)
+			this._camForward.y = 0
+			if (this._camForward.lengthSq() < 1e-6)
+				this._camForward.set(0, 0, -1)
+			else this._camForward.normalize()
+			this._camRight.crossVectors(this._camForward, WORLD_UP)
+			input.addScaledVector(this._camRight, inputX)
+			input.addScaledVector(this._camForward, -inputZ)
+		}
+		const hasInput = input.lengthSq() > 0
+		if (hasInput) input.normalize()
 
-		if (move.lengthSq() > 0) {
-			move.normalize()
-			const currentSlope = this.planet.slopeDegreesAt(
-				this.playerRoot.position.x,
-				this.playerRoot.position.z
-			)
-			const slopePenalty =
-				1 - Math.min(0.28, currentSlope / 180)
-			const baseSpeed = this.keys.has('ShiftLeft') ? 8.6 : 4.5
-			const speed =
-				baseSpeed *
-				slopePenalty *
-				this.hazards.speedFactorAt(
-					this.playerRoot.position
-				)
+		// Jump: a fresh Space press on the ground launches the pilot;
+		// gravity takes over until the feet touch terrain again.
+		const jumpDown = this.keys.has('Space')
+		if (jumpDown && !this._jumpWasDown && !this._airborne) {
+			this._airborne = true
+			this._verticalSpeed = JUMP_SPEED
+		}
+		this._jumpWasDown = jumpDown
+
+		this._slopeDegrees = this.planet.slopeDegreesAt(
+			this.playerRoot.position.x,
+			this.playerRoot.position.z
+		)
+		this.planet.normalAt(
+			this.playerRoot.position.x,
+			this.playerRoot.position.z,
+			1.6,
+			this._groundNormal
+		)
+		const slopePenalty =
+			1 - Math.min(0.28, this._slopeDegrees / 180)
+		const running =
+			this.keys.has('ShiftLeft') ||
+			this.keys.has('ShiftRight')
+		const targetSpeed =
+			(running ? RUN_SPEED : WALK_SPEED) *
+			slopePenalty *
+			this.hazards.speedFactorAt(this.playerRoot.position)
+
+		// Momentum: velocity chases the input-driven target speed, so
+		// starts, stops and direction flips read as a body with weight
+		// instead of a switch. Acceleration stays high enough to feel
+		// responsive on the shortest input taps. In the air the authority
+		// drops so momentum carries the jump, and releasing the keys
+		// mid-jump barely bleeds horizontal speed.
+		const authority = this._airborne
+			? hasInput
+				? MOVE_ACCEL_DAMP * AIR_CONTROL
+				: MOVE_BRAKE_DAMP * AIR_DRAG
+			: hasInput
+				? MOVE_ACCEL_DAMP
+				: MOVE_BRAKE_DAMP
+		this.velocity.lerp(
+			input.multiplyScalar(targetSpeed),
+			1 - Math.exp(-authority * delta)
+		)
+
+		const speed = this.velocity.length()
+		if (speed > 0.02) {
 			const moved = this._movePlayerDirection(
-				move,
+				this.velocity.clone().divideScalar(speed),
 				speed * delta
 			)
-			if (moved) {
-				const targetYaw = Math.atan2(move.x, move.z)
-				const difference = Math.atan2(
-					Math.sin(
-						targetYaw -
-							this.playerRoot.rotation
-								.y
-					),
-					Math.cos(
-						targetYaw -
-							this.playerRoot.rotation
-								.y
-					)
+			if (!moved) {
+				// Fully blocked: bleed momentum fast so it cannot fight
+				// the obstacle on the next frame.
+				this.velocity.multiplyScalar(
+					Math.exp(-14 * delta)
 				)
-				this.playerRoot.rotation.y +=
-					difference * (1 - Math.exp(-12 * delta))
 			}
+		} else {
+			this.velocity.set(0, 0, 0)
 		}
 
-		this.pilotWalk?.update(
-			delta,
-			Math.hypot(
-				this.playerRoot.position.x - startX,
-				this.playerRoot.position.z - startZ
+		// Slopes only pull when the boots are on the ground.
+		this._slideSpeed = this._airborne
+			? 0
+			: this._applySlopeSlide(delta)
+
+		// Rotate toward the actual travel direction (or downhill while
+		// sliding) through the body instead of snapping the yaw.
+		let targetYaw = null
+		if (this._slideSpeed > 0.4) {
+			targetYaw = Math.atan2(
+				this._slideDir.x,
+				this._slideDir.z
+			)
+		} else if (speed > 0.6) {
+			targetYaw = Math.atan2(this.velocity.x, this.velocity.z)
+		} else if (hasInput && !this._airborne) {
+			// Standing start: pivot in place toward the input heading.
+			const inputYaw = Math.atan2(input.x, input.z)
+			if (
+				Math.abs(
+					shortestAngle(
+						inputYaw,
+						this.playerRoot.rotation.y
+					)
+				) > PIVOT_ANGLE
+			) {
+				targetYaw = inputYaw
+			}
+		}
+		if (targetYaw !== null) {
+			const diff = shortestAngle(
+				targetYaw,
+				this.playerRoot.rotation.y
+			)
+			const turnResponse =
+				Math.abs(diff) > U_TURN_ANGLE
+					? U_TURN_DAMP
+					: TURN_DAMP
+			const step =
+				diff * (1 - Math.exp(-turnResponse * delta))
+			this.playerRoot.rotation.y += step
+			this._turnRate = THREE.MathUtils.damp(
+				this._turnRate,
+				step / Math.max(delta, 1e-4),
+				10,
+				delta
+			)
+		} else {
+			this._turnRate = THREE.MathUtils.damp(
+				this._turnRate,
+				0,
+				10,
+				delta
+			)
+		}
+
+		// Measured, not requested: blocked movement produces honest
+		// numbers, and the gait leans off those.
+		this._accel = THREE.MathUtils.damp(
+			this._accel,
+			THREE.MathUtils.clamp(
+				(speed - this._prevSpeed) /
+					Math.max(delta, 1e-4),
+				-140,
+				140
 			),
-			false
+			6,
+			delta
 		)
-		this._applySlopeSlide(delta)
-		this._syncPlayerToTerrain()
+		this._prevSpeed = speed
+		this._speed = speed
+
+		if (this._airborne) {
+			// Ballistic arc: integrate vertical speed and land when the
+			// feet fall back through the terrain surface.
+			this._verticalSpeed -= GRAVITY * delta
+			this.playerRoot.position.y +=
+				this._verticalSpeed * delta
+			const groundY =
+				this.planet.heightAt(
+					this.playerRoot.position.x,
+					this.playerRoot.position.z
+				) + (this.pilotWalk?.footOffset ?? 0)
+			if (
+				this._verticalSpeed <= 0 &&
+				this.playerRoot.position.y <= groundY
+			) {
+				this.playerRoot.position.y = groundY
+				const impact = THREE.MathUtils.clamp(
+					-this._verticalSpeed / 16,
+					0.15,
+					1
+				)
+				this._airborne = false
+				this._verticalSpeed = 0
+				this._feetScratch.copy(this.playerRoot.position)
+				this._feetScratch.y -=
+					this.pilotWalk?.footOffset ?? 0
+				this.dust.spawnBurst(this._feetScratch, {
+					count: Math.round(6 + impact * 10),
+					strength: 1.6 + impact * 1.6,
+					spread: 1.5,
+					size: 0.9,
+					upBias: 0.45,
+				})
+			}
+		} else {
+			this._syncPlayerToTerrain()
+		}
+
+		// Footfall dust: one small puff per stride of measured travel
+		// (walking, sprinting or sliding), sized by how fast the pilot
+		// is actually moving; landings keep their own bigger burst.
+		const travelled = Math.hypot(
+			this.playerRoot.position.x - startX,
+			this.playerRoot.position.z - startZ
+		)
+		const groundSpeed = Math.max(speed, this._slideSpeed)
+		if (!this._airborne) {
+			this._footstepDistance += travelled
+		}
+		if (
+			!this._airborne &&
+			groundSpeed > 1.5 &&
+			this._footstepDistance >= FOOTSTEP_STRIDE
+		) {
+			this._footstepDistance %= FOOTSTEP_STRIDE
+			this._dustScratch.copy(this.playerRoot.position)
+			this._dustScratch.y -= this.pilotWalk?.footOffset ?? 0
+			this.dust.spawnFoot(this._dustScratch, {
+				ratio: clamp01(groundSpeed / RUN_SPEED),
+			})
+		}
+
+		// Feed the measured travel distance to the shader gait so the
+		// stride rate tracks the actual ground speed.
+		this.pilotWalk?.update(delta, travelled, false)
 	}
 
 	_updateMovementFeedback(delta) {
@@ -839,8 +1342,50 @@ export class Level2 extends Level {
 		}
 	}
 
+	/** Did the pilot (or the driven rover) reach the portal gate? */
+	_checkPortalArrival() {
+		if (this.completed) return
+		const dx =
+			this.playerRoot.position.x -
+			this.portal.group.position.x
+		const dz =
+			this.playerRoot.position.z -
+			this.portal.group.position.z
+		if (Math.hypot(dx, dz) > PORTAL_ARRIVE_RADIUS) return
+		this._completeMission()
+	}
+
+	_completeMission() {
+		if (this.completed) return
+		this.completed = true
+		// Stop the rover where it crossed; the pilot freeze happens in
+		// update() off the completed flag.
+		this.rover.inputEnabled = false
+		const time = this.elapsedPlayTime
+		const score = Math.round(
+			1500 +
+				Math.max(0, 600 - time) * 3 +
+				(this._hasBoarded ? 500 : 0)
+		)
+		this.state.score = score
+		this.state.status = STATUS.LEVEL_COMPLETE
+		this.audio?.playEscape()
+		this.portal.playArrival()
+		// A beat of arrival burst before the results screen takes over.
+		this._endTimer = setTimeout(() => {
+			this.onEnd?.({
+				outcome: 'transited',
+				won: true,
+				score,
+				time,
+				hull: Math.max(0, this.state.integrity),
+				progress: 1,
+				level: 2,
+			})
+		}, 1500)
+	}
+
 	update(delta) {
-		
 		this.planet.update(delta)
 		this.hazards.update(delta)
 		if (this.wreckFlame) {
@@ -857,43 +1402,65 @@ export class Level2 extends Level {
 		this._eWasDown = eDown
 
 		this.rover.update(delta)
-		if (this.rover.blockedBySlope) {
-			this._showMovementFeedback('TOO STEEP FOR THE ROVER')
+		this._updateRoverAudio()
+		// Throttled: while grinding against a steep bank the message would
+		// otherwise be re-asserted every frame. Tells the driver how to
+		// recover instead of just reporting the block.
+		if (this.rover.blockedBySlope && this.feedbackTimer <= 0) {
+			this._showMovementFeedback(
+				'TOO STEEP — HOLD S TO BACK OUT'
+			)
 		}
 
 		if (this.boarded) {
+			// The pilot itself is hidden in the cockpit while driving
+			// (see _toggleBoardRover); keeping the walk layer warm parks
+			// the seated pose for the frame the hatch opens again.
 			this.pilotWalk?.update(delta, 0, true)
 			this.rover.getSeatPosition(this.playerRoot.position)
 			this.playerRoot.rotation.y = this.rover.heading
+			this.velocity.set(0, 0, 0)
+			this._speed = 0
+			this._prevSpeed = 0
+			this._accel = 0
+			this._slideSpeed = 0
+			this._turnRate = THREE.MathUtils.damp(
+				this._turnRate,
+				0,
+				10,
+				delta
+			)
+		} else if (this.completed) {
+			// The run is over; park the pilot so the results screen
+			// isn't chasing a still-walking character.
+			this.velocity.set(0, 0, 0)
+			this._speed = 0
+			this.pilotWalk?.update(delta, 0, false)
 		} else {
 			this._updatePlayerMovement(delta)
 		}
-		this._updateMovementFeedback(delta)
-		this.spawnTimer = Math.min(this.spawnTimer + delta, 15);
-		if(this.spawnTimer == 15){
-			this.spawnTimer = 0;
-			this._spawnEnemy(Math.floor(Math.random() * (2 - 0 + 1)) + 0)
-		}
-
-		for (const enemy of this.enemyList) {
-			enemy.updatePhysics(delta);
-
-			for (const enemy of this.enemyList) {
-				enemy.updatePhysics(delta);
-
-				if (enemy.collisionCooldown > 0) continue;
-
-				if (enemy.checkPlayerCollision(this.playerRoot)) {
-					this.playerHP = Math.max(0, this.playerHP - 1);
-					enemy.collisionCooldown = 3;
-					console.log(this.playerHP);
-				} else if (enemy.checkRoverCollision(this.rover)) {
-					this.playerHP = Math.max(0, this.playerHP - 1);
-					enemy.collisionCooldown = 3;
-					console.log(this.playerHP)
-				}
+		// Guidance, dust and ambient life keep running every frame: the
+		// rover guide retires once the rover has been boarded, and the
+		// portal guide takes over to lead the way to the escape gate.
+		this.elapsedPlayTime += delta
+		this.portal.update(delta)
+		this.guide.update(delta, this.playerRoot.position, {
+			active: !this.boarded && !this._hasBoarded,
+		})
+		this.portalGuide.update(delta, this.playerRoot.position, {
+			active: this._hasBoarded && !this.completed,
+		})
+		this.dust.update(delta)
+		for (const alien of this.aliens) {
+			alien.update(delta, this.playerRoot.position)
+			if (alien.checkPlayerCollision(this.playerRoot) || alien.checkRoverCollision(this.rover)) {
+				this.playerHP = Math.max(this.playerHP - 1, 0);
+				console.log(this.playerHP)
 			}
+			
 		}
+		this._updateMovementFeedback(delta)
+		this._checkPortalArrival()
 
 		const camera = this.sceneManager.camera
 		const focus = this.boarded
@@ -924,30 +1491,38 @@ export class Level2 extends Level {
 				),
 			this.planet
 		)
-		camera.lookAt(
-			focus
-				.clone()
-				.add(
-					new THREE.Vector3(
-						0,
-						this.boarded ? 3.5 : 1.8,
-						0
+		// The look target follows with its own damping and a slight lead in
+		// the direction of travel, so sustained runs and turns stop feeling
+		// like the camera is welded to the pilot's chest.
+		const lookLead = this.boarded
+			? this.rover
+					.forwardVector(new THREE.Vector3())
+					.multiplyScalar(
+						Math.abs(this.rover.speed) *
+							0.22
 					)
-				)
-		)
+			: this.velocity.clone().multiplyScalar(0.22)
+		const lookTarget = focus
+			.clone()
+			.add(new THREE.Vector3(0, this.boarded ? 3.5 : 1.8, 0))
+			.add(lookLead)
+		this._lookAt.lerp(lookTarget, 1 - Math.exp(-9 * delta))
+		camera.lookAt(this._lookAt)
 
 		const dx =
 			this.playerRoot.position.x - this.rover.group.position.x
 		const dz =
 			this.playerRoot.position.z - this.rover.group.position.z
 		const roverDistance = Math.hypot(dx, dz)
-		const objectiveKey = this.boarded
-			? 'boarded'
-			: roverDistance < 9
-				? 'board'
-				: roverDistance < 16
-					? 'located'
-					: 'default'
+		const objectiveKey = this.completed
+			? 'complete'
+			: this.boarded
+				? 'portal'
+				: roverDistance < 9
+					? 'board'
+					: roverDistance < 16
+						? 'located'
+						: 'default'
 		const distanceLabel = Math.ceil(roverDistance)
 		const displayKey = `${objectiveKey}:${distanceLabel}`
 		if (this.objectiveEl && displayKey !== this._objectiveKey) {
@@ -956,7 +1531,8 @@ export class Level2 extends Level {
 				default: `<strong>REACH THE ROVER · ${distanceLabel} m</strong><br><span style="font-size:12px;opacity:.8">WASD to walk · Left Shift to sprint · E to board when close.</span>`,
 				located: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Get closer to board the rover.</span>',
 				board: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Press E to board the rover.</span>',
-				boarded: '<strong>ROVER ONLINE</strong><br><span style="font-size:12px;opacity:.8">WASD to drive · E to exit.</span>',
+				portal: '<strong>ESCAPE VIA THE PORTAL</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide line · drive through the ring.</span>',
+				complete: '<strong>PORTAL REACHED</strong><br><span style="font-size:12px;opacity:.8">You made it off the planet.</span>',
 			}
 			this.objectiveEl.innerHTML = objectiveText[objectiveKey]
 		}
@@ -965,9 +1541,13 @@ export class Level2 extends Level {
 	dispose() {
 		window.removeEventListener('keydown', this._onKeyDown)
 		window.removeEventListener('keyup', this._onKeyUp)
+		window.removeEventListener('blur', this._onBlur)
+		if (this._endTimer) clearTimeout(this._endTimer)
+		for (const timer of this._alienTimers || []) clearTimeout(timer)
 		this.objectiveEl?.remove()
 		this.feedbackEl?.remove()
 		this.rover?.dispose()
+		this.audio?.stopRoverEngine()
 		this.gameplayColliders.length = 0
 		this.hazards?.dispose()
 		this.planet?.dispose()
