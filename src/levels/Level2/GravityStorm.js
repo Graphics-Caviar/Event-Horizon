@@ -6,15 +6,15 @@ import * as THREE from 'three'
 // warm = heavy. Rare, extreme storms get the low weights.
 const VARIANTS = [
 	// Light: things move faster / float
-	{ name: 'Featherfall', multiplier: 0.5, color: 0xbfe9ff, weight: 6 },
-	{ name: 'Lunar Drift', multiplier: 0.15, color: 0x4fd8ff, weight: 5 },
+	{ name: 'Featherfall', multiplier: 0.5, color: 0xbfe9ff, weight: 4 },
+	{ name: 'Lunar Drift', multiplier: 0.15, color: 0x4fd8ff, weight: 4 },
 	{ name: 'Null Zone', multiplier: 0, color: 0x6a7bff, weight: 3 },
-	{ name: 'Updraft', multiplier: -0.5, color: 0x4fffc0, weight: 3 },
+	{ name: 'Updraft', multiplier: -0.5, color: 0x4fffc0, weight: 2 },
 	{ name: 'Inversion', multiplier: -1, color: 0x9a64ff, weight: 2 },
 	// Heavy: things move slower
 	{ name: 'Leaden Squall', multiplier: 2, color: 0xffc247, weight: 6 },
 	{ name: 'Crushing Gale', multiplier: 4, color: 0xff5a2a, weight: 4 },
-	{ name: 'Collapse', multiplier: 10, color: 0xd7263d, weight: 2 },
+	{ name: 'Collapse', multiplier: 10, color: 0xd7263d, weight: 3 },
 	{ name: 'Singularity', multiplier: 30, color: 0xb5179e, weight: 1 },
 ]
 
