@@ -14,9 +14,10 @@ const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
 
 const BASE_GRAVITY = 30
-const JUMP_HEIGHT = 1.6
-const MIN_GRAVITY_MULT = 0.1
-const JUMP_SPEED = Math.sqrt(2 * BASE_GRAVITY * JUMP_HEIGHT)
+const JUMP_HEIGHT = 1.6 // peak of a jump at normal gravity
+const MAX_JUMP_HEIGHT = 5 // low-gravity jumps are capped here, not 1 / g
+const MIN_GRAVITY_MULT = 0.1 // the pilot never gets zero/negative gravity
+const AIR_DRAG = 0.35 // share of horizontal momentum lost per second airborne
 
 const vec3From = (value, fallback = new THREE.Vector3()) => {
 	if (value?.isVector3) return value.clone()
@@ -155,6 +156,7 @@ export class Level2 extends Level {
 		window.addEventListener('keyup', this._onKeyUp)
 		this.airborne = false
 		this.verticalVelocity = 0
+		this.airVelocity = new THREE.Vector3()
 
 		this.feedbackTimer = 0
 		this._buildObjective()
@@ -694,31 +696,12 @@ export class Level2 extends Level {
 		this._syncPlayerToTerrain()
 	}
 
-	_updatePlayerVertical(delta) {
-		const pos = this.playerRoot.position
-		const floor = this.planet.heightAt(pos.x, pos.z) + 2.2
-		if (!this.airborne) {
-			pos.y = floor
-			if (!this.keys.has('Space')) return
-			this.airborne = true
-			this.verticalVelocity = JUMP_SPEED
-		}
-		const mult = Math.max(
-			this.hazards.gravityMultiplierAt(pos),
-			MIN_GRAVITY_MULT
-		)
-		this.verticalVelocity -= BASE_GRAVITY * mult * delta
-		pos.y += this.verticalVelocity * delta
-		if (pos.y <= floor) {
-			pos.y = floor // never sink into a rising slope
-			if (this.verticalVelocity <= 0) {
-				this.airborne = false
-				this.verticalVelocity = 0
-			}
-		}
-	}
-
 	_updatePlayerMovement(delta) {
+		if (this.airborne) {
+			this._updateAirborne(delta)
+			return
+		}
+
 		const move = new THREE.Vector3(
 			(this.keys.has('KeyD') ? 1 : 0) -
 				(this.keys.has('KeyA') ? 1 : 0),
@@ -727,6 +710,7 @@ export class Level2 extends Level {
 				(this.keys.has('KeyW') ? 1 : 0)
 		)
 
+		let walkVelocity = null // carried into the air if we jump this frame
 		if (move.lengthSq() > 0) {
 			move.normalize()
 			const currentSlope = this.planet.slopeDegreesAt(
@@ -736,22 +720,87 @@ export class Level2 extends Level {
 			const slopePenalty =
 				1 - Math.min(0.28, currentSlope / 180)
 			const baseSpeed = this.keys.has('ShiftLeft') ? 20 : 12
-			const factor = this.hazards.speedFactorAt(
-				this.playerRoot.position
-			)
+			const speed =
+				baseSpeed *
+				slopePenalty *
+				this.hazards.speedFactorAt(
+					this.playerRoot.position
+				)
 			const moved = this._movePlayerDirection(
 				move,
-				baseSpeed * slopePenalty * factor * delta
+				speed * delta
 			)
-			if (moved)
+			if (moved) {
 				this.playerRoot.rotation.y = Math.atan2(
 					move.x,
 					move.z
 				)
+				walkVelocity = move
+					.clone()
+					.multiplyScalar(speed)
+			}
 		}
 
-		if (!this.airborne) this._applySlopeSlide(delta)
-		this._updatePlayerVertical(delta)
+		this._applySlopeSlide(delta)
+		this._syncPlayerToTerrain()
+
+		if (this.keys.has('Space')) this._startJump(walkVelocity)
+	}
+
+	/** Leave the ground. Horizontal velocity is whatever we were walking at. */
+	_startJump(walkVelocity) {
+		const g = Math.max(
+			this.hazards.gravityMultiplierAt(
+				this.playerRoot.position
+			),
+			MIN_GRAVITY_MULT
+		)
+		// Peak is JUMP_HEIGHT / g, capped. Launch speed is derived from the peak
+		// so a capped low-gravity jump is a slow, floaty arc rather than a rocket.
+		const peak = Math.min(JUMP_HEIGHT / g, MAX_JUMP_HEIGHT)
+		this.verticalVelocity = Math.sqrt(2 * BASE_GRAVITY * g * peak)
+		this.airVelocity.set(0, 0, 0)
+		if (walkVelocity) this.airVelocity.copy(walkVelocity)
+		this.airborne = true
+	}
+
+	_updateAirborne(delta) {
+		const pos = this.playerRoot.position
+
+		// Horizontal: momentum only. No steering in the air; it bleeds off.
+		const speed = this.airVelocity.length()
+		if (speed > 0.05) {
+			const moved = this._movePlayerDirection(
+				this.airVelocity,
+				speed * delta,
+				{ sliding: true } // no walking feedback messages mid-air
+			)
+			if (moved) {
+				this.airVelocity.multiplyScalar(
+					Math.exp(-AIR_DRAG * delta)
+				)
+			} else {
+				this.airVelocity.set(0, 0, 0) // hit a wall: momentum lost
+			}
+		}
+
+		// Vertical: gravity comes from any storm we are inside.
+		const g = Math.max(
+			this.hazards.gravityMultiplierAt(pos),
+			MIN_GRAVITY_MULT
+		)
+		this.verticalVelocity -= BASE_GRAVITY * g * delta
+		pos.y += this.verticalVelocity * delta
+
+		const floor = this.planet.heightAt(pos.x, pos.z) + 2.2 // as _syncPlayerToTerrain
+		if (pos.y <= floor) {
+			pos.y = floor // never sink into a rising slope
+			if (this.verticalVelocity <= 0) {
+				this.airborne = false
+				this.verticalVelocity = 0
+				this.airVelocity.set(0, 0, 0)
+			}
+		}
 	}
 
 	_updateMovementFeedback(delta) {

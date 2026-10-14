@@ -57,6 +57,7 @@ export class Hazards {
 		if (!HazardClass) return null
 		const hazard = new HazardClass(this.level)
 		this.active.push(hazard)
+		console.log('Spawned: ', hazard)
 		return hazard
 	}
 
