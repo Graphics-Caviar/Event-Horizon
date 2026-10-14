@@ -239,7 +239,7 @@ export class Rover {
 		// on-foot pilot) instead of flinging the chassis upwards.
 		this.gravityScale = THREE.MathUtils.clamp(
 			hazards.gravityMultiplierAt(at),
-			0,
+			0.1,
 			MAX_SLOPE_GRAVITY
 		)
 	}
@@ -355,7 +355,11 @@ export class Rover {
 					3
 				)
 			)
-			this.vehicle.setWheelEngineForce(i, force)
+
+			const isFront = wheel.z > 3
+			const wheelForce = isFront ? force * 0.15 : force
+			this.vehicle.setWheelEngineForce(i, wheelForce)
+
 			this.vehicle.setWheelBrake(
 				i,
 				!this.inputEnabled
@@ -370,7 +374,7 @@ export class Rover {
 			)
 			this.vehicle.setWheelSteering(
 				i,
-				this.wheels[i].z > 3 ? this.steer * 0.45 : 0
+				isFront ? this.steer * 0.45 : 0
 			)
 		}
 		this._applySlopeGravity()
