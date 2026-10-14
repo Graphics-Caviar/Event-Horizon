@@ -68,6 +68,23 @@ export class Alien {
         this.loadModel(this.type.model)
 		this.collisionCooldown = 0;
 		this.stopTimer = 0;
+		this.aimLine = null;
+		this.aimLineLength = 40;
+		const points = [
+			new THREE.Vector3(0, 1.5, 0),
+			new THREE.Vector3(0, 1.5, this.aimLineLength)
+		];
+
+		const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+		const material = new THREE.LineBasicMaterial({
+			color: 0xff0000
+		});
+
+		this.aimLine = new THREE.Line(geometry, material);
+		this.aimLine.visible = false;
+
+		this.alienGroup.add(this.aimLine);
     }
 
 	updatePhysics(delta) {
@@ -84,6 +101,7 @@ export class Alien {
 			
 		} else if (this.type.name == "launcher") {
 			if(this.stopTimer == 0) {
+				this.aimLine.visible = !this.launch && this.launchTimer <= 1.5;
 				if(this.launchTimer == 0){
 					this.launch = true
 					this.launchDuration = 1
@@ -91,6 +109,7 @@ export class Alien {
 				} else if(this.launchDuration == 0){
 					this.launch = false
 					this.launchDuration = 1
+					this.aimLine.visible = false;
 				}
 				if(!this.launch) {
 					this.alienGroup.rotation.y = Math.atan2(target.x - this.position.x, target.z - this.position.z)
@@ -99,10 +118,12 @@ export class Alien {
 				} else {
 					this.velocity.set(0, 0, 40).applyQuaternion(this.alienGroup.quaternion)
 					this.launchDuration = Math.max(0, this.launchDuration - dt)
+					
 				}
 			} else {
 				this.stopTimer = Math.max(0, this.stopTimer - dt)
 				this.velocity.set(0, 0, 0)
+				this.aimLine.visible = false;
 			}
 			
 		} else if (this.type.name == "flyer") {

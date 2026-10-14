@@ -885,11 +885,11 @@ export class Level2 extends Level {
 
 				if (enemy.checkPlayerCollision(this.playerRoot)) {
 					this.playerHP = Math.max(0, this.playerHP - 1);
-					enemy.collisionCooldown = 1;
+					enemy.collisionCooldown = 3;
 					console.log(this.playerHP);
 				} else if (enemy.checkRoverCollision(this.rover)) {
 					this.playerHP = Math.max(0, this.playerHP - 1);
-					enemy.collisionCooldown = 1;
+					enemy.collisionCooldown = 3;
 					console.log(this.playerHP)
 				}
 			}
