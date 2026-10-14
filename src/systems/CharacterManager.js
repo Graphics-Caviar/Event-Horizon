@@ -6,6 +6,7 @@
 export const CHARACTERS = {
 	zara: {
 		key: 'zara',
+		gameplayModel: '/assets/models/pilots/zara-voss-gameplay.glb',
 		name: 'Zara Voss',
 		role: 'The Ace Pilot',
 		description:
@@ -42,6 +43,7 @@ export const CHARACTERS = {
 	},
 	kai: {
 		key: 'kai',
+		gameplayModel: '/assets/models/pilots/kai-ryder-gameplay.glb',
 		name: 'Kai Ryder',
 		role: 'The Scavenger',
 		description:
@@ -80,6 +82,7 @@ export const CHARACTERS = {
 	},
 	nyx: {
 		key: 'nyx',
+		gameplayModel: '/assets/models/pilots/nyx-gameplay.glb',
 		name: 'Nyx',
 		role: 'The Void Walker',
 		description:

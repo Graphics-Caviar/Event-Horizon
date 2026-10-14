@@ -777,44 +777,46 @@ export class AlienPlanet {
 		return texture
 	}
 
-	/** Surround the playable basin with highlands so it reads as a world. */
+	/** A stitched perimeter: every inner vertex matches the playable mesh edge. */
 	_buildHorizon() {
-		const size = this.size * 3,
-			segments = 120,
-			inner = this.size / 2
-		const geometry = this.level.own(
-			new THREE.PlaneGeometry(size, size, segments, segments)
-		)
-		geometry.rotateX(-Math.PI / 2)
-		const positions = geometry.attributes.position
-		for (let i = 0; i < positions.count; i++) {
-			positions.setY(
-				i,
-				this.heightAt(
-					this.center.x + positions.getX(i),
-					this.center.z + positions.getZ(i)
-				) - this.baseY
-			)
-		}
+		const segments = this.terrain.geometry.parameters.widthSegments
+		const rings = 24
+		const perimeter = segments * 4
+		const vertices = []
 		const indices = []
-		const old = geometry.index.array
-		for (let i = 0; i < old.length; i += 3) {
-			const a = old[i],
-				b = old[i + 1],
-				c = old[i + 2]
-			const x =
-				(positions.getX(a) +
-					positions.getX(b) +
-					positions.getX(c)) /
-				3
-			const z =
-				(positions.getZ(a) +
-					positions.getZ(b) +
-					positions.getZ(c)) /
-				3
-			if (Math.abs(x) >= inner || Math.abs(z) >= inner)
-				indices.push(a, b, c)
+		const half = this.size / 2
+		for (let ring = 0; ring <= rings; ring++) {
+			const extent = half + (this.size * ring) / rings
+			for (let i = 0; i < perimeter; i++) {
+				const side = Math.floor(i / segments)
+				const t = (i % segments) / segments
+				const u = t * 2 - 1
+				const x = [u, 1, -u, -1][side] * extent
+				const z = [-1, u, 1, -u][side] * extent
+				vertices.push(
+					x,
+					this.heightAt(
+						this.center.x + x,
+						this.center.z + z
+					) - this.baseY,
+					z
+				)
+				if (ring < rings) {
+					const a = ring * perimeter + i
+					const b =
+						ring * perimeter +
+						((i + 1) % perimeter)
+					const c = a + perimeter,
+						d = b + perimeter
+					indices.push(a, b, c, b, d, c)
+				}
+			}
 		}
+		const geometry = this.level.own(new THREE.BufferGeometry())
+		geometry.setAttribute(
+			'position',
+			new THREE.Float32BufferAttribute(vertices, 3)
+		)
 		geometry.setIndex(indices)
 		geometry.computeVertexNormals()
 		const material = this.level.own(

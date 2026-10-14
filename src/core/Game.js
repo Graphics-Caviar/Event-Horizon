@@ -16,6 +16,7 @@ import { AuthScreen } from '../ui/AuthScreen.js'
 import { LeaderboardScreen } from '../ui/LeaderboardScreen.js'
 import { LevelScreens } from '../ui/LevelScreens.js'
 import { SHIPS } from '../systems/ShipManager.js'
+import { CHARACTERS } from '../systems/CharacterManager.js'
 
 // Menu -> Pilot registry (sign in / create account) -> Hangar
 // (character/ship select) -> Level 1. Level 1 gameplay
@@ -194,6 +195,21 @@ export class Game {
 	_showMenu() {
 		this._refreshHome(this.backend?.status())
 		this.menu.showStart()
+		this._preloadPilot()
+	}
+
+	_preloadPilot() {
+		const config =
+			CHARACTERS[this.gameState.selectedCharacter] ||
+			CHARACTERS.zara
+		void this.assetManager
+			.preloadModel(config.gameplayModel || config.model)
+			.catch((error) => {
+				console.warn(
+					'[Level2] Pilot preload unavailable:',
+					error?.message
+				)
+			})
 	}
 
 	/**
@@ -209,6 +225,7 @@ export class Game {
 		this.gameState.selectedCharacter = profile.selectedCharacter
 		this.gameState.selectedShip = profile.selectedShip
 		this.audio.setMuted(profile.settings.muted)
+		this._preloadPilot()
 	}
 
 	/** True when a real account could be created or signed into right now. */
@@ -355,6 +372,7 @@ export class Game {
 			initialShip: this.gameState.selectedShip,
 			onSelectPilot: (key) => {
 				this.gameState.selectedCharacter = key
+				this._preloadPilot()
 				this.hangarScene.showCharacter(key)
 			},
 			onPilotOverview: () => {
@@ -434,6 +452,7 @@ export class Game {
 
 	/** Start (or restart) Level 1 with the pilot and ship from the hangar. */
 	_startLevel1() {
+		this._preloadPilot()
 		this.levelScreens.hideAll()
 		this.menu.hideAll()
 		this.currentLevel?.dispose()
