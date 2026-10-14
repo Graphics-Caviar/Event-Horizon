@@ -107,8 +107,12 @@ export class Level2 extends Level {
 		this.playerRoot.position.copy(this.landingSite)
 		this._syncPlayerToTerrain()
 		this.addObject(this.playerRoot)
-		const pilot = CHARACTERS[this.state.selectedCharacter] || CHARACTERS.zara
-		const cachedPilot = this.assetManager.getCachedModel(pilot.gameplayModel || pilot.model)
+		const pilot =
+			CHARACTERS[this.state.selectedCharacter] ||
+			CHARACTERS.zara
+		const cachedPilot = this.assetManager.getCachedModel(
+			pilot.gameplayModel || pilot.model
+		)
 		if (cachedPilot) {
 			this._installPilot(cachedPilot, pilot.key)
 		} else {
@@ -199,7 +203,11 @@ export class Level2 extends Level {
 					candidate.z - this.landingSite.z
 				)
 				// Terrain adjustment must keep immediate boarding possible.
-				if (landingDistance < 7.9 || landingDistance > 8.8) continue
+				if (
+					landingDistance < 7.9 ||
+					landingDistance > 8.8
+				)
+					continue
 				const crashDx = candidate.x - this.crashSite.x
 				const crashDz = candidate.z - this.crashSite.z
 				if (Math.hypot(crashDx, crashDz) < 25) continue
