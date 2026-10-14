@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
 // Cache parsed assets across the hangar, cinematic and gameplay scenes.
 
@@ -11,8 +12,16 @@ export class AssetManager {
 		this._readyModels = new Map()
 	}
 
-	_cloneModel(source) {
-		const clone = source.clone(true)
+	_cloneModel(gltf) {
+		// SkeletonUtils.clone rebinds skinned meshes (bone remapping) which
+		// a plain .clone() cannot; unrigged meshes clone identically.
+		const clone = skeletonClone(gltf.scene)
+		// Clips stay reachable from the instance so characters can drive
+		// an AnimationMixer when a model actually ships animations.
+		clone.userData.animations = gltf.animations || []
+		// GLTF clones intentionally share geometry/material/texture resources
+		// with the cached source. Mark every node so clearScene() can detach
+		// the instance without disposing cache-owned GPU resources.
 		clone.traverse((node) => {
 			node.userData.__assetManagerShared = true
 		})
@@ -24,8 +33,8 @@ export class AssetManager {
 			? pathOrPaths
 			: [pathOrPaths]
 		for (const path of paths) {
-			const source = this._readyModels.get(path)
-			if (source) return this._cloneModel(source)
+			const gltf = this._readyModels.get(path)
+			if (gltf) return this._cloneModel(gltf)
 		}
 		return null
 	}
@@ -44,11 +53,14 @@ export class AssetManager {
 						this.gltfLoader
 							.loadAsync(path)
 							.then((gltf) => {
+								// The full parse (scene + clips) is what
+								// gets cached; instances are cloned off
+								// it on demand.
 								this._readyModels.set(
 									path,
-									gltf.scene
+									gltf
 								)
-								return gltf.scene
+								return gltf
 							})
 					)
 				}

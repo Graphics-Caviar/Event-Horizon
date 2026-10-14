@@ -8,11 +8,38 @@ const STEP = 1 / 120
 const REST_LENGTH = 1.4
 const GRAVITY = 9.81
 
+// Authored rover GLB (static single mesh: ~1.5M tris, no wheel nodes).
+const DEFAULT_MODEL = '/assets/models/rover/sci-fi-exploration-rover.glb'
+const MODEL_FIT_LENGTH = 11 // matches the placeholder's footprint
+const MODEL_GROUND_SINK = 0.45 // tyre contact at the clearance height
+const MODEL_PIVOT_YAW = 0 // rotate if the GLB does not face +Z
+// The authored GLB bakes its four wheels into the mesh (measured from the
+// vertices: front pair at z 3.60, rear pair at z -3.35, tyre radii 1.87 /
+// 2.13 and widths 1.76 / 1.84 in fitted group space, contact plane at
+// y = -MODEL_GROUND_SINK). Static geometry cannot roll, so each baked wheel
+// gets a slightly larger procedural cover that hides it and spins. `spin`
+// and `steer` index the physics bogie wheels driving the cover (-1 = the
+// rear pair does not steer).
+const MODEL_WHEEL_STEER_GAIN = 0.6
+const MODEL_WHEELS = [
+	{ x: -3.68, z: 3.6, radius: 1.91, width: 1.82, spin: 4, steer: 4 },
+	{ x: 3.68, z: 3.6, radius: 1.91, width: 1.82, spin: 5, steer: 5 },
+	{ x: -3.76, z: -3.35, radius: 2.17, width: 1.9, spin: 0, steer: -1 },
+	{ x: 3.76, z: -3.35, radius: 2.17, width: 1.9, spin: 1, steer: -1 },
+]
+
 // Drive tuning. Gravity storms scale these through level.hazards.
 const ENGINE_FORCE = 2100
 const REVERSE_FORCE = 1300
-const MAX_FORWARD_SPEED = 25
+export const MAX_FORWARD_SPEED = 25
 const MAX_REVERSE_SPEED = 10
+// The pedal eases toward its target instead of switching, so pulling away
+// and lifting off ramp through the frame instead of lurching.
+const THROTTLE_DAMP = 6
+// Front-wheel steering lock (rad) and how much of it is shed at top speed:
+// full lock at full pace made the rover dart.
+const STEER_ANGLE = 0.45
+const STEER_HIGH_SPEED_TRIM = 0.25
 // Wheel brake used to shed speed when a storm lowers the limit under a rover
 // that is already going faster than the new limit.
 const OVERSPEED_BRAKE = 2
@@ -25,12 +52,16 @@ let rapierReady
 
 /** A dynamic chassis with six independent ray-cast suspension springs. */
 export class Rover {
-	constructor(level, { position, heading = 0 } = {}) {
+	constructor(
+		level,
+		{ position, heading = 0, model = DEFAULT_MODEL } = {}
+	) {
 		this.level = level
 		this.planet = level.planet
 		this.heading = heading
 		this.speed = 0
 		this.steer = 0
+		this.throttle = 0
 		this.inputEnabled = false
 		this.blockedBySlope = false
 		// Set every frame from level.hazards (1 = unaffected).
@@ -38,17 +69,27 @@ export class Rover {
 		this.gravityScale = 1
 		this._slopeNormal = new THREE.Vector3()
 		this.collider = null
+		this.model = null
+		this._seatHeight = 5
 		this.accumulator = 0
 		this._forward = new THREE.Vector3()
 		this.group = new THREE.Group()
 		this.group.name = 'exploration-rover'
 		this.wheels = []
+		// Procedural tyres covering the GLB's baked wheels once it loads.
+		this.modelWheels = []
+		// Placeholder chassis until (unless) the GLB arrives; the swap
+		// replaces this whole group.
+		this.chassisGroup = new THREE.Group()
+		this.chassisGroup.name = 'rover-chassis'
+		this.group.add(this.chassisGroup)
 		this._buildChassis()
 		this.group.position.copy(position)
 		this.group.position.y =
 			this.planet.heightAt(position.x, position.z) + 1
 		this.group.rotation.y = heading
 		level.addObject(this.group)
+		if (model) this._loadModel(model)
 		this.ready = (rapierReady ??= RAPIER.init())
 			.then(() => {
 				if (!this.disposed) this._initPhysics()
@@ -193,8 +234,11 @@ export class Rover {
 	}
 
 	getSeatPosition(target = new THREE.Vector3()) {
+		// The physics chassis tilts with the terrain, so the seat rides
+		// the rotated frame; _seatHeight rises once the tall authored GLB
+		// replaces the placeholder roof.
 		return target
-			.set(0, 4, 0.8)
+			.set(0, this._seatHeight, 0.8)
 			.applyQuaternion(this.group.quaternion)
 			.add(this.group.position)
 	}
@@ -308,13 +352,40 @@ export class Rover {
 		const overspeed =
 			this.speedFactor < 1 &&
 			(this.speed > maxForward || this.speed < -maxReverse)
+		// The pedal eases toward its target; while braking it returns to
+		// neutral first, so switching between forward and reverse rolls
+		// through standstill instead of slamming the drive force over.
+		const throttleTarget = braking ? 0 : gas ? 1 : reverse ? -1 : 0
+		this.throttle = THREE.MathUtils.damp(
+			this.throttle,
+			throttleTarget,
+			THROTTLE_DAMP,
+			STEP
+		)
 		let force = 0
 		if (!braking) {
-			if (gas && this.speed < maxForward)
-				force = ENGINE_FORCE * this.speedFactor
-			else if (reverse && this.speed > -maxReverse)
-				force = -REVERSE_FORCE * this.speedFactor
+			if (this.throttle > 0 && this.speed < maxForward)
+				force =
+					ENGINE_FORCE *
+					this.speedFactor *
+					this.throttle
+			else if (this.throttle < 0 && this.speed > -maxReverse)
+				force =
+					REVERSE_FORCE *
+					this.speedFactor *
+					this.throttle
 		}
+		// Steering lock tapers with pace, so the same input turns tightly
+		// in a slow crawl and gently at full speed.
+		const speedRatio = THREE.MathUtils.clamp(
+			Math.abs(this.speed) / Math.max(1, maxForward),
+			0,
+			1
+		)
+		const steerAngle =
+			this.steer *
+			STEER_ANGLE *
+			(1 - STEER_HIGH_SPEED_TRIM * speedRatio)
 		if (gas || reverse || left || right) this.body.wakeUp()
 		for (let i = 0; i < this.wheels.length; i++) {
 			// A centre ray alone treats the tire as a point on inclined ground.
@@ -334,7 +405,7 @@ export class Rover {
 				center.z,
 				0.5
 			)
-			const angle = wheel.z > 3 ? this.steer * 0.45 : 0
+			const angle = wheel.z > 3 ? steerAngle : 0
 			const axle = new THREE.Vector3(
 				Math.cos(angle),
 				0,
@@ -374,7 +445,7 @@ export class Rover {
 			)
 			this.vehicle.setWheelSteering(
 				i,
-				isFront ? this.steer * 0.45 : 0
+				isFront ? steerAngle : 0
 			)
 		}
 		this._applySlopeGravity()
@@ -447,6 +518,21 @@ export class Rover {
 				}
 			}
 		}
+		for (const wheel of this.modelWheels) {
+			if (wheel.steer >= 0)
+				wheel.pivot.rotation.y =
+					(this.vehicle.wheelSteering(
+						wheel.steer
+					) ?? 0) * MODEL_WHEEL_STEER_GAIN
+			// Same roll convention as the placeholder wheels; scaling by the
+			// radius ratio keeps the bigger cover's tread speed on the ground
+			// speed the physics wheel integrates for its own radius.
+			const roll =
+				(this.vehicle.wheelRotation(wheel.spin) ?? 0) *
+				(WHEEL_RADIUS / wheel.radius)
+			wheel.spinner.rotation.set(0, 0, Math.PI / 2)
+			wheel.spinner.rotateY(roll)
+		}
 	}
 
 	dispose() {
@@ -454,6 +540,158 @@ export class Rover {
 		this.world?.free()
 		this.world = null
 		this.vehicle = null
+	}
+
+	/**
+	 * Prefer the authored GLB over the placeholder chassis when it loads.
+	 * The model is one static mesh (no wheel nodes), so the placeholder body
+	 * and tyres leave the scene with the old chassis group while the entries
+	 * in this.wheels stay behind for suspension and steering math.
+	 */
+	async _loadModel(path) {
+		try {
+			const model =
+				await this.level.assetManager.loadModel(path)
+			if (!this.group.parent) return // level torn down mid-load
+			this.level._fit(model, MODEL_FIT_LENGTH)
+			model.updateMatrixWorld(true)
+			const box = new THREE.Box3().setFromObject(model)
+			const height = box.max.y - box.min.y
+			// Sink the tyres slightly so ground contact reads at CLEARANCE.
+			model.position.y += -box.min.y - MODEL_GROUND_SINK
+			// Taller than the placeholder: lift the seat above its roof.
+			this._seatHeight = Math.max(
+				5,
+				height - MODEL_GROUND_SINK + 0.5
+			)
+			const pivot = new THREE.Group()
+			pivot.name = 'rover-chassis'
+			pivot.rotation.y = MODEL_PIVOT_YAW
+			pivot.add(model)
+			this.chassisGroup.removeFromParent()
+			this.chassisGroup = pivot
+			this.group.add(pivot)
+			this._buildModelWheels(pivot)
+			this.model = model
+		} catch (error) {
+			console.warn(
+				'[Rover] Model unavailable; keeping the placeholder:',
+				error?.message
+			)
+		}
+	}
+
+	/**
+	 * Procedural spinning tyres parked exactly on the GLB's baked wheels.
+	 * Each cover is a rigid cylinder a few centimetres larger than the
+	 * baked tyre, so it hides it completely; proud hub caps and tread lugs
+	 * give the spin something to read against. The front pair yaws with the
+	 * physics steering.
+	 */
+	_buildModelWheels(parent) {
+		const level = this.level
+		const rubber = level.own(
+			new THREE.MeshStandardMaterial({
+				color: 0x14171a,
+				roughness: 0.95,
+			})
+		)
+		const steel = level.own(
+			new THREE.MeshStandardMaterial({
+				color: 0x99a2aa,
+				metalness: 0.75,
+				roughness: 0.35,
+			})
+		)
+		const lugMat = level.own(
+			new THREE.MeshStandardMaterial({
+				color: 0x2b3137,
+				roughness: 0.85,
+			})
+		)
+		for (const spec of MODEL_WHEELS) {
+			const pivot = new THREE.Group()
+			pivot.position.set(
+				spec.x,
+				spec.radius - MODEL_GROUND_SINK,
+				spec.z
+			)
+			const spinner = new THREE.Group()
+			spinner.rotation.set(0, 0, Math.PI / 2)
+			pivot.add(spinner)
+			const tire = new THREE.Mesh(
+				level.own(
+					new THREE.CylinderGeometry(
+						spec.radius,
+						spec.radius,
+						spec.width,
+						40
+					)
+				),
+				rubber
+			)
+			tire.castShadow = true
+			spinner.add(tire)
+			const hub = new THREE.Mesh(
+				level.own(
+					new THREE.CylinderGeometry(
+						spec.radius * 0.55,
+						spec.radius * 0.55,
+						spec.width + 0.12,
+						24
+					)
+				),
+				steel
+			)
+			hub.castShadow = true
+			spinner.add(hub)
+			// Crossed spokes on both faces: high-contrast, so the roll reads.
+			const barGeometry = level.own(
+				new THREE.BoxGeometry(
+					spec.radius * 1.02,
+					0.09,
+					0.22
+				)
+			)
+			for (const face of [-1, 1])
+				for (let i = 0; i < 2; i++) {
+					const bar = new THREE.Mesh(
+						barGeometry,
+						lugMat
+					)
+					bar.position.y =
+						face * (spec.width / 2 + 0.09)
+					bar.rotation.y = i * (Math.PI / 2)
+					spinner.add(bar)
+				}
+			// Tread lugs: bumps on the silhouette while the tyre rolls.
+			const lugGeometry = level.own(
+				new THREE.BoxGeometry(
+					0.2,
+					spec.width * 0.86,
+					0.14
+				)
+			)
+			for (let i = 0; i < 8; i++) {
+				const angle = (i / 8) * Math.PI * 2
+				const lug = new THREE.Mesh(lugGeometry, lugMat)
+				lug.position.set(
+					Math.cos(angle) * (spec.radius - 0.05),
+					0,
+					Math.sin(angle) * (spec.radius - 0.05)
+				)
+				lug.rotation.y = -angle
+				spinner.add(lug)
+			}
+			parent.add(pivot)
+			this.modelWheels.push({
+				pivot,
+				spinner,
+				spin: spec.spin,
+				steer: spec.steer,
+				radius: spec.radius,
+			})
+		}
 	}
 
 	_buildChassis() {
@@ -470,7 +708,8 @@ export class Rover {
 		)
 		body.position.y = 2.4
 		body.castShadow = body.receiveShadow = true
-		this.group.add(body)
+		this.chassisGroup.add(body)
+
 		const geometry = level.own(
 			new THREE.CylinderGeometry(
 				WHEEL_RADIUS,
@@ -493,7 +732,7 @@ export class Rover {
 				mesh.rotation.z = Math.PI / 2
 				mesh.castShadow = true
 				pivot.add(mesh)
-				this.group.add(pivot)
+				this.chassisGroup.add(pivot)
 				this.wheels.push({ mesh, pivot, x, z })
 			}
 		const beacon = new THREE.PointLight(0x5ef2ff, 4, 65)
