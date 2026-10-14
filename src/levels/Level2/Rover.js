@@ -8,6 +8,12 @@ const STEP = 1 / 120
 const REST_LENGTH = 1.4
 const GRAVITY = 9.81
 
+// Authored rover GLB (static single mesh: ~1.5M tris, no wheel nodes).
+const DEFAULT_MODEL = '/assets/models/rover/sci-fi-exploration-rover.glb'
+const MODEL_FIT_LENGTH = 11 // matches the placeholder's footprint
+const MODEL_GROUND_SINK = 0.45 // tyre contact at the clearance height
+const MODEL_PIVOT_YAW = 0 // rotate if the GLB does not face +Z
+
 // Drive tuning. Gravity storms scale these through level.hazards.
 const ENGINE_FORCE = 2100
 const REVERSE_FORCE = 1300
@@ -25,7 +31,10 @@ let rapierReady
 
 /** A dynamic chassis with six independent ray-cast suspension springs. */
 export class Rover {
-	constructor(level, { position, heading = 0 } = {}) {
+	constructor(
+		level,
+		{ position, heading = 0, model = DEFAULT_MODEL } = {}
+	) {
 		this.level = level
 		this.planet = level.planet
 		this.heading = heading
@@ -38,17 +47,25 @@ export class Rover {
 		this.gravityScale = 1
 		this._slopeNormal = new THREE.Vector3()
 		this.collider = null
+		this.model = null
+		this._seatHeight = 5
 		this.accumulator = 0
 		this._forward = new THREE.Vector3()
 		this.group = new THREE.Group()
 		this.group.name = 'exploration-rover'
 		this.wheels = []
+		// Placeholder chassis until (unless) the GLB arrives; the swap
+		// replaces this whole group.
+		this.chassisGroup = new THREE.Group()
+		this.chassisGroup.name = 'rover-chassis'
+		this.group.add(this.chassisGroup)
 		this._buildChassis()
 		this.group.position.copy(position)
 		this.group.position.y =
 			this.planet.heightAt(position.x, position.z) + 1
 		this.group.rotation.y = heading
 		level.addObject(this.group)
+		if (model) this._loadModel(model)
 		this.ready = (rapierReady ??= RAPIER.init())
 			.then(() => {
 				if (!this.disposed) this._initPhysics()
@@ -193,8 +210,11 @@ export class Rover {
 	}
 
 	getSeatPosition(target = new THREE.Vector3()) {
+		// The physics chassis tilts with the terrain, so the seat rides
+		// the rotated frame; _seatHeight rises once the tall authored GLB
+		// replaces the placeholder roof.
 		return target
-			.set(0, 4, 0.8)
+			.set(0, this._seatHeight, 0.8)
 			.applyQuaternion(this.group.quaternion)
 			.add(this.group.position)
 	}
@@ -456,6 +476,44 @@ export class Rover {
 		this.vehicle = null
 	}
 
+	/**
+	 * Prefer the authored GLB over the placeholder chassis when it loads.
+	 * The model is one static mesh (no wheel nodes), so the placeholder body
+	 * and tyres leave the scene with the old chassis group while the entries
+	 * in this.wheels stay behind for suspension and steering math.
+	 */
+	async _loadModel(path) {
+		try {
+			const model =
+				await this.level.assetManager.loadModel(path)
+			if (!this.group.parent) return // level torn down mid-load
+			this.level._fit(model, MODEL_FIT_LENGTH)
+			model.updateMatrixWorld(true)
+			const box = new THREE.Box3().setFromObject(model)
+			const height = box.max.y - box.min.y
+			// Sink the tyres slightly so ground contact reads at CLEARANCE.
+			model.position.y += -box.min.y - MODEL_GROUND_SINK
+			// Taller than the placeholder: lift the seat above its roof.
+			this._seatHeight = Math.max(
+				5,
+				height - MODEL_GROUND_SINK + 0.5
+			)
+			const pivot = new THREE.Group()
+			pivot.name = 'rover-chassis'
+			pivot.rotation.y = MODEL_PIVOT_YAW
+			pivot.add(model)
+			this.chassisGroup.removeFromParent()
+			this.chassisGroup = pivot
+			this.group.add(pivot)
+			this.model = model
+		} catch (error) {
+			console.warn(
+				'[Rover] Model unavailable; keeping the placeholder:',
+				error?.message
+			)
+		}
+	}
+
 	_buildChassis() {
 		const level = this.level
 		const body = new THREE.Mesh(
@@ -470,7 +528,8 @@ export class Rover {
 		)
 		body.position.y = 2.4
 		body.castShadow = body.receiveShadow = true
-		this.group.add(body)
+		this.chassisGroup.add(body)
+
 		const geometry = level.own(
 			new THREE.CylinderGeometry(
 				WHEEL_RADIUS,
@@ -493,7 +552,7 @@ export class Rover {
 				mesh.rotation.z = Math.PI / 2
 				mesh.castShadow = true
 				pivot.add(mesh)
-				this.group.add(pivot)
+				this.chassisGroup.add(pivot)
 				this.wheels.push({ mesh, pivot, x, z })
 			}
 		const beacon = new THREE.PointLight(0x5ef2ff, 4, 65)
