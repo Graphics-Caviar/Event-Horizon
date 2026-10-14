@@ -17,8 +17,15 @@ const MODEL_PIVOT_YAW = 0 // rotate if the GLB does not face +Z
 // Drive tuning. Gravity storms scale these through level.hazards.
 const ENGINE_FORCE = 2100
 const REVERSE_FORCE = 1300
-const MAX_FORWARD_SPEED = 25
+export const MAX_FORWARD_SPEED = 25
 const MAX_REVERSE_SPEED = 10
+// The pedal eases toward its target instead of switching, so pulling away
+// and lifting off ramp through the frame instead of lurching.
+const THROTTLE_DAMP = 6
+// Front-wheel steering lock (rad) and how much of it is shed at top speed:
+// full lock at full pace made the rover dart.
+const STEER_ANGLE = 0.45
+const STEER_HIGH_SPEED_TRIM = 0.25
 // Wheel brake used to shed speed when a storm lowers the limit under a rover
 // that is already going faster than the new limit.
 const OVERSPEED_BRAKE = 2
@@ -40,6 +47,7 @@ export class Rover {
 		this.heading = heading
 		this.speed = 0
 		this.steer = 0
+		this.throttle = 0
 		this.inputEnabled = false
 		this.blockedBySlope = false
 		// Set every frame from level.hazards (1 = unaffected).
@@ -328,13 +336,40 @@ export class Rover {
 		const overspeed =
 			this.speedFactor < 1 &&
 			(this.speed > maxForward || this.speed < -maxReverse)
+		// The pedal eases toward its target; while braking it returns to
+		// neutral first, so switching between forward and reverse rolls
+		// through standstill instead of slamming the drive force over.
+		const throttleTarget = braking ? 0 : gas ? 1 : reverse ? -1 : 0
+		this.throttle = THREE.MathUtils.damp(
+			this.throttle,
+			throttleTarget,
+			THROTTLE_DAMP,
+			STEP
+		)
 		let force = 0
 		if (!braking) {
-			if (gas && this.speed < maxForward)
-				force = ENGINE_FORCE * this.speedFactor
-			else if (reverse && this.speed > -maxReverse)
-				force = -REVERSE_FORCE * this.speedFactor
+			if (this.throttle > 0 && this.speed < maxForward)
+				force =
+					ENGINE_FORCE *
+					this.speedFactor *
+					this.throttle
+			else if (this.throttle < 0 && this.speed > -maxReverse)
+				force =
+					REVERSE_FORCE *
+					this.speedFactor *
+					this.throttle
 		}
+		// Steering lock tapers with pace, so the same input turns tightly
+		// in a slow crawl and gently at full speed.
+		const speedRatio = THREE.MathUtils.clamp(
+			Math.abs(this.speed) / Math.max(1, maxForward),
+			0,
+			1
+		)
+		const steerAngle =
+			this.steer *
+			STEER_ANGLE *
+			(1 - STEER_HIGH_SPEED_TRIM * speedRatio)
 		if (gas || reverse || left || right) this.body.wakeUp()
 		for (let i = 0; i < this.wheels.length; i++) {
 			// A centre ray alone treats the tire as a point on inclined ground.
@@ -354,7 +389,7 @@ export class Rover {
 				center.z,
 				0.5
 			)
-			const angle = wheel.z > 3 ? this.steer * 0.45 : 0
+			const angle = wheel.z > 3 ? steerAngle : 0
 			const axle = new THREE.Vector3(
 				Math.cos(angle),
 				0,
@@ -394,7 +429,7 @@ export class Rover {
 			)
 			this.vehicle.setWheelSteering(
 				i,
-				isFront ? this.steer * 0.45 : 0
+				isFront ? steerAngle : 0
 			)
 		}
 		this._applySlopeGravity()
