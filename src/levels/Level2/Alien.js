@@ -2,6 +2,7 @@ import * as THREE from 'three'
 
 
 
+
 export const ALIENS = {
     0: {
         name: "runner",
@@ -66,31 +67,44 @@ export class Alien {
 		this.velocity = new THREE.Vector3(0, 0, 0)
         this.loadModel(this.type.model)
 		this.collisionCooldown = 0;
+		this.stopTimer = 0;
     }
 
 	updatePhysics(delta) {
 		const dt = delta
 		const target = this.target.position
 		if(this.type.name == "runner") {
-			this.alienGroup.rotation.y = Math.atan2(target.x - this.position.x, target.z - this.position.z)
-			this.velocity.set(0, 0, this.type.stats.speed).applyQuaternion(this.alienGroup.quaternion)
-		} else if (this.type.name == "launcher") {
-			if(this.launchTimer == 0){
-				this.launch = true
-				this.launchDuration = 1
-				this.launchTimer = 5
-			} else if(this.launchDuration == 0){
-				this.launch = false
-				this.launchDuration = 1
-			}
-			if(!this.launch) {
+			if(this.stopTimer == 0){
 				this.alienGroup.rotation.y = Math.atan2(target.x - this.position.x, target.z - this.position.z)
 				this.velocity.set(0, 0, this.type.stats.speed).applyQuaternion(this.alienGroup.quaternion)
-				this.launchTimer = Math.max(0, this.launchTimer - dt)
 			} else {
-				this.velocity.set(0, 0, 40).applyQuaternion(this.alienGroup.quaternion)
-				this.launchDuration = Math.max(0, this.launchDuration - dt)
+				this.stopTimer = Math.max(0, this.stopTimer - dt)
+				this.velocity.set(0, 0, 0)
 			}
+			
+		} else if (this.type.name == "launcher") {
+			if(this.stopTimer == 0) {
+				if(this.launchTimer == 0){
+					this.launch = true
+					this.launchDuration = 1
+					this.launchTimer = 5
+				} else if(this.launchDuration == 0){
+					this.launch = false
+					this.launchDuration = 1
+				}
+				if(!this.launch) {
+					this.alienGroup.rotation.y = Math.atan2(target.x - this.position.x, target.z - this.position.z)
+					this.velocity.set(0, 0, this.type.stats.speed).applyQuaternion(this.alienGroup.quaternion)
+					this.launchTimer = Math.max(0, this.launchTimer - dt)
+				} else {
+					this.velocity.set(0, 0, 40).applyQuaternion(this.alienGroup.quaternion)
+					this.launchDuration = Math.max(0, this.launchDuration - dt)
+				}
+			} else {
+				this.stopTimer = Math.max(0, this.stopTimer - dt)
+				this.velocity.set(0, 0, 0)
+			}
+			
 		} else if (this.type.name == "flyer") {
 			if(!this.diving){
 				if(!this.orbiting && Math.hypot(this.position.x - target.x, this.position.z - target.z) <= this.orbitRadius){
@@ -218,8 +232,11 @@ export class Alien {
 		const dy = this.position.y - player.position.y;
 
 		const enemyRadius = this.type.name === "runner" ? 1.5 : 2;
-
-		return Math.hypot(dx, dz) <= enemyRadius + playerRadius && dy <= enemyRadius + playerRadius;
+		let hit = Math.hypot(dx, dz) <= enemyRadius + playerRadius && dy <= enemyRadius + playerRadius;
+		if(hit){
+			this.stopTimer = 3;
+		}
+		return hit;
 	}
 
 	checkRoverCollision(rover, roverRadius = 8) {
@@ -228,8 +245,11 @@ export class Alien {
 		const dy = this.position.y - rover.group.position.y;
 
 		const enemyRadius = this.type.name === "runner" ? 1.5 : 2;
-
-		return Math.hypot(dx, dz) <= enemyRadius + roverRadius && dy <= enemyRadius + 1;
+		let hit = Math.hypot(dx, dz) <= enemyRadius + roverRadius && dy <= enemyRadius + 1;
+		if(hit){
+			this.stopTimer = 3;
+		}
+		return hit;
 	}
 
 	moveTowards(target, maxDistance) {

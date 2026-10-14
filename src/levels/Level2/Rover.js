@@ -212,7 +212,7 @@ export class Rover {
 		this.steer = THREE.MathUtils.damp(
 			this.steer,
 			Number(left) - Number(right),
-			8,
+			20,
 			STEP
 		)
 		const gas = this.inputEnabled && keys.has('KeyW')
@@ -222,7 +222,7 @@ export class Rover {
 			(gas && this.speed < -0.5)
 		let force = 0
 		if (!braking) {
-			if (gas && this.speed < 18) force = 2100
+			if (gas && this.speed < 25) force = 2100
 			else if (reverse && this.speed > -6) force = -1300
 		}
 		if (gas || reverse || left || right) this.body.wakeUp()
