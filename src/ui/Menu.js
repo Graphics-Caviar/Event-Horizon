@@ -53,7 +53,9 @@ export class Menu {
 				onTestLevel2?.()
 			}
 		})
-		const level3Card = document.querySelector('.level-card[data-level="3"]')
+		const level3Card = document.querySelector(
+			'.level-card[data-level="3"]'
+		)
 		level3Card?.setAttribute('tabindex', '0')
 		level3Card?.setAttribute('role', 'button')
 		level3Card?.addEventListener('click', () => onTestLevel3?.())
