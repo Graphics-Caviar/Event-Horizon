@@ -125,10 +125,10 @@ export class PilotWalk {
 						float h = walkSize.y;
 						float runBlend = walkRunBlend;
 						float stride = walkStride;
-						float stance = mix(walkStance, max(0.48, walkStance - 0.09), runBlend);
-						float liftHeight = walkLift * mix(1.0, 1.5, runBlend);
-						float armStrength = walkArm * mix(1.0, 1.7, runBlend);
-						float swayStrength = walkSway * mix(1.0, 1.2, runBlend);
+						float stance = mix(walkStance, max(0.43, walkStance - 0.16), runBlend);
+						float liftHeight = walkLift * mix(1.0, 3.6, runBlend);
+						float armStrength = mix(walkArm, max(walkArm * 2.8, 0.48), runBlend);
+						float swayStrength = walkSway * mix(1.0, 1.9, runBlend);
 						vec3 q = ((meshToWalk * vec4(p, 1.0)).xyz - walkMin - vec3(walkSize.x * 0.5, 0.0, walkSize.z * 0.5)) / h;
 						q.z -= walkJoints.w; q.x -= walkCenterX;
 						float side = q.x < 0.0 ? 1.0 : -1.0;
@@ -190,11 +190,12 @@ export class PilotWalk {
 						// Transfer weight over the supporting hip while shoulders counter-turn.
 						// Fade this above the knees so planted feet remain in place.
 						float torso = smoothstep(0.30, 0.58, rest.y);
-						q.xz = gaitRotation(cos(walkPhase) * 0.025 * mix(1.0, 1.25, runBlend) * torso * walkAmount) * q.xz;
+						q.xz = gaitRotation(cos(walkPhase) * 0.025 * mix(1.0, 2.2, runBlend) * torso * walkAmount) * q.xz;
 						q.x += sin(walkPhase) * swayStrength * smoothstep(0.22, 0.48, rest.y) * walkAmount;
-						// Running carries the torso slightly forward instead of only
-						// changing the cadence of the walk cycle.
-						q.yz = gaitRotation(-0.04 * runBlend * torso * walkAmount) * (q.yz - vec2(0.52, 0.0)) + vec2(0.52, 0.0);
+						// Run posture: a clearer forward pitch and a small torso bounce.
+						q.yz = gaitRotation(0.32 * runBlend * torso * walkAmount) * (q.yz - vec2(0.52, 0.0)) + vec2(0.52, 0.0);
+						float runBounce = abs(sin(walkPhase)) * 0.026 * runBlend * walkAmount;
+						q.y += runBounce * smoothstep(0.36, 0.62, rest.y);
 						q.z += sin(walkPhase - rest.y * 5.0) * 0.012 * fabric * (1.0 - smoothstep(0.15, 0.55, rest.y)) * walkAmount;
  q.y += pelvis * walkAmount;
 						// A short anticipation, knee tuck, and held airborne pose make
@@ -247,7 +248,7 @@ export class PilotWalk {
 						)
 				}
 				material.customProgramCacheKey = () =>
-					'level2-pilot-animation-v7'
+					'level2-pilot-animation-v8'
 				return material
 			}
 			mesh.material = Array.isArray(mesh.material)
@@ -311,25 +312,18 @@ export class PilotWalk {
 			delta
 		)
 		if (jumping) this.jumpElapsed += delta
-		this.uniforms.walkJumpTime.value = Math.min(
-			this.jumpElapsed,
-			1.0
-		)
+		this.uniforms.walkJumpTime.value = Math.min(this.jumpElapsed, 1.0)
 
-		// Keep the stride tied to the chosen gait rather than guessing from
-		// speed alone: a quick walk remains a walk, while Shift selects a
-		// distinct running cycle. Actual travel still advances the phase.
+		// Preserve the established walk stride response. Running explicitly
+		// selects the sprint stride and gets its own shorter contact phase,
+		// stronger arm pump, higher leg lift, and forward-leaning torso.
 		const speed = delta > 0 ? distance / delta : 0
 		const strideTarget = running
 			? this.profile.sprint
 			: THREE.MathUtils.lerp(
 					this.profile.stride,
 					this.profile.sprint,
-					THREE.MathUtils.clamp(
-						(speed - 2.8) / 2.8,
-						0,
-						1
-					)
+					THREE.MathUtils.clamp((speed - 2.8) / 2.8, 0, 1)
 				)
 		this.uniforms.walkStride.value = THREE.MathUtils.damp(
 			this.uniforms.walkStride.value,
@@ -339,7 +333,7 @@ export class PilotWalk {
 		)
 		const stance = THREE.MathUtils.lerp(
 			this.profile.stance,
-			Math.max(0.48, this.profile.stance - 0.09),
+			Math.max(0.43, this.profile.stance - 0.16),
 			this.uniforms.walkRunBlend.value
 		)
 		this.strideLength =
