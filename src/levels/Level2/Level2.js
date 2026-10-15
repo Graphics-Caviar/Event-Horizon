@@ -22,8 +22,8 @@ const MAX_MOVEMENT_SUBSTEP = 0.8
 // On-foot locomotion feel. The pilot carries momentum instead of snapping
 // to a fixed speed and turns through its body; the measured ground speed
 // and turn rate then drive the procedural gait in PilotWalk.
-const WALK_SPEED = 12
-const RUN_SPEED = 20
+const WALK_SPEED = 4
+const RUN_SPEED = 7
 const MOVE_ACCEL_DAMP = 6.5 // approach rate while input is held
 const MOVE_BRAKE_DAMP = 9.5 // decay rate once input is released
 const TURN_DAMP = 11 // heading approach rate while moving
