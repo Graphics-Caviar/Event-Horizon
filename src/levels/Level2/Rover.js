@@ -250,6 +250,20 @@ export class Rover {
 			.add(this.group.position)
 	}
 
+	/** Chassis mass in kg (for scaling world-space impulses). */
+	get mass() {
+		return this.body?.mass() ?? 900
+	}
+
+	/**
+	 * Push the chassis with a world-space impulse (N·s). Used by the
+	 * wormhole suction and alien strikes; a no-op until physics is ready.
+	 */
+	applyImpulse(x, y, z) {
+		if (!this.body || this.disposed) return
+		this.body.applyImpulse({ x, y, z }, true)
+	}
+
 	update(delta) {
 		if (!this.vehicle || this.disposed) return
 		this._readHazards()
