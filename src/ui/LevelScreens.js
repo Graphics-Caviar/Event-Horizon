@@ -60,7 +60,6 @@ export class LevelScreens {
 		this.noteEl = document.getElementById('results-note')
 		this.retryBtn = document.getElementById('btn-results-retry')
 		this.resumeBtn = document.getElementById('btn-pause-resume')
-		
 
 		const bind = (id, handler) =>
 			document
@@ -93,7 +92,7 @@ export class LevelScreens {
 		this.titleEl.textContent = copy.title
 		this.titleEl.dataset.tone = copy.tone
 		this.subtitleEl.textContent = copy.subtitle
-		if(result.outcome == "overrun"){
+		if (result.outcome == 'overrun') {
 			this.retryBtn.textContent = 'TRY AGAIN'
 		}
 		this.scoreEl.textContent = Math.round(
