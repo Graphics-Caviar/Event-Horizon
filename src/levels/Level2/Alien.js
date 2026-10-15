@@ -223,7 +223,7 @@ export class Alien {
 			distance > COMBAT_EXIT_DISTANCE) {
 			this.combatMode = false;
 			if (this.collider) {
-				this.collider.enabled = false;
+				this.collider.enabled = true;
 			}
 			this._walkSpeed = 0;
 			this.velocity.set(0, 0, 0);

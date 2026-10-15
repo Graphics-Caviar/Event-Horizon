@@ -1452,12 +1452,16 @@ export class Level2 extends Level {
 		})
 		this.dust.update(delta)
 		for (const alien of this.aliens) {
-			alien.update(delta, this.playerRoot.position)
-			if (alien.checkPlayerCollision(this.playerRoot) || alien.checkRoverCollision(this.rover)) {
+			alien.update(delta, this.playerRoot.position);
+
+			if (!alien.combatMode) continue;
+
+			if (
+				alien.checkPlayerCollision(this.playerRoot) ||
+				alien.checkRoverCollision(this.rover)
+			) {
 				this.playerHP = Math.max(this.playerHP - 1, 0);
-				console.log(this.playerHP)
 			}
-			
 		}
 		this._updateMovementFeedback(delta)
 		this._checkPortalArrival()
