@@ -3,14 +3,17 @@ import * as THREE from 'three'
 /**
  * Level 2 escape portal — the mission's win condition.
  *
- * A stargate-style ring standing on the terrain, built entirely from
- * procedural geometry (the project ships no portal asset): a faceted
- * metal torus with emissive glow, an additive halo, a slowly swirling
- * vortex disc, orbiting stud lights, a tall beacon beam that marks it
- * from across the planet, a ground ring and a point light.
+ * A wormhole gate standing on the terrain, built entirely from procedural
+ * geometry (the project ships no portal asset): a faceted metal torus with
+ * emissive glow, an additive halo, a vortex disc whose bands stream inward
+ * around a dark throat, motes spiraling into the hole, orbiting stud
+ * lights, a tall beacon beam that marks it from across the planet, a
+ * ground ring and a point light.
  *
- * Level 2 watches the player's distance to the gate; playArrival()
- * fires the burst when the player steps through it.
+ * Level 2 watches the player's distance to the gate and pulls anything
+ * nearby in: suckLevel (0..1, set every frame while the suction is
+ * active) spins the vortex up and brightens the infall; playArrival()
+ * fires the burst when the player finally steps through.
  */
 
 const RING_RADIUS = 8
@@ -32,23 +35,35 @@ void main() {
 const FRAGMENT = `
 uniform float uTime;
 uniform float uBurst;
+uniform float uSuck;
 varying vec2 vUv;
 void main() {
 	vec2 p = vUv * 2.0 - 1.0;
 	float r = length(p);
 	float angle = atan(p.y, p.x);
-	// Two counter-rotating bands drift around the disc; the arrival
-	// burst spins them up and brightens everything.
-	float spin = uTime * (1.5 + uBurst * 5.0);
-	float swirl = sin(angle * 3.0 + spin - r * 9.0);
-	float ribbons = sin(angle * 5.0 - spin * 0.6 + r * 14.0);
-	float pattern = swirl * 0.5 + ribbons * 0.5;
+	// Wormhole throat: bands stream inward while counter-rotating spiral
+	// arms shear them; the suction spins and brightens everything up.
+	float spin = uTime * (1.2 + uBurst * 4.0 + uSuck * 2.5);
+	float flow = fract(r * 3.0 - uTime * (0.9 + uSuck * 1.4 + uBurst * 2.0));
+	float band = smoothstep(0.0, 0.45, flow) * smoothstep(1.0, 0.55, flow);
+	float arms = sin(angle * 3.0 + spin + r * 7.0) * 0.5 + 0.5;
+	float arms2 = sin(angle * 5.0 - spin * 0.7 - r * 11.0) * 0.5 + 0.5;
+	float m = band * (0.45 + 0.55 * arms) + arms2 * 0.25;
+	vec3 deep = vec3(0.02, 0.05, 0.16);
+	vec3 mid = vec3(0.10, 0.45, 0.85);
+	vec3 hot = vec3(0.75, 0.96, 1.0);
+	vec3 color = mix(deep, mid, smoothstep(0.0, 0.6, r));
+	color = mix(color, hot, clamp(m, 0.0, 1.0) * smoothstep(0.15, 0.75, r));
+	// Violet accretion shading toward the rim.
+	color += vec3(0.25, 0.10, 0.45) * smoothstep(0.55, 1.0, r) * 0.5;
+	// The throat itself stays dark: with additive blending that reads as
+	// a hole punched through space, not a glowing disc.
+	float throat = 1.0 - smoothstep(0.10, 0.30, r);
+	color *= 1.0 - throat * 0.85;
 	float glow = smoothstep(1.0, 0.1, r);
 	float rim = smoothstep(0.6, 1.0, r);
-	vec3 deep = vec3(0.05, 0.34, 0.6);
-	vec3 bright = vec3(0.72, 0.97, 1.0);
-	vec3 color = mix(deep, bright, clamp(pattern * 0.5 + 0.5, 0.0, 1.0));
-	float alpha = glow * (0.2 + 0.28 * pattern) + rim * 0.25 + uBurst * 0.5;
+	float alpha =
+		glow * (0.5 + 0.34 * m) + rim * 0.25 + uBurst * 0.5 + uSuck * 0.15;
 	gl_FragColor = vec4(color * (1.0 + uBurst * 1.5), alpha);
 }
 `
@@ -64,6 +79,8 @@ export class Portal {
 		this.level = level
 		this.time = 0
 		this._arrivalT = 0
+		// 0..1, driven by Level2 while its suction field is pulling things in.
+		this.suckLevel = 0
 
 		this.group = new THREE.Group()
 		this.group.name = 'escape-portal'
@@ -137,6 +154,7 @@ export class Portal {
 		this.vortexUniforms = {
 			uTime: { value: 0 },
 			uBurst: { value: 0 },
+			uSuck: { value: 0 },
 		}
 		const vortex = new THREE.Mesh(
 			level.own(
@@ -160,6 +178,69 @@ export class Portal {
 		vortex.position.y = centerY
 		vortex.renderOrder = 5
 		this.group.add(vortex)
+
+		// --- Dark throat -------------------------------------------------
+		// A near-black disc just behind the vortex; against the additive
+		// swirl it reads as an actual hole punched through space.
+		this.throatMaterial = level.own(
+			new THREE.MeshBasicMaterial({
+				color: 0x010409,
+				transparent: true,
+				opacity: 0.92,
+			})
+		)
+		const throat = new THREE.Mesh(
+			level.own(
+				new THREE.CircleGeometry(
+					RING_RADIUS - RING_TUBE * 0.4,
+					48
+				)
+			),
+			this.throatMaterial
+		)
+		throat.position.set(0, centerY, -0.06)
+		throat.renderOrder = 3
+		this.group.add(throat)
+
+		// --- Infall streaks -----------------------------------------------
+		// Motes spiraling from the rim into the throat; they sell the
+		// suction far better than the disc alone.
+		const STREAK_COUNT = 90
+		this._streakCount = STREAK_COUNT
+		this._streakRadius = new Float32Array(STREAK_COUNT)
+		this._streakAngle = new Float32Array(STREAK_COUNT)
+		this._streakSpeed = new Float32Array(STREAK_COUNT)
+		this._streakPositions = new Float32Array(STREAK_COUNT * 3)
+		for (let i = 0; i < STREAK_COUNT; i++) {
+			this._streakAngle[i] = Math.random() * Math.PI * 2
+			this._streakRadius[i] =
+				RING_RADIUS * (0.3 + Math.random() * 0.85)
+			this._streakSpeed[i] = 1.6 + Math.random() * 2.4
+		}
+		this.streakGeometry = level.own(new THREE.BufferGeometry())
+		this.streakGeometry.setAttribute(
+			'position',
+			new THREE.BufferAttribute(this._streakPositions, 3)
+		)
+		this.streakMaterial = level.own(
+			new THREE.PointsMaterial({
+				color: COLOR_CORE,
+				size: 0.42,
+				sizeAttenuation: true,
+				transparent: true,
+				opacity: 0.85,
+				blending: THREE.AdditiveBlending,
+				depthWrite: false,
+			})
+		)
+		this.streaks = new THREE.Points(
+			this.streakGeometry,
+			this.streakMaterial
+		)
+		this.streaks.position.set(0, centerY, 0.35)
+		this.streaks.renderOrder = 6
+		this.streaks.frustumCulled = false
+		this.group.add(this.streaks)
 
 		// --- Stud lights slowly orbiting the ring -----------------------
 		this.detail = new THREE.Group()
@@ -257,10 +338,14 @@ export class Portal {
 		if (this._arrivalT > 0) {
 			this._arrivalT = Math.max(0, this._arrivalT - delta)
 		}
+		// Decays so the swirl winds down gracefully if suction stops.
+		this.suckLevel = Math.max(0, this.suckLevel - delta * 2)
 		const burst = THREE.MathUtils.clamp(this._arrivalT / 1.5, 0, 1)
+		const suck = THREE.MathUtils.clamp(this.suckLevel, 0, 1)
 
 		this.vortexUniforms.uTime.value = this.time
 		this.vortexUniforms.uBurst.value = burst
+		this.vortexUniforms.uSuck.value = suck
 		this.detail.rotation.z += delta * (0.25 + burst * 2.0)
 		this.structureMaterial.emissiveIntensity =
 			0.4 + Math.sin(this.time * 2.2) * 0.1 + burst * 1.2
@@ -275,6 +360,39 @@ export class Portal {
 		)
 		this.light.intensity =
 			3.6 + Math.sin(this.time * 1.8) * 0.7 + burst * 16
+		this.throatMaterial.opacity =
+			0.86 + Math.sin(this.time * 1.4) * 0.05 - suck * 0.1
+
+		// Motes spiral inward and respawn at the rim.
+		const streakSpin = 1.4 + burst * 5 + suck * 3
+		for (let i = 0; i < this._streakCount; i++) {
+			this._streakRadius[i] -=
+				this._streakSpeed[i] * delta * (1 + suck * 2.2)
+			if (this._streakRadius[i] < 0.4) {
+				this._streakRadius[i] =
+					RING_RADIUS *
+					(0.85 + Math.random() * 0.3)
+				this._streakAngle[i] =
+					Math.random() * Math.PI * 2
+			}
+			this._streakAngle[i] +=
+				(streakSpin * delta) /
+				Math.max(0.5, this._streakRadius[i])
+			const p = i * 3
+			this._streakPositions[p] =
+				Math.cos(this._streakAngle[i]) *
+				this._streakRadius[i]
+			this._streakPositions[p + 1] =
+				Math.sin(this._streakAngle[i]) *
+				this._streakRadius[i]
+			this._streakPositions[p + 2] = (i % 5) * 0.04
+		}
+		this.streakGeometry.attributes.position.needsUpdate = true
+		this.streakMaterial.opacity =
+			0.65 +
+			Math.sin(this.time * 2.1) * 0.1 +
+			burst * 0.3 +
+			suck * 0.25
 	}
 
 	/** Fires the celebration burst when the player steps through. */

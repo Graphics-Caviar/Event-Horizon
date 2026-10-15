@@ -19,6 +19,14 @@ const MAX_WALK_SLOPE = 60
 const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
 
+// Wormhole suction around the escape gate: inside this radius the gate
+// pulls the rover and the pilot toward the ring, gently at the rim and
+// irresistibly close in. Weak enough to drive out of, strong enough that
+// idling near the gate means getting eaten — which is how the run ends.
+const SUCTION_RADIUS = 60
+const SUCTION_MAX_ROVER = 24 // m/s² on the chassis at full pull
+const SUCTION_MAX_PILOT = 16
+
 // On-foot locomotion feel. The pilot carries momentum instead of snapping
 // to a fixed speed and turns through its body; the measured ground speed
 // and turn rate then drive the procedural gait in PilotWalk.
@@ -118,11 +126,12 @@ export class Level2 extends Level {
 		this.roverSite = this.landingSite
 			.clone()
 			.add(new THREE.Vector3(95, 0, -55))
-		// The escape portal waits across the valley, well away from the
-		// rover and the wreck, so reaching it means a real traversal.
+		// The escape portal waits far across the valley, well away from the
+		// rover and the wreck, so reaching it means a real traversal — and
+		// its suction field is felt long before the gate itself is reached.
 		this.portalSite = this.landingSite
 			.clone()
-			.add(new THREE.Vector3(-150, 0, 135))
+			.add(new THREE.Vector3(-238, 0, 212))
 
 		const center = this.landingSite
 			.clone()
@@ -265,6 +274,11 @@ export class Level2 extends Level {
 		this._endTimer = null
 		this._eWasDown = false
 		this._lastBoardToggle = 0
+		// Wormhole suction + camera impact shake state.
+		this._suckShake = 0
+		this._impactShake = 0
+		this._suckPuff = 0
+		this._hitScratch = new THREE.Vector3()
 		this.keys = new Set()
 		this._onKeyDown = (e) => this.keys.add(e.code)
 		this._onKeyUp = (e) => this.keys.delete(e.code)
@@ -1509,6 +1523,143 @@ export class Level2 extends Level {
 		}
 	}
 
+	/**
+	 * The wormhole pulls everything nearby in: the rover through its
+	 * physics body, the pilot through direct displacement. Pull strength
+	 * ramps steeply, so the rim is an escapeable tug and the throat is a
+	 * one-way trip — exactly how the run is meant to finish.
+	 */
+	_applyWormholeSuction(delta) {
+		if (this.completed) {
+			this.portal.suckLevel = 0
+			this._suckShake = 0
+			return
+		}
+		const portal = this.portal.group.position
+		const falloffAt = (x, z) => {
+			const d = Math.hypot(x - portal.x, z - portal.z)
+			if (d >= SUCTION_RADIUS) return 0
+			return Math.pow(1 - d / SUCTION_RADIUS, 1.8)
+		}
+
+		let strongest = 0
+
+		// The rover is always fair game, driven or parked.
+		const roverPos = this.rover.group.position
+		const roverPull = falloffAt(roverPos.x, roverPos.z)
+		if (roverPull > 0) {
+			strongest = Math.max(strongest, roverPull)
+			const dx = portal.x - roverPos.x
+			const dz = portal.z - roverPos.z
+			const d = Math.hypot(dx, dz) || 1
+			const nx = dx / d
+			const nz = dz / d
+			// A tangential swirl drags it into a spiral, not a beeline.
+			const pull =
+				SUCTION_MAX_ROVER *
+				roverPull *
+				this.rover.mass *
+				delta
+			const swirl = pull * 0.35
+			this.rover.applyImpulse(
+				nx * pull - nz * swirl,
+				0,
+				nz * pull + nx * swirl
+			)
+		}
+
+		// The pilot on foot feels the draft too; boarded rides the rover.
+		if (!this.boarded) {
+			const p = this.playerRoot.position
+			const pilotPull = falloffAt(p.x, p.z)
+			if (pilotPull > 0) {
+				strongest = Math.max(strongest, pilotPull)
+				const dx = portal.x - p.x
+				const dz = portal.z - p.z
+				const d = Math.hypot(dx, dz) || 1
+				const nx = dx / d
+				const nz = dz / d
+				const pull =
+					SUCTION_MAX_PILOT * pilotPull * delta
+				const swirl = pull * 0.35
+				p.x += nx * pull - nz * swirl
+				p.z += nz * pull + nx * swirl
+				this._syncPlayerToTerrain()
+				// Dust whipping past sells the inflow.
+				this._suckPuff -= delta
+				if (this._suckPuff <= 0 && pilotPull > 0.25) {
+					this._suckPuff = 0.4
+					this.dust.spawnBurst(
+						{
+							x: p.x + nx * 4,
+							y: p.y,
+							z: p.z + nz * 4,
+						},
+						{
+							count: 5,
+							strength: 2.4,
+							spread: 1.6,
+							size: 0.8,
+							upBias: 0.2,
+						}
+					)
+				}
+			}
+		}
+
+		this.portal.suckLevel = strongest
+		this._suckShake = strongest * 0.22
+	}
+
+	/** Keep fighting aliens from stacking into one blob. */
+	_separateAliens() {
+		const aliens = this.aliens
+		for (let i = 0; i < aliens.length; i++) {
+			const a = aliens[i]
+			if (!a.combatMode || a.smashed || a.kind === 'flyer')
+				continue
+			for (let j = i + 1; j < aliens.length; j++) {
+				const b = aliens[j]
+				if (
+					!b.combatMode ||
+					b.smashed ||
+					b.kind === 'flyer'
+				)
+					continue
+				const dx = b.position.x - a.position.x
+				const dz = b.position.z - a.position.z
+				const min = a.radius + b.radius
+				const d = Math.hypot(dx, dz)
+				if (d >= min || d < 0.001) continue
+				const push = (min - d) / 2
+				const nx = dx / d
+				const nz = dz / d
+				a.position.x -= nx * push
+				a.position.z -= nz * push
+				b.position.x += nx * push
+				b.position.z += nz * push
+			}
+		}
+	}
+
+	/** Hull damage from a bite or talon strike; true when it was fatal. */
+	_applyAlienHit(amount = 1) {
+		this.playerHP = Math.max(this.playerHP - amount, 0)
+		this.damageCooldown = 0.8
+		this._flashDamage()
+		this._updateLevelHUD()
+		if (this.playerHP <= 0) {
+			this._gameOver()
+			return true
+		}
+		return false
+	}
+
+	/** Impact shake for the camera; the strongest request this frame wins. */
+	_requestShake(amount) {
+		this._impactShake = Math.max(this._impactShake, amount)
+	}
+
 	/** Did the pilot (or the driven rover) reach the portal gate? */
 	_checkPortalArrival() {
 		if (this.completed) return
@@ -1617,6 +1768,7 @@ export class Level2 extends Level {
 		// rover guide retires once the rover has been boarded, and the
 		// portal guide takes over to lead the way to the escape gate.
 		this.elapsedPlayTime += delta
+		this._applyWormholeSuction(delta)
 		this.portal.update(delta)
 		this.guide.update(delta, this.playerRoot.position, {
 			active: !this.boarded && !this._hasBoarded,
@@ -1630,27 +1782,86 @@ export class Level2 extends Level {
 		for (const alien of this.aliens) {
 			alien.update(delta, this.playerRoot.position)
 
-			if (!alien.combatMode || this.completed) continue
-			if (this.damageCooldown > 0) continue
+			if (this.completed || !alien.combatMode) continue
 
-			const hitPlayer = alien.checkPlayerCollision(
-				this.playerRoot
-			)
-			const hitRover = alien.checkRoverCollision(this.rover)
-
-			if (hitPlayer || hitRover) {
-				this.playerHP = Math.max(this.playerHP - 1, 0)
-				this.damageCooldown = 0.8
-
-				this._flashDamage()
-				this._updateLevelHUD()
-
-				if (this.playerHP <= 0) {
-					this._gameOver()
-					return
+			// A flyer's talon pass connects: hull damage plus a shove.
+			if (alien.pendingStrike) {
+				alien.pendingStrike = false
+				if (this.damageCooldown <= 0) {
+					if (this._applyAlienHit(1)) return
+					const away = this._hitScratch
+						.copy(this.playerRoot.position)
+						.sub(alien.position)
+					away.y = 0
+					if (away.lengthSq() > 0.001)
+						away.normalize()
+					if (this.boarded) {
+						this.rover.applyImpulse(
+							away.x *
+								this.rover
+									.mass *
+								3.2,
+							0,
+							away.z *
+								this.rover
+									.mass *
+								3.2
+						)
+					} else {
+						this.velocity.addScaledVector(
+							away,
+							6.5
+						)
+					}
 				}
 			}
+
+			// Ramming at speed hurts the alien; slow contact earns a snap.
+			const roverContact = alien.checkRoverCollision(
+				this.rover
+			)
+			if (roverContact === 'ram') {
+				this.dust.spawnBurst(
+					{
+						x: alien.position.x,
+						y: this.planet.heightAt(
+							alien.position.x,
+							alien.position.z
+						),
+						z: alien.position.z,
+					},
+					{
+						count: 10,
+						strength: 1.9,
+						spread: 2,
+						size: 1,
+						upBias: 0.6,
+					}
+				)
+				this.audio?.playImpact()
+				this._requestShake(0.45)
+			} else if (
+				roverContact === 'bite' &&
+				this.damageCooldown <= 0
+			) {
+				if (this._applyAlienHit(1)) return
+			}
+
+			if (
+				this.damageCooldown <= 0 &&
+				alien.checkPlayerCollision(this.playerRoot)
+			) {
+				if (this._applyAlienHit(1)) return
+				// Knock the pilot back out of the jaws.
+				const away = this._hitScratch
+					.copy(this.playerRoot.position)
+					.sub(alien.position)
+				away.y = 0
+				if (away.lengthSq() > 0.001) away.normalize()
+				this.velocity.addScaledVector(away, 6.5)
+			}
 		}
+		this._separateAliens()
 		this._updateMovementFeedback(delta)
 		this._checkPortalArrival()
 
@@ -1775,6 +1986,16 @@ export class Level2 extends Level {
 
 			camera.lookAt(this._lookAt)
 		}
+
+		// Wormhole draft + impact kicks, applied after lookAt so they
+		// jitter the view without fighting the tracking.
+		const shake = this._suckShake + this._impactShake
+		if (shake > 0.002) {
+			camera.position.x += (Math.random() - 0.5) * shake
+			camera.position.y += (Math.random() - 0.5) * shake
+			camera.position.z += (Math.random() - 0.5) * shake
+		}
+		this._impactShake = 0
 
 		const dx =
 			this.playerRoot.position.x - this.rover.group.position.x
