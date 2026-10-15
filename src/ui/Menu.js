@@ -2,6 +2,7 @@ export class Menu {
 	constructor({
 		onPlay,
 		onTestLevel2,
+		onTestLevel3,
 		onLeaderboard,
 		onSignOut,
 		audioManager,
@@ -50,6 +51,18 @@ export class Menu {
 			if (event.key === 'Enter' || event.key === ' ') {
 				event.preventDefault()
 				onTestLevel2?.()
+			}
+		})
+		const level3Card = document.querySelector(
+			'.level-card[data-level="3"]'
+		)
+		level3Card?.setAttribute('tabindex', '0')
+		level3Card?.setAttribute('role', 'button')
+		level3Card?.addEventListener('click', () => onTestLevel3?.())
+		level3Card?.addEventListener('keydown', (event) => {
+			if (event.key === 'Enter' || event.key === ' ') {
+				event.preventDefault()
+				onTestLevel3?.()
 			}
 		})
 		this.accountEl = document.getElementById('menu-account')
@@ -157,10 +170,10 @@ export class Menu {
 		)
 		for (const card of this.levelCards) {
 			const level = Number(card.dataset.level)
-			// Level 2 is temporarily available for direct gameplay testing.
+			// Terrain levels are available for direct gameplay testing.
 			card.classList.toggle(
 				'is-locked',
-				level !== 2 && level > unlocked
+				level !== 2 && level !== 3 && level > unlocked
 			)
 		}
 	}

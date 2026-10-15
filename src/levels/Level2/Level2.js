@@ -84,7 +84,14 @@ const shortestAngle = (target, current) => {
  * Alien combat remains deliberately out of scope for this cinematic milestone.
  */
 export class Level2 extends Level {
-	constructor(game, { transition = {}, onEnd = null } = {}) {
+	constructor(
+		game,
+		{
+			transition = {},
+			onEnd = null,
+			planetClass = AlienPlanet,
+		} = {}
+	) {
 		super(game, 2)
 		this.state = game.gameState
 		this.state.currentLevel = 2
@@ -123,7 +130,7 @@ export class Level2 extends Level {
 		center.y = this.baseY
 
 		this.gameplayColliders = []
-		this.planet = new AlienPlanet(this, {
+		this.planet = new planetClass(this, {
 			center,
 			baseY: this.baseY,
 			size: 1100,
@@ -1407,7 +1414,7 @@ export class Level2 extends Level {
 				time,
 				hull: Math.max(0, this.state.integrity),
 				progress: 1,
-				level: 2,
+				level: this.level,
 			})
 		}, 1500)
 	}

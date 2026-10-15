@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { Level1 } from '../levels/Level1/Level1.js'
 import { clearScene } from './Level.js'
 import { Level2 } from '../levels/Level2/Level2.js'
+import { Level3 } from '../levels/Level3/Level3.js'
 import { Level1ToLevel2Cutscene } from '../cutscenes/Level1ToLevel2Cutscene.js'
 import { SceneManager } from './SceneManager.js'
 import { AssetManager } from './AssetManager.js'
@@ -72,6 +73,7 @@ export class Game {
 		this.menu = new Menu({
 			onPlay: () => this._onPlay(),
 			onTestLevel2: () => this._testLevel2(),
+			onTestLevel3: () => this._testLevel3(),
 			onLeaderboard: () => this._showLeaderboard(),
 			onSignOut: () => this._signOut(),
 			audioManager: this.audio,
@@ -478,6 +480,10 @@ export class Game {
 	 * result screen never waits on the network.
 	 */
 	async _onLevelEnd(result) {
+		if (result.won && result.level === 2) {
+			this._testLevel3()
+			return
+		}
 		// A successful escape is now a story transition rather than a results
 		// screen. Persist the Level 1 run in the background, then hand the exact
 		// exit transform/momentum into the cinematic. Failures keep the existing
@@ -582,8 +588,25 @@ export class Game {
 	}
 
 	/** Results-screen retry: relaunch whichever level was just played. */
+	_testLevel3() {
+		this.menu.hideAll()
+		this.levelScreens.hideAll()
+		this.currentLevel?.dispose()
+		this.currentLevel = null
+		this.menuBackground?.dispose()
+		this.menuBackground = null
+		clearScene(this.sceneManager.scene)
+		this.gameState.reset()
+		document.activeElement?.blur?.()
+		this._activeLevelNumber = 3
+		this.currentLevel = new Level3(this, {
+			onEnd: (result) => this._onLevelEnd(result),
+		})
+	}
+
 	_restartLevel() {
-		if (this._activeLevelNumber === 2) this._testLevel2()
+		if (this._activeLevelNumber === 3) this._testLevel3()
+		else if (this._activeLevelNumber === 2) this._testLevel2()
 		else this._startLevel1()
 	}
 

@@ -150,7 +150,11 @@ export class AlienPlanet {
 		this._buildOutcrops()
 		this._buildGravel()
 		this._buildSky()
-		this.lava = new LavaStream(this)
+		this.lava = this._buildLava()
+	}
+
+	_buildLava() {
+		return new LavaStream(this)
 	}
 
 	_heightFunction(x, z) {
