@@ -29,8 +29,11 @@ const MOVE_BRAKE_DAMP = 9.5 // decay rate once input is released
 const TURN_DAMP = 11 // heading approach rate while moving
 const U_TURN_DAMP = 16 // ... and on reversals, so 180s stay playable
 const U_TURN_ANGLE = 2 // radians; beyond this a turn counts as a reversal
-const JUMP_SPEED = 10.5 // takeoff vertical speed (units/s)
-const GRAVITY = 30 // keeps the hop ~1.7 units high
+
+const BASE_GRAVITY = 30 // gravity at multiplier 1 (units/s^2)
+const JUMP_HEIGHT = 1.6 // peak of a jump at normal gravity
+const MAX_JUMP_HEIGHT = 5 // low-gravity jumps are capped here, not 1 / g
+const MIN_GRAVITY_MULT = 0.1 // the pilot never gets zero/negative gravity
 const AIR_CONTROL = 0.35 // input authority while airborne
 const AIR_DRAG = 0.12 // horizontal decay while airborne without input
 const PIVOT_ANGLE = 0.5 // min facing error before turning in place
@@ -1102,6 +1105,22 @@ export class Level2 extends Level {
 		)
 	}
 
+	_jumpGravityMult() {
+		return Math.max(
+			this.hazards.gravityMultiplierAt(
+				this.playerRoot.position
+			),
+			MIN_GRAVITY_MULT
+		)
+	}
+
+	_startJump() {
+		const g = this._jumpGravityMult()
+		const peak = Math.min(JUMP_HEIGHT / g, MAX_JUMP_HEIGHT)
+		this._verticalSpeed = Math.sqrt(2 * BASE_GRAVITY * g * peak)
+		this._airborne = true
+	}
+
 	_updatePlayerMovement(delta) {
 		const startX = this.playerRoot.position.x
 		const startZ = this.playerRoot.position.z
@@ -1135,8 +1154,7 @@ export class Level2 extends Level {
 		// gravity takes over until the feet touch terrain again.
 		const jumpDown = this.keys.has('Space')
 		if (jumpDown && !this._jumpWasDown && !this._airborne) {
-			this._airborne = true
-			this._verticalSpeed = JUMP_SPEED
+			this._startJump()
 		}
 		this._jumpWasDown = jumpDown
 
@@ -1270,7 +1288,8 @@ export class Level2 extends Level {
 		if (this._airborne) {
 			// Ballistic arc: integrate vertical speed and land when the
 			// feet fall back through the terrain surface.
-			this._verticalSpeed -= GRAVITY * delta
+			this._verticalSpeed -=
+				BASE_GRAVITY * this._jumpGravityMult() * delta
 			this.playerRoot.position.y +=
 				this._verticalSpeed * delta
 			const groundY =
@@ -1278,6 +1297,12 @@ export class Level2 extends Level {
 					this.playerRoot.position.x,
 					this.playerRoot.position.z
 				) + (this.pilotWalk?.footOffset ?? 0)
+			if (
+				this._verticalSpeed > 0 &&
+				this.playerRoot.position.y < groundY
+			) {
+				this.playerRoot.position.y = groundY
+			}
 			if (
 				this._verticalSpeed <= 0 &&
 				this.playerRoot.position.y <= groundY
