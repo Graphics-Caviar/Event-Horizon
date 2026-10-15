@@ -25,6 +25,11 @@ const OUTCOMES = {
 		subtitle: 'The asteroid field tore you apart. Steer around the rocks.',
 		tone: 'bad',
 	},
+	overrun: {
+		title: 'OVERRUN',
+		subtitle: 'The aliens overwhelmed you. Try again and watch your surroundings.',
+		tone: 'bad',
+	},
 }
 
 /** 63.4 -> "1:03.4" */
@@ -55,6 +60,7 @@ export class LevelScreens {
 		this.noteEl = document.getElementById('results-note')
 		this.retryBtn = document.getElementById('btn-results-retry')
 		this.resumeBtn = document.getElementById('btn-pause-resume')
+		
 
 		const bind = (id, handler) =>
 			document
@@ -87,6 +93,9 @@ export class LevelScreens {
 		this.titleEl.textContent = copy.title
 		this.titleEl.dataset.tone = copy.tone
 		this.subtitleEl.textContent = copy.subtitle
+		if(result.outcome == "overrun"){
+			this.retryBtn.textContent = 'TRY AGAIN'
+		}
 		this.scoreEl.textContent = Math.round(
 			result.score
 		).toLocaleString()

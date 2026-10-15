@@ -274,6 +274,10 @@ export class Level2 extends Level {
 		this._vWasDown = false
 		this.hazards = new Hazards(this)
 		this.playerHP = 5
+		this.damageCooldown = 0;
+		this._buildLevelHUD();
+		this._updateLevelHUD();
+		this._buildDamageFlash();
 		// Dev-only handle so automated smoke tests can inspect and drive
 		// the level without a visible viewport; stripped from production
 		// builds because import.meta.env.DEV is a static false there.
@@ -801,6 +805,132 @@ export class Level2 extends Level {
 			pointerEvents: 'none',
 		})
 		document.body.appendChild(this.feedbackEl)
+	}
+
+	_buildLevelHUD() {
+		this.levelHudEl = document.createElement('div');
+
+		Object.assign(this.levelHudEl.style, {
+			position: 'fixed',
+			top: '18px',
+			left: '18px',
+			width: '250px',
+			padding: '16px',
+			boxSizing: 'border-box',
+			zIndex: '32',
+			color: '#dffcff',
+			background: 'rgba(3, 10, 18, 0.82)',
+			border: '1px solid rgba(110, 235, 255, 0.45)',
+			fontFamily: 'monospace',
+			fontSize: '12px',
+			letterSpacing: '0.06em',
+			pointerEvents: 'none',
+		});
+
+		this.levelHudEl.innerHTML = `
+			<div style="color:#75eaff; margin-bottom:14px;">
+				LEVEL 02 // PLANETARY EXODUS
+			</div>
+
+			<div style="margin-bottom:6px;">
+				HP
+				<span id="l2-hp-text"
+					style="float:right;">5 / 5</span>
+			</div>
+
+			<div style="
+				height:8px;
+				background:rgba(255,255,255,0.12);
+				margin-bottom:16px;
+			">
+				<div id="l2-hp-bar" style="
+					height:100%;
+					width:100%;
+					background:#5cffb1;
+					transition:width 120ms linear;
+				"></div>
+			</div>
+
+			<div style="margin-bottom:10px;">
+				ELAPSED TIME
+				<span id="l2-time"
+					style="float:right;">00:00</span>
+			</div>
+
+			<div style="margin-bottom:10px;">
+				SPEED
+				<span id="l2-speed"
+					style="float:right;">0.0 m/s</span>
+			</div>
+
+			<div id="l2-controls" style="
+				margin-top:16px;
+				padding-top:12px;
+				border-top:1px solid rgba(110,235,255,0.25);
+				line-height:1.8;
+				color:rgba(223,252,255,0.75);
+			">
+				V — CHANGE VIEW
+			</div>
+		`;
+
+		document.body.appendChild(this.levelHudEl);
+	}
+
+	_buildDamageFlash() {
+		this.damageFlashEl = document.createElement('div');
+
+		Object.assign(this.damageFlashEl.style, {
+			position: 'fixed',
+			inset: '0',
+			background: 'rgba(255, 0, 0, 0)',
+			pointerEvents: 'none',
+			zIndex: '999',
+			transition: 'background 0.08s ease-out'
+		});
+
+		document.body.appendChild(this.damageFlashEl);
+	}
+
+	_updateLevelHUD() {
+		if (!this.levelHudEl) return;
+
+		const hp = THREE.MathUtils.clamp(this.playerHP, 0, 5);
+		const hpPercent = (hp / 5) * 100;
+
+		const hpText = this.levelHudEl.querySelector('#l2-hp-text');
+		const hpBar = this.levelHudEl.querySelector('#l2-hp-bar');
+		const timeEl = this.levelHudEl.querySelector('#l2-time');
+		const speedEl = this.levelHudEl.querySelector('#l2-speed');
+		const modeEl = this.levelHudEl.querySelector('#l2-mode');
+		const controlsEl = this.levelHudEl.querySelector('#l2-controls');
+
+		if (hpText) hpText.textContent = `${hp} / 5`;
+
+		if (hpBar) {
+			hpBar.style.width = `${hpPercent}%`;
+			hpBar.style.background =
+				hp > 2 ? '#5cffb1' : hp > 1 ? '#ffb347' : '#ff5268';
+		}
+
+		const seconds = Math.floor(this.elapsedPlayTime);
+		const minutes = Math.floor(seconds / 60);
+		const remainder = String(seconds % 60).padStart(2, '0');
+
+		if (timeEl) {
+			timeEl.textContent = `${String(minutes).padStart(2, '0')}:${remainder}`;
+		}
+
+		// Walking speed uses the pilot's measured velocity.
+		// Rover speed uses the rover's own physics state.
+		const speed = this.boarded
+			? Math.abs(this.rover.speed)
+			: this.velocity.length();
+
+		if (speedEl) speedEl.textContent = `${speed.toFixed(1)} m/s`;
+		if (modeEl) modeEl.textContent = this.boarded ? 'ROVER' : 'ON FOOT';
+
+		
 	}
 
 	_showMovementFeedback(message, seconds = 0.7) {
@@ -1460,16 +1590,31 @@ export class Level2 extends Level {
 			active: this._hasBoarded && !this.completed,
 		})
 		this.dust.update(delta)
+		this.damageCooldown = Math.max(
+			0,
+			this.damageCooldown - delta
+		);
+
 		for (const alien of this.aliens) {
-			alien.update(delta, this.playerRoot.position)
+			alien.update(delta, this.playerRoot.position);
 
-			if (!alien.combatMode) continue
+			if (!alien.combatMode || this.completed) continue;
+			if (this.damageCooldown > 0) continue;
 
-			if (
-				alien.checkPlayerCollision(this.playerRoot) ||
-				alien.checkRoverCollision(this.rover)
-			) {
-				this.playerHP = Math.max(this.playerHP - 1, 0)
+			const hitPlayer = alien.checkPlayerCollision(this.playerRoot);
+			const hitRover = alien.checkRoverCollision(this.rover);
+
+			if (hitPlayer || hitRover) {
+				this.playerHP = Math.max(this.playerHP - 1, 0);
+				this.damageCooldown = 0.8;
+
+				this._flashDamage();
+				this._updateLevelHUD();
+
+				if (this.playerHP <= 0) {
+					this._gameOver();
+					return;
+				}
 			}
 		}
 		this._updateMovementFeedback(delta)
@@ -1613,7 +1758,7 @@ export class Level2 extends Level {
 						: 'default'
 		const distanceLabel = Math.ceil(roverDistance)
 		const displayKey = `${objectiveKey}:${distanceLabel}`
-		if (this.objectiveEl && displayKey !== this._objectiveKey) {
+		if (this.objectiveEl && displayKey !== this._objectiveKey && this.playerHP != 0) {
 			this._objectiveKey = displayKey
 			const objectiveText = {
 				default: `<strong>REACH THE ROVER · ${distanceLabel} m</strong><br><span style="font-size:12px;opacity:.8">WASD to walk · Left Shift to sprint · E to board when close.</span>`,
@@ -1623,7 +1768,57 @@ export class Level2 extends Level {
 				complete: '<strong>PORTAL REACHED</strong><br><span style="font-size:12px;opacity:.8">You made it off the planet.</span>',
 			}
 			this.objectiveEl.innerHTML = objectiveText[objectiveKey]
+			
 		}
+		this._updateLevelHUD();
+	}
+
+	_flashDamage() {
+		if (!this.damageFlashEl) return;
+
+		// Make the screen briefly flash red.
+		this.damageFlashEl.style.transition = 'none';
+		this.damageFlashEl.style.background = 'rgba(255, 0, 0, 0.4)';
+
+		// Force the browser to apply the red state before fading.
+		void this.damageFlashEl.offsetWidth;
+
+		this.damageFlashEl.style.transition = 'background 0.3s ease-out';
+		this.damageFlashEl.style.background = 'rgba(255, 0, 0, 0)';
+	}
+
+	_gameOver() {
+		if (this.completed) return;
+
+		this.completed = true;
+		this.state.status = STATUS.GAME_OVER;
+
+		// Stop the rover and player.
+		this.keys.clear();
+		this.velocity.set(0, 0, 0);
+		this.rover.inputEnabled = false;
+		this.rover.speed = 0;
+
+		this.audio?.stopRoverEngine();
+		this.audio?.playCrash();
+
+		const time = this.elapsedPlayTime;
+		const score = 0;
+
+		this.state.score = score;
+
+		// Brief delay before showing the results screen.
+		this._endTimer = setTimeout(() => {
+			this.onEnd?.({
+				outcome: 'overrun',
+				won: false,
+				score,
+				time,
+				hull: 0,
+				progress: 0,
+				level: 2,
+			});
+		}, 1000);
 	}
 
 	dispose() {
@@ -1639,6 +1834,8 @@ export class Level2 extends Level {
 		this.gameplayColliders.length = 0
 		this.hazards?.dispose()
 		this.planet?.dispose()
+		this.levelHudEl?.remove();
+		this.damageFlashEl?.remove();
 		super.dispose()
 	}
 }

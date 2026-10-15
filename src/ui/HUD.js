@@ -41,10 +41,6 @@ export class HUD {
 				.join(' · ')
 				.toUpperCase()
 		}
-		// Nitrogen pickups and boosts are not implemented yet; hide their
-		// rows instead of showing a counter that can never change.
-		//this.nitrogenRow?.classList.add('hidden')
-		//this.boostEl?.classList.add('hidden')
 		this.setWarning(false)
 		this.root?.classList.remove('hidden', 'hud-hit')
 	}
