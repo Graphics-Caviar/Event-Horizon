@@ -29,8 +29,11 @@ const MOVE_BRAKE_DAMP = 9.5 // decay rate once input is released
 const TURN_DAMP = 11 // heading approach rate while moving
 const U_TURN_DAMP = 16 // ... and on reversals, so 180s stay playable
 const U_TURN_ANGLE = 2 // radians; beyond this a turn counts as a reversal
-const JUMP_SPEED = 10.5 // takeoff vertical speed (units/s)
-const GRAVITY = 30 // keeps the hop ~1.7 units high
+
+const BASE_GRAVITY = 30 // gravity at multiplier 1 (units/s^2)
+const JUMP_HEIGHT = 1.6 // peak of a jump at normal gravity
+const MAX_JUMP_HEIGHT = 5 // low-gravity jumps are capped here, not 1 / g
+const MIN_GRAVITY_MULT = 0.1 // the pilot never gets zero/negative gravity
 const AIR_CONTROL = 0.35 // input authority while airborne
 const AIR_DRAG = 0.12 // horizontal decay while airborne without input
 const PIVOT_ANGLE = 0.5 // min facing error before turning in place
@@ -270,6 +273,8 @@ export class Level2 extends Level {
 		this._buildObjective()
 		this._buildMovementFeedback()
 		this._setupCamera()
+		this.firstPerson = false
+		this._vWasDown = false
 		this.hazards = new Hazards(this)
 		this.playerHP = 5
 		// Dev-only handle so automated smoke tests can inspect and drive
@@ -1102,6 +1107,22 @@ export class Level2 extends Level {
 		)
 	}
 
+	_jumpGravityMult() {
+		return Math.max(
+			this.hazards.gravityMultiplierAt(
+				this.playerRoot.position
+			),
+			MIN_GRAVITY_MULT
+		)
+	}
+
+	_startJump() {
+		const g = this._jumpGravityMult()
+		const peak = Math.min(JUMP_HEIGHT / g, MAX_JUMP_HEIGHT)
+		this._verticalSpeed = Math.sqrt(2 * BASE_GRAVITY * g * peak)
+		this._airborne = true
+	}
+
 	_updatePlayerMovement(delta) {
 		const startX = this.playerRoot.position.x
 		const startZ = this.playerRoot.position.z
@@ -1135,8 +1156,7 @@ export class Level2 extends Level {
 		// gravity takes over until the feet touch terrain again.
 		const jumpDown = this.keys.has('Space')
 		if (jumpDown && !this._jumpWasDown && !this._airborne) {
-			this._airborne = true
-			this._verticalSpeed = JUMP_SPEED
+			this._startJump()
 		}
 		this._jumpWasDown = jumpDown
 
@@ -1270,7 +1290,8 @@ export class Level2 extends Level {
 		if (this._airborne) {
 			// Ballistic arc: integrate vertical speed and land when the
 			// feet fall back through the terrain surface.
-			this._verticalSpeed -= GRAVITY * delta
+			this._verticalSpeed -=
+				BASE_GRAVITY * this._jumpGravityMult() * delta
 			this.playerRoot.position.y +=
 				this._verticalSpeed * delta
 			const groundY =
@@ -1278,6 +1299,12 @@ export class Level2 extends Level {
 					this.playerRoot.position.x,
 					this.playerRoot.position.z
 				) + (this.pilotWalk?.footOffset ?? 0)
+			if (
+				this._verticalSpeed > 0 &&
+				this.playerRoot.position.y < groundY
+			) {
+				this.playerRoot.position.y = groundY
+			}
 			if (
 				this._verticalSpeed <= 0 &&
 				this.playerRoot.position.y <= groundY
@@ -1400,6 +1427,13 @@ export class Level2 extends Level {
 		const eDown = this.keys.has('KeyE')
 		if (eDown && !this._eWasDown) this._toggleBoardRover()
 		this._eWasDown = eDown
+		const vDown = this.keys.has('KeyV')
+
+		if (vDown && !this._vWasDown) {
+			this.firstPerson = !this.firstPerson
+		}
+
+		this._vWasDown = vDown
 
 		this.rover.update(delta)
 		this._updateRoverAudio()
@@ -1467,51 +1501,126 @@ export class Level2 extends Level {
 		this._checkPortalArrival()
 
 		const camera = this.sceneManager.camera
-		const focus = this.boarded
-			? this.rover.group.position
-			: this.playerRoot.position
-		const desired = this.boarded
-			? focus
-					.clone()
-					.addScaledVector(
-						this.rover.forwardVector(
-							new THREE.Vector3()
-						),
-						-26
-					)
-					.add(new THREE.Vector3(0, 12, 0))
-			: focus.clone().add(this.walkCameraOffset || new THREE.Vector3(10, 8, 18))
-		camera.position.lerp(desired, 1 - Math.exp(-5 * delta))
-		constrainTerrainCamera(
-			camera.position,
-			focus
-				.clone()
-				.add(
-					new THREE.Vector3(
-						0,
-						this.boarded ? 3.5 : 1.8,
-						0
-					)
-				),
-			this.planet
-		)
-		// The look target follows with its own damping and a slight lead in
-		// the direction of travel, so sustained runs and turns stop feeling
-		// like the camera is welded to the pilot's chest.
-		const lookLead = this.boarded
-			? this.rover
+
+		if (this.firstPerson) {
+			if (this.boarded) {
+				// FIRST PERSON: ROVER
+				const forward = this.rover
 					.forwardVector(new THREE.Vector3())
-					.multiplyScalar(
-						Math.abs(this.rover.speed) *
-							0.22
-					)
-			: this.velocity.clone().multiplyScalar(0.22)
-		const lookTarget = focus
-			.clone()
-			.add(new THREE.Vector3(0, this.boarded ? 3.5 : 1.8, 0))
-			.add(lookLead)
-		this._lookAt.lerp(lookTarget, 1 - Math.exp(-9 * delta))
-		camera.lookAt(this._lookAt)
+					.normalize()
+
+				// Place the camera inside the cockpit.
+				camera.position.copy(this.rover.group.position)
+				camera.position.y += 3.0
+				camera.position.addScaledVector(forward, 10)
+
+				// Look forward in the direction the rover is driving.
+				this._lookAt
+					.copy(camera.position)
+					.addScaledVector(forward, 10)
+
+				camera.lookAt(this._lookAt)
+			} else {
+				// FIRST PERSON: ON FOOT
+				camera.position.set(
+					this.playerRoot.position.x,
+					this.playerRoot.position.y + 1.5,
+					this.playerRoot.position.z
+				)
+
+				const yaw = this.playerRoot.rotation.y
+				const forward = new THREE.Vector3(
+					Math.sin(yaw),
+					0,
+					Math.cos(yaw)
+				)
+
+				this._lookAt
+					.copy(camera.position)
+					.addScaledVector(forward, 10)
+
+				camera.lookAt(this._lookAt)
+			}
+
+			// Hide the pilot's body in first person.
+			if (this.pilotModel) {
+				this.pilotModel.visible = false
+			}
+		} else {
+			// THIRD PERSON: restore the pilot when on foot.
+			if (this.pilotModel && !this.boarded) {
+				this.pilotModel.visible = true
+			}
+
+			const focus = this.boarded
+				? this.rover.group.position
+				: this.playerRoot.position
+
+			const desired = this.boarded
+				? focus
+						.clone()
+						.addScaledVector(
+							this.rover.forwardVector(
+								new THREE.Vector3()
+							),
+							-26
+						)
+						.add(
+							new THREE.Vector3(
+								0,
+								12,
+								0
+							)
+						)
+				: focus
+						.clone()
+						.add(
+							new THREE.Vector3(
+								10,
+								8,
+								18
+							)
+						)
+
+			camera.position.lerp(desired, 1 - Math.exp(-5 * delta))
+
+			const targetHeight = this.boarded ? 3.5 : 1.8
+
+			constrainTerrainCamera(
+				camera.position,
+				focus
+					.clone()
+					.add(
+						new THREE.Vector3(
+							0,
+							targetHeight,
+							0
+						)
+					),
+				this.planet
+			)
+
+			const lookLead = this.boarded
+				? this.rover
+						.forwardVector(
+							new THREE.Vector3()
+						)
+						.multiplyScalar(
+							Math.abs(
+								this.rover.speed
+							) * 0.22
+						)
+				: this.velocity.clone().multiplyScalar(0.22)
+
+			const lookTarget = focus
+				.clone()
+				.add(new THREE.Vector3(0, targetHeight, 0))
+				.add(lookLead)
+
+			this._lookAt.lerp(lookTarget, 1 - Math.exp(-9 * delta))
+
+			camera.lookAt(this._lookAt)
+		}
 
 		const dx =
 			this.playerRoot.position.x - this.rover.group.position.x
