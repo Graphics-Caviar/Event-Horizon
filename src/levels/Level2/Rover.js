@@ -739,6 +739,4 @@ export class Rover {
 		beacon.position.set(0, 5, 0)
 		this.group.add(beacon)
 	}
-
-	
 }
