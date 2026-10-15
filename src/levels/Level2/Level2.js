@@ -77,7 +77,7 @@ const shortestAngle = (target, current) => {
  * - the exploration rover is boardable (E when close) and drivable with
  *   WASD, using a Rapier chassis and independent wheel suspension;
  * - the on-foot pilot carries momentum, leans into acceleration and turns,
- *   and plays a procedural idle/walk/run gait on its static mesh;
+ *   and plays procedural idle, walk, run, and jump animations on its static mesh;
  * - a yellow guide line leads to the rover, then retargets to the escape
  *   portal once the rover is boarded — reaching the portal wins the level.
  *
@@ -1354,8 +1354,14 @@ export class Level2 extends Level {
 			})
 		}
 
-		// Feed the measured travel distance to the shader gait so the
-		// stride rate tracks the actual ground speed.
+		// Select the pilot's animation explicitly: jumping takes precedence,
+		// otherwise Shift + directional input selects the run cycle.
+		if (this._airborne) this.pilotWalk?.jump()
+		else if (running && hasInput) this.pilotWalk?.run()
+		else this.pilotWalk?.walk()
+
+		// Feed measured travel distance so each gait stays in step with the
+		// ground movement rather than advancing at a fixed animation rate.
 		this.pilotWalk?.update(delta, travelled, false)
 	}
 
@@ -1460,6 +1466,7 @@ export class Level2 extends Level {
 			// isn't chasing a still-walking character.
 			this.velocity.set(0, 0, 0)
 			this._speed = 0
+			this.pilotWalk?.walk()
 			this.pilotWalk?.update(delta, 0, false)
 		} else {
 			this._updatePlayerMovement(delta)

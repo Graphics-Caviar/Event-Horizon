@@ -55,6 +55,8 @@ export class PilotWalk {
 		this.model = model
 		this.phase = 0
 		this.amount = 0
+		this.mode = 'walk'
+		this.jumpElapsed = 0
 		this.uniforms = {
 			walkPhase: { value: 0 },
 			walkAmount: { value: 0 },
@@ -63,6 +65,9 @@ export class PilotWalk {
 			walkLift: { value: profile.lift },
 			walkArm: { value: profile.arm },
 			walkSway: { value: profile.sway },
+			walkRunBlend: { value: 0 },
+			walkJumpAmount: { value: 0 },
+			walkJumpTime: { value: 0 },
 			walkJoints: {
 				value: new THREE.Vector4(...profile.joints),
 			},
@@ -111,28 +116,35 @@ export class PilotWalk {
 					uniform float walkAmount;
 					uniform float walkStride;
  uniform float walkStance; uniform float walkLift; uniform float walkArm; uniform float walkSway; uniform float walkCloth; uniform float walkCenterX;
+ uniform float walkRunBlend; uniform float walkJumpAmount; uniform float walkJumpTime;
  uniform vec4 walkJoints; uniform mat4 meshToWalk; uniform mat4 walkToMesh;
 					uniform vec3 walkMin;
 					uniform vec3 walkSize;
 					mat2 gaitRotation(float a) { return mat2(cos(a), sin(a), -sin(a), cos(a)); }
 					vec3 gait(vec3 p) {
 						float h = walkSize.y;
+						float runBlend = walkRunBlend;
+						float stride = walkStride;
+						float stance = mix(walkStance, max(0.48, walkStance - 0.09), runBlend);
+						float liftHeight = walkLift * mix(1.0, 1.5, runBlend);
+						float armStrength = walkArm * mix(1.0, 1.7, runBlend);
+						float swayStrength = walkSway * mix(1.0, 1.2, runBlend);
 						vec3 q = ((meshToWalk * vec4(p, 1.0)).xyz - walkMin - vec3(walkSize.x * 0.5, 0.0, walkSize.z * 0.5)) / h;
 						q.z -= walkJoints.w; q.x -= walkCenterX;
 						float side = q.x < 0.0 ? 1.0 : -1.0;
 						// A longer stance gives a brief double-support phase. The foot
 						// tracks root travel while planted, then swings through softly.
 						float cycle = fract(walkPhase / 6.2831853 + (side < 0.0 ? 0.5 : 0.0));
-						float swing = clamp((cycle - walkStance) / (1.0 - walkStance), 0.0, 1.0);
+						float swing = clamp((cycle - stance) / (1.0 - stance), 0.0, 1.0);
 						float swingEase = swing * swing * swing * (swing * (swing * 6.0 - 15.0) + 10.0);
-						float strideZ = cycle < walkStance ? mix(walkStride, -walkStride, cycle / walkStance) : mix(-walkStride, walkStride, swingEase);
+						float strideZ = cycle < stance ? mix(stride, -stride, cycle / stance) : mix(-stride, stride, swingEase);
 						float clearance = pow(sin(swing * 3.14159265), 2.0);
-						float lift = clearance * walkLift;
+						float lift = clearance * liftHeight;
 						// Both legs share one pelvis height. During double support,
 						// accommodate the farther planted foot without a deep crouch.
 						float otherCycle = fract(cycle + 0.5);
-						float planted = cycle < walkStance ? abs(mix(walkStride, -walkStride, cycle / walkStance)) : 0.0;
-						float otherPlanted = otherCycle < walkStance ? abs(mix(walkStride, -walkStride, otherCycle / walkStance)) : 0.0;
+						float planted = cycle < stance ? abs(mix(stride, -stride, cycle / stance)) : 0.0;
+						float otherPlanted = otherCycle < stance ? abs(mix(stride, -stride, otherCycle / stance)) : 0.0;
 						float supportZ = max(planted, otherPlanted);
 						float upper = walkJoints.x - walkJoints.y;
  float lower = walkJoints.y - walkJoints.z;
@@ -172,16 +184,43 @@ export class PilotWalk {
 						}
 						{
 							float arm = smoothstep(0.125, 0.19, abs(rest.x)) * smoothstep(0.34, 0.43, rest.y) * (1.0 - smoothstep(0.76, 0.87, rest.y));
-							float armSwing = (strideZ / walkStride) * walkArm * walkAmount;
+							float armSwing = (strideZ / max(stride, 0.001)) * armStrength * walkAmount;
 							q.yz = mix(q.yz, gaitRotation(armSwing) * (rest.yz - vec2(0.77, 0.0)) + vec2(0.77, 0.0), arm);
 						}
 						// Transfer weight over the supporting hip while shoulders counter-turn.
 						// Fade this above the knees so planted feet remain in place.
 						float torso = smoothstep(0.30, 0.58, rest.y);
-						q.xz = gaitRotation(cos(walkPhase) * 0.025 * torso * walkAmount) * q.xz;
-						q.x += sin(walkPhase) * walkSway * smoothstep(0.22, 0.48, rest.y) * walkAmount;
+						q.xz = gaitRotation(cos(walkPhase) * 0.025 * mix(1.0, 1.25, runBlend) * torso * walkAmount) * q.xz;
+						q.x += sin(walkPhase) * swayStrength * smoothstep(0.22, 0.48, rest.y) * walkAmount;
+						// Running carries the torso slightly forward instead of only
+						// changing the cadence of the walk cycle.
+						q.yz = gaitRotation(-0.04 * runBlend * torso * walkAmount) * (q.yz - vec2(0.52, 0.0)) + vec2(0.52, 0.0);
 						q.z += sin(walkPhase - rest.y * 5.0) * 0.012 * fabric * (1.0 - smoothstep(0.15, 0.55, rest.y)) * walkAmount;
  q.y += pelvis * walkAmount;
+						// A short anticipation, knee tuck, and held airborne pose make
+						// jumping read independently from either ground gait. The pose
+						// stays held until Level2 switches back to walk() or run().
+						float jumpT = clamp(walkJumpTime, 0.0, 1.0);
+						float jumpAnticipation = 1.0 - smoothstep(0.0, 0.12, jumpT);
+						float jumpTuck = smoothstep(0.08, 0.22, jumpT) * (1.0 - smoothstep(0.35, 0.52, jumpT));
+						float jumpHang = smoothstep(0.18, 0.34, jumpT);
+						float jumpKnee = jumpAnticipation * 0.12 + jumpTuck * 0.72 + jumpHang * 0.22;
+						float jumpHip = jumpAnticipation * 0.08 - jumpTuck * 0.16 - jumpHang * 0.055;
+						vec3 jumped = rest;
+						vec3 jumpLeg = rest;
+						float jumpKneeWeight = 1.0 - smoothstep(walkJoints.y - 0.02, walkJoints.y + 0.02, rest.y);
+						jumpLeg.yz = mix(jumpLeg.yz, gaitRotation(jumpKnee) * (jumpLeg.yz - vec2(walkJoints.y, 0.0)) + vec2(walkJoints.y, 0.0), jumpKneeWeight);
+						jumpLeg.yz = gaitRotation(jumpHip) * (jumpLeg.yz - vec2(walkJoints.x, 0.0)) + vec2(walkJoints.x, 0.0);
+						jumped = mix(jumped, jumpLeg, legMask);
+						float jumpArm = smoothstep(0.125, 0.19, abs(rest.x)) * smoothstep(0.34, 0.43, rest.y) * (1.0 - smoothstep(0.76, 0.87, rest.y));
+						float armRaise = 0.52 * jumpHang + 0.22 * jumpTuck;
+						vec2 raisedArm = gaitRotation(-side * armRaise) * (jumped.xy - vec2(side * 0.14, 0.77)) + vec2(side * 0.14, 0.77);
+						jumped.xy = mix(jumped.xy, raisedArm, jumpArm);
+						jumped.z -= jumpArm * (0.012 + 0.018 * jumpTuck);
+						float jumpTorso = smoothstep(0.4, 0.62, rest.y);
+						jumped.yz = gaitRotation(-0.045 * (jumpTuck + 0.2 * jumpHang) * jumpTorso) * (jumped.yz - vec2(0.52, 0.0)) + vec2(0.52, 0.0);
+						jumped.y -= jumpAnticipation * 0.018 * (1.0 - smoothstep(0.56, 0.75, rest.y));
+						q = mix(q, jumped, walkJumpAmount);
  q.z += walkJoints.w; q.x += walkCenterX;
 						return (walkToMesh * vec4(q * h + walkMin + vec3(walkSize.x * 0.5, 0.0, walkSize.z * 0.5), 1.0)).xyz;
 					}`
@@ -208,7 +247,7 @@ export class PilotWalk {
 						)
 				}
 				material.customProgramCacheKey = () =>
-					'level2-pilot-walk-v6'
+					'level2-pilot-animation-v7'
 				return material
 			}
 			mesh.material = Array.isArray(mesh.material)
@@ -225,7 +264,28 @@ export class PilotWalk {
 		})
 	}
 
+	walk() {
+		this.mode = 'walk'
+	}
+
+	run() {
+		this.mode = 'run'
+	}
+
+	jump() {
+		// Level2 calls this while airborne. Do not restart the jump timeline
+		// every frame; only the transition into jump begins a new animation.
+		if (this.mode !== 'jump') {
+			this.mode = 'jump'
+			this.jumpElapsed = 0
+		}
+	}
+
 	update(delta, distance, boarded) {
+		if (boarded) {
+			this.mode = 'walk'
+			this.jumpElapsed = 0
+		}
 		const moving = !boarded && distance > 0.0001
 		this.amount = boarded
 			? 0
@@ -235,23 +295,56 @@ export class PilotWalk {
 					16,
 					delta
 				)
-		// Extend the stride when sprinting instead of only cycling the legs faster.
-		const speed = delta > 0 ? distance / delta : 0
-		const strideTarget = THREE.MathUtils.lerp(
-			this.profile.stride,
-			this.profile.sprint,
-			THREE.MathUtils.clamp((speed - 2.8) / 2.8, 0, 1)
+
+		const running = !boarded && this.mode === 'run'
+		const jumping = !boarded && this.mode === 'jump'
+		this.uniforms.walkRunBlend.value = THREE.MathUtils.damp(
+			this.uniforms.walkRunBlend.value,
+			running ? 1 : 0,
+			8,
+			delta
 		)
+		this.uniforms.walkJumpAmount.value = THREE.MathUtils.damp(
+			this.uniforms.walkJumpAmount.value,
+			jumping ? 1 : 0,
+			14,
+			delta
+		)
+		if (jumping) this.jumpElapsed += delta
+		this.uniforms.walkJumpTime.value = Math.min(
+			this.jumpElapsed,
+			1.0
+		)
+
+		// Keep the stride tied to the chosen gait rather than guessing from
+		// speed alone: a quick walk remains a walk, while Shift selects a
+		// distinct running cycle. Actual travel still advances the phase.
+		const speed = delta > 0 ? distance / delta : 0
+		const strideTarget = running
+			? this.profile.sprint
+			: THREE.MathUtils.lerp(
+					this.profile.stride,
+					this.profile.sprint,
+					THREE.MathUtils.clamp(
+						(speed - 2.8) / 2.8,
+						0,
+						1
+					)
+				)
 		this.uniforms.walkStride.value = THREE.MathUtils.damp(
 			this.uniforms.walkStride.value,
 			strideTarget,
 			8,
 			delta
 		)
+		const stance = THREE.MathUtils.lerp(
+			this.profile.stance,
+			Math.max(0.48, this.profile.stance - 0.09),
+			this.uniforms.walkRunBlend.value
+		)
 		this.strideLength =
 			this.height *
-			((this.uniforms.walkStride.value * 2) /
-				this.profile.stance)
+			((this.uniforms.walkStride.value * 2) / stance)
 		// Match root travel to the stance-foot path to avoid skating.
 		if (moving)
 			this.phase +=
