@@ -219,63 +219,8 @@ export class CrystalPlanet extends AlienPlanet {
 		return true
 	}
 
-	_buildRocks() {
-		// Hexagonal basalt stacks replace the desert's rounded boulders.
-		const geometry = this.level.own(
-			new THREE.CylinderGeometry(1.7, 2.1, 1, 6)
-		)
-		const material = this.level.own(
-			new THREE.MeshStandardMaterial({
-				color: 0x435565,
-				roughness: 1,
-				metalness: 0,
-				flatShading: true,
-			})
-		)
-		const transforms = []
-		const matrix = new THREE.Matrix4()
-		for (let i = 0; i < 130; i++) {
-			const x =
-				this.center.x +
-				((Math.sin(i * 127.1) * 43758.5453) % 1) * 470
-			const z =
-				this.center.z +
-				((Math.sin(i * 311.7) * 23519.171) % 1) * 470
-			if (
-				!this._isSpawnClear(x, z, 9) ||
-				this.slopeDegreesAt(x, z) > 30
-			)
-				continue
-			const group = new THREE.Group()
-			group.position.set(x, this.heightAt(x, z), z)
-			this.root.add(group)
-			this._registerCollider(group, 6.5, 'basalt-stack')
-			for (let j = 0; j < 5; j++) {
-				const height =
-					3 + (Math.sin(i * 2.1 + j) + 1) * 5
-				matrix.makeScale(1, height, 1)
-				matrix.setPosition(
-					x + Math.cos(j * 2.4) * 3,
-					group.position.y + height / 2,
-					z + Math.sin(j * 2.4) * 3
-				)
-				transforms.push(matrix.clone())
-			}
-		}
-		const columns = new THREE.InstancedMesh(
-			geometry,
-			material,
-			transforms.length
-		)
-		transforms.forEach((transform, i) =>
-			columns.setMatrixAt(i, transform)
-		)
-		columns.instanceMatrix.needsUpdate = true
-		columns.receiveShadow = true
-		this.root.add(columns)
-	}
-
-	// No desert outcrops, gravel field, crater bowls or lava river on this planet.
+	// Rocks and gravel are removed; crystals alone occupy the terrain.
+	_buildRocks() {}
 	_buildOutcrops() {}
 	_buildGravel() {}
 	_buildLava() {
