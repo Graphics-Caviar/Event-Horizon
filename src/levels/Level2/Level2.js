@@ -271,7 +271,7 @@ export class Level2 extends Level {
 		this._buildMovementFeedback()
 		this._setupCamera()
 		this.hazards = new Hazards(this)
-
+		this.playerHP = 5
 		// Dev-only handle so automated smoke tests can inspect and drive
 		// the level without a visible viewport; stripped from production
 		// builds because import.meta.env.DEV is a static false there.
@@ -1453,6 +1453,15 @@ export class Level2 extends Level {
 		this.dust.update(delta)
 		for (const alien of this.aliens) {
 			alien.update(delta, this.playerRoot.position)
+
+			if (!alien.combatMode) continue
+
+			if (
+				alien.checkPlayerCollision(this.playerRoot) ||
+				alien.checkRoverCollision(this.rover)
+			) {
+				this.playerHP = Math.max(this.playerHP - 1, 0)
+			}
 		}
 		this._updateMovementFeedback(delta)
 		this._checkPortalArrival()

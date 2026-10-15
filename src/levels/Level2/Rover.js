@@ -337,7 +337,7 @@ export class Rover {
 		this.steer = THREE.MathUtils.damp(
 			this.steer,
 			Number(left) - Number(right),
-			8,
+			20,
 			STEP
 		)
 		const gas = this.inputEnabled && keys.has('KeyW')
