@@ -9,7 +9,7 @@ const REST_LENGTH = 1.4
 const GRAVITY = 9.81
 
 // Authored rover GLB (static single mesh: ~1.5M tris, no wheel nodes).
-const DEFAULT_MODEL = '/assets/models/rover/sci-fi-exploration-rover.glb'
+export const DEFAULT_MODEL = '/assets/models/rover/sci-fi-exploration-rover.glb'
 const MODEL_FIT_LENGTH = 11 // matches the placeholder's footprint
 const MODEL_GROUND_SINK = 0.45 // tyre contact at the clearance height
 const MODEL_PIVOT_YAW = 0 // rotate if the GLB does not face +Z

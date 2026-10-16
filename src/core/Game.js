@@ -18,6 +18,9 @@ import { LeaderboardScreen } from '../ui/LeaderboardScreen.js'
 import { LevelScreens } from '../ui/LevelScreens.js'
 import { SHIPS } from '../systems/ShipManager.js'
 import { CHARACTERS } from '../systems/CharacterManager.js'
+import { ALIEN_MODELS } from '../levels/Level2/Alien.js'
+import { ASTEROID_MODELS } from '../levels/Level1/AsteroidField.js'
+import { DEFAULT_MODEL as ROVER_MODEL } from '../levels/Level2/Rover.js'
 
 // Menu -> Pilot registry (sign in / create account) -> Hangar
 // (character/ship select) -> Level 1. Level 1 gameplay
@@ -113,8 +116,210 @@ export class Game {
 			this.assetManager
 		)
 
-		this._showMenu()
+		// Keep the menu and every other UI screen hidden until every model
+		// needed by the game has been downloaded and parsed. The normal menu
+		// background keeps rendering behind this blocking loading screen.
+		this.menu.hideAll()
+		this.loadingScreen = this._createLoadingScreen()
 		this._loop()
+		void this._preloadStartupModels()
+	}
+
+	/** Create the blocking startup overlay above the normal animated menu background. */
+	_createLoadingScreen() {
+		const screen = document.createElement('div')
+		screen.id = 'model-preload-screen'
+		screen.setAttribute('role', 'status')
+		screen.setAttribute('aria-live', 'polite')
+		Object.assign(screen.style, {
+			position: 'fixed',
+			inset: '0',
+			zIndex: '100000',
+			display: 'grid',
+			placeItems: 'center',
+			padding: '24px',
+			boxSizing: 'border-box',
+			background: 'rgba(3, 7, 17, 0.34)',
+			color: '#d9f7ff',
+			fontFamily: 'system-ui, sans-serif',
+			textAlign: 'center',
+		})
+
+		const panel = document.createElement('div')
+		Object.assign(panel.style, {
+			width: 'min(420px, 100%)',
+			padding: '28px 24px',
+			border: '1px solid rgba(94, 209, 238, 0.34)',
+			borderRadius: '10px',
+			background: 'rgba(4, 12, 25, 0.78)',
+			boxShadow: '0 14px 50px rgba(0, 0, 0, 0.22)',
+		})
+
+		const title = document.createElement('div')
+		title.textContent = 'EVENT HORIZON'
+		Object.assign(title.style, {
+			fontSize: '13px',
+			fontWeight: '700',
+			letterSpacing: '0.24em',
+			marginBottom: '9px',
+		})
+
+		const status = document.createElement('div')
+		status.textContent = 'PREPARING FLIGHT SYSTEMS…'
+		Object.assign(status.style, {
+			fontSize: '11px',
+			letterSpacing: '0.14em',
+			color: '#86c8d8',
+			marginBottom: '18px',
+		})
+
+		const track = document.createElement('div')
+		track.setAttribute('role', 'progressbar')
+		track.setAttribute('aria-valuemin', '0')
+		track.setAttribute('aria-valuemax', '11')
+		track.setAttribute('aria-valuenow', '0')
+		Object.assign(track.style, {
+			width: '100%',
+			height: '8px',
+			overflow: 'hidden',
+			border: '1px solid rgba(107, 202, 228, 0.5)',
+			borderRadius: '999px',
+			background: 'rgba(10, 28, 44, 0.95)',
+			boxSizing: 'border-box',
+		})
+
+		const fill = document.createElement('div')
+		Object.assign(fill.style, {
+			width: '0%',
+			height: '100%',
+			borderRadius: '999px',
+			background: 'linear-gradient(90deg, #25a9dc, #a7f0ff)',
+			transition: 'width 160ms ease-out',
+		})
+		track.appendChild(fill)
+
+		const counter = document.createElement('div')
+		counter.textContent = '0 / 11 MODELS LOADED'
+		Object.assign(counter.style, {
+			fontSize: '11px',
+			fontFamily: 'ui-monospace, monospace',
+			letterSpacing: '0.08em',
+			marginTop: '11px',
+			color: '#d9f7ff',
+		})
+
+		const error = document.createElement('div')
+		Object.assign(error.style, {
+			fontSize: '12px',
+			lineHeight: '1.5',
+			color: '#ffb7a9',
+			marginTop: '15px',
+		})
+		error.hidden = true
+
+		const retry = document.createElement('button')
+		retry.type = 'button'
+		retry.textContent = 'RETRY LOADING'
+		retry.hidden = true
+		Object.assign(retry.style, {
+			marginTop: '16px',
+			padding: '10px 18px',
+			border: '1px solid rgba(108, 220, 245, 0.8)',
+			borderRadius: '5px',
+			background: 'rgba(21, 112, 145, 0.28)',
+			color: '#e3fbff',
+			font: 'inherit',
+			fontSize: '11px',
+			fontWeight: '700',
+			letterSpacing: '0.1em',
+			cursor: 'pointer',
+		})
+		retry.addEventListener('click', () => {
+			void this._preloadStartupModels()
+		})
+
+		panel.append(title, status, track, counter, error, retry)
+		screen.appendChild(panel)
+		document.body.appendChild(screen)
+		this._loadingStatus = status
+		this._loadingTrack = track
+		this._loadingFill = fill
+		this._loadingCounter = counter
+		this._loadingError = error
+		this._loadingRetry = retry
+		return screen
+	}
+
+	/** Preload the unique GLB models used by the hangar and all gameplay levels. */
+	async _preloadStartupModels() {
+		if (this._startupPreloadActive || !this.loadingScreen) return
+		this._startupPreloadActive = true
+		const models = [
+			...Object.values(CHARACTERS).map((config) => ({
+				name: `${config.name} pilot`,
+				paths: config.model,
+			})),
+			...Object.values(SHIPS).map((config) => ({
+				name: `${config.name} ship`,
+				paths: config.model,
+			})),
+			...Object.entries(ALIEN_MODELS).map(([name, path]) => ({
+				name: `${name} alien`,
+				paths: path,
+			})),
+			...ASTEROID_MODELS.map((path, index) => ({
+				name: `asteroid ${index + 1}`,
+				paths: path,
+			})),
+			{ name: 'exploration rover', paths: ROVER_MODEL },
+		]
+		const loaded = new Set()
+		const failures = []
+
+		this._loadingStatus.textContent = 'PREPARING FLIGHT SYSTEMS…'
+		this._loadingError.hidden = true
+		this._loadingError.textContent = ''
+		this._loadingRetry.hidden = true
+		this._loadingRetry.disabled = true
+		this._loadingTrack.setAttribute('aria-valuemax', String(models.length))
+		this._updateModelLoadingProgress(loaded.size, models.length)
+
+		await Promise.all(
+			models.map(async (entry) => {
+				try {
+					await this.assetManager.preloadModel(entry.paths)
+					loaded.add(entry.name)
+				} catch (error) {
+					failures.push({ name: entry.name, error })
+					console.error(`[Startup] Failed to preload ${entry.name}:`, error)
+				} finally {
+					this._updateModelLoadingProgress(loaded.size, models.length)
+				}
+			})
+		)
+
+		this._startupPreloadActive = false
+		this._loadingRetry.disabled = false
+		if (failures.length) {
+			this._loadingStatus.textContent = 'SOME MODELS COULD NOT BE LOADED'
+			const failedNames = failures.map(({ name }) => name).join(', ')
+			this._loadingError.textContent =
+				`Could not load ${failures.length} of ${models.length} models: ${failedNames}. Check the asset paths or connection, then retry.`
+			this._loadingError.hidden = false
+			this._loadingRetry.hidden = false
+			return
+		}
+
+		this.loadingScreen.remove()
+		this.loadingScreen = null
+		this._showMenu()
+	}
+
+	_updateModelLoadingProgress(loaded, total) {
+		if (!this._loadingCounter || !this._loadingFill) return
+		this._loadingCounter.textContent = `${loaded} / ${total} MODELS LOADED`
+		this._loadingFill.style.width = `${total ? (loaded / total) * 100 : 0}%`
+		this._loadingTrack.setAttribute('aria-valuenow', String(loaded))
 	}
 
 	/**
@@ -205,7 +410,7 @@ export class Game {
 			CHARACTERS[this.gameState.selectedCharacter] ||
 			CHARACTERS.zara
 		void this.assetManager
-			.preloadModel(config.gameplayModel || config.model)
+			.preloadModel(config.model)
 			.catch((error) => {
 				console.warn(
 					'[Level2] Pilot preload unavailable:',
