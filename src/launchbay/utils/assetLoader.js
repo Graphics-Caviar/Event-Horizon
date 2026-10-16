@@ -10,6 +10,7 @@
 
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
+import { assetUrl } from '../../core/assetUrl.js'
 
 // Draco only activates for meshes actually compressed with it — harmless
 // (and unused) for plain GLBs, but lets compressed assets work without
@@ -36,6 +37,7 @@ const inFlight = new Map()
  * @returns {Promise<import('three/examples/jsm/loaders/GLTFLoader.js').GLTF>}
  */
 export function loadGLTF(url, onProgress) {
+	url = assetUrl(url)
 	if (inFlight.has(url)) return inFlight.get(url)
 
 	const promise = new Promise((resolve, reject) => {

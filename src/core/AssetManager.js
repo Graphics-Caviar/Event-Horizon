@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { assetUrl } from './assetUrl.js'
+import { trackModelLoad } from './modelLoading.js'
 
 // Cache parsed assets across the hangar, cinematic and gameplay scenes.
 
@@ -32,7 +34,7 @@ export class AssetManager {
 		const paths = Array.isArray(pathOrPaths)
 			? pathOrPaths
 			: [pathOrPaths]
-		for (const path of paths) {
+		for (const path of paths.map((asset) => assetUrl(asset))) {
 			const gltf = this._readyModels.get(path)
 			if (gltf) return this._cloneModel(gltf)
 		}
@@ -45,23 +47,25 @@ export class AssetManager {
 			: [pathOrPaths]
 		let lastError = null
 
-		for (const path of paths) {
+		for (const path of paths.map((asset) => assetUrl(asset))) {
 			try {
 				if (!this._modelCache.has(path)) {
 					this._modelCache.set(
 						path,
-						this.gltfLoader
-							.loadAsync(path)
-							.then((gltf) => {
-								// The full parse (scene + clips) is what
-								// gets cached; instances are cloned off
-								// it on demand.
-								this._readyModels.set(
-									path,
-									gltf
-								)
-								return gltf
-							})
+						trackModelLoad(
+							this.gltfLoader.loadAsync(
+								path
+							)
+						).then((gltf) => {
+							// The full parse (scene + clips) is what
+							// gets cached; instances are cloned off
+							// it on demand.
+							this._readyModels.set(
+								path,
+								gltf
+							)
+							return gltf
+						})
 					)
 				}
 				await this._modelCache.get(path)
