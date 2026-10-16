@@ -6,13 +6,13 @@
 export const CHARACTERS = {
 	zara: {
 		key: 'zara',
-		gameplayModel: '/assets/models/pilots/zara-voss-gameplay.glb',
+		gameplayModel: 'assets/models/pilots/zara-voss-gameplay.glb',
 		name: 'Zara Voss',
 		role: 'The Ace Pilot',
 		description:
 			'A former military pilot with unmatched skills in high-speed maneuvers and survival.',
 		model: [
-			'/assets/models/pilots/zara-voss.glb',
+			'assets/models/pilots/zara-voss.glb',
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/pilots/zara-voss.glb',
 		],
 		stats: {
@@ -43,13 +43,13 @@ export const CHARACTERS = {
 	},
 	kai: {
 		key: 'kai',
-		gameplayModel: '/assets/models/pilots/kai-ryder-gameplay.glb',
+		gameplayModel: 'assets/models/pilots/kai-ryder-gameplay.glb',
 		name: 'Kai Ryder',
 		role: 'The Scavenger',
 		description:
 			'A resourceful engineer who can make the most out of any situation.',
 		model: [
-			'/assets/models/pilots/kai-ryder.glb',
+			'assets/models/pilots/kai-ryder.glb',
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/pilots/kai-ryder.glb',
 		],
 		stats: {
@@ -82,13 +82,13 @@ export const CHARACTERS = {
 	},
 	nyx: {
 		key: 'nyx',
-		gameplayModel: '/assets/models/pilots/nyx-gameplay.glb',
+		gameplayModel: 'assets/models/pilots/nyx-gameplay.glb',
 		name: 'Nyx',
 		role: 'The Void Walker',
 		description:
 			'A mysterious figure with the ability to manipulate gravity and phase through danger.',
 		model: [
-			'/assets/models/pilots/nyx.glb',
+			'assets/models/pilots/nyx.glb',
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/pilots/nyx.glb',
 		],
 		stats: {

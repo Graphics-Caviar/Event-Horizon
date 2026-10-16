@@ -5,7 +5,7 @@ import { AssetManager } from '../../core/AssetManager'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
-const ASTEROID_MODELS = ['/assets/models/asteroids/asteroid_01.glb']
+const ASTEROID_MODELS = ['assets/models/asteroids/asteroid_01.glb']
 
 function randomUnit() {
 	return new THREE.Vector3(
