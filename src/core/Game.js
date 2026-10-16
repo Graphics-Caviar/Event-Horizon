@@ -281,19 +281,33 @@ export class Game {
 		this._loadingError.textContent = ''
 		this._loadingRetry.hidden = true
 		this._loadingRetry.disabled = true
-		this._loadingTrack.setAttribute('aria-valuemax', String(models.length))
+		this._loadingTrack.setAttribute(
+			'aria-valuemax',
+			String(models.length)
+		)
 		this._updateModelLoadingProgress(loaded.size, models.length)
 
 		await Promise.all(
 			models.map(async (entry) => {
 				try {
-					await this.assetManager.preloadModel(entry.paths)
+					await this.assetManager.preloadModel(
+						entry.paths
+					)
 					loaded.add(entry.name)
 				} catch (error) {
-					failures.push({ name: entry.name, error })
-					console.error(`[Startup] Failed to preload ${entry.name}:`, error)
+					failures.push({
+						name: entry.name,
+						error,
+					})
+					console.error(
+						`[Startup] Failed to preload ${entry.name}:`,
+						error
+					)
 				} finally {
-					this._updateModelLoadingProgress(loaded.size, models.length)
+					this._updateModelLoadingProgress(
+						loaded.size,
+						models.length
+					)
 				}
 			})
 		)
@@ -301,10 +315,12 @@ export class Game {
 		this._startupPreloadActive = false
 		this._loadingRetry.disabled = false
 		if (failures.length) {
-			this._loadingStatus.textContent = 'SOME MODELS COULD NOT BE LOADED'
-			const failedNames = failures.map(({ name }) => name).join(', ')
-			this._loadingError.textContent =
-				`Could not load ${failures.length} of ${models.length} models: ${failedNames}. Check the asset paths or connection, then retry.`
+			this._loadingStatus.textContent =
+				'SOME MODELS COULD NOT BE LOADED'
+			const failedNames = failures
+				.map(({ name }) => name)
+				.join(', ')
+			this._loadingError.textContent = `Could not load ${failures.length} of ${models.length} models: ${failedNames}. Check the asset paths or connection, then retry.`
 			this._loadingError.hidden = false
 			this._loadingRetry.hidden = false
 			return

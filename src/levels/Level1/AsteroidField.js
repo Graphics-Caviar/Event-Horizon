@@ -138,7 +138,8 @@ export class AsteroidField {
 			// The cached GLTF owns its textures, so clone them before this level
 			// takes ownership and disposes asteroid resources.
 			for (const key in material) {
-				if (material[key]?.isTexture) material[key] = material[key].clone()
+				if (material[key]?.isTexture)
+					material[key] = material[key].clone()
 			}
 			pieces.push({ geometry, material })
 		})
