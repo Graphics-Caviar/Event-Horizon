@@ -7,16 +7,9 @@
 			content="width=device-width, initial-scale=1.0"
 		/>
 		<title>Event Horizon: Escape from Singularity</title>
-		<link rel="stylesheet" href="public/style.css" />
+		<link rel="stylesheet" href="/style.css" />
 
-		<!-- No bundler: three.js is loaded straight from a CDN via an import map -->
-		<script type="importmap">
-			{
-				"imports": {
-					"three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-				}
-			}
-		</script>
+		<!-- Vite bundles dependencies locally for deployment. -->
 	</head>
 	<body>
 		<canvas id="game-canvas"></canvas>

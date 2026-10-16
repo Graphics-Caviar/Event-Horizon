@@ -3,6 +3,8 @@ import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 import { NitrogenCanister } from './Nitrogen'
 import { AssetManager } from '../../core/AssetManager'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { assetUrl } from '../../core/assetUrl.js'
+import { trackModelLoad } from '../../core/modelLoading.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 const ASTEROID_MODELS = ['/assets/models/asteroids/asteroid_01.glb']
@@ -121,9 +123,9 @@ export class AsteroidField {
 	}
 
 	loadModel(loader, url) {
-		return loader
-			.loadAsync(url)
-			.then((gltf) => this.buildModel(gltf, url))
+		return trackModelLoad(loader.loadAsync(assetUrl(url))).then(
+			(gltf) => this.buildModel(gltf, url)
+		)
 	}
 
 	buildModel(gltf, url) {
