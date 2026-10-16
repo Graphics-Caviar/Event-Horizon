@@ -6,6 +6,7 @@
 // orbit/charge loop with hover altitude, and the boss's three hp phases.
 import * as THREE from 'three'
 import { existsSync } from 'node:fs'
+import { assetUrl } from '../src/core/assetUrl.js'
 import { VoidEnemy } from '../src/levels/Level3/VoidEnemy.js'
 import { VoidColossus } from '../src/levels/Level3/VoidColossus.js'
 import { VOID_ASSETS } from '../src/levels/Level3/voidAssets.js'
@@ -20,14 +21,17 @@ const assert = (condition, message) => {
 }
 
 // 1. Every manifest entry resolves on disk and shipped into dist/.
+// Paths use the repo's absolute '/assets/...' convention; dist ships the
+// assetUrl-chosen browser copy (original until a -web.glb variant exists).
 for (const [key, def] of Object.entries(VOID_ASSETS)) {
 	assert(
 		existsSync(`public/${def.path}`),
 		`missing GLB for ${key}: public/${def.path}`
 	)
+	const shipped = assetUrl(def.path).replace(/^\.\//, '')
 	assert(
-		existsSync(`dist/${def.path}`),
-		`GLB not in dist for ${key}: dist/${def.path}`
+		existsSync(`dist/${shipped}`),
+		`GLB not in dist for ${key}: dist/${shipped}`
 	)
 }
 

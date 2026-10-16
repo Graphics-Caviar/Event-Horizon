@@ -6,7 +6,7 @@ export const SHIPS = {
 		mark: 'VG-07',
 		role: 'Balanced Assault Craft',
 		model: [
-			'assets/models/spaceship/spaceship.glb',
+			'/assets/models/spaceship/spaceship.glb',
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/spaceship/spaceship.glb',
 		],
 		tagline: '"Ready for anything."',
@@ -32,7 +32,7 @@ export const SHIPS = {
 		name: 'Starfighter',
 		mark: 'SF-01',
 		role: 'High-Speed Interceptor',
-		model: 'assets/models/spaceship/starfighter.glb',
+		model: '/assets/models/spaceship/starfighter.glb',
 		tagline: '"Speed is survival."',
 		description:
 			'A lightweight interceptor designed for rapid acceleration, tight manoeuvres and escaping extreme gravitational fields.',
@@ -56,7 +56,7 @@ export const SHIPS = {
 		name: 'Aegis',
 		mark: 'AE-09',
 		role: 'Heavy Explorer',
-		model: 'assets/models/spaceship/aegis.glb',
+		model: '/assets/models/spaceship/aegis.glb',
 		tagline: '"Built to survive the impossible."',
 		description:
 			'A heavily reinforced exploration vessel designed to endure asteroid impacts, gravitational instability and deep-space missions.',

@@ -1,16 +1,16 @@
 import * as THREE from 'three'
 
 export const ALIEN_MODELS = {
-	predator: 'assets/models/aliens/alien-predator.glb',
-	flying: 'assets/models/aliens/alien-flying-predator.glb',
-	brute: 'assets/models/aliens/armored-alien-brute.glb',
+	predator: '/assets/models/aliens/alien-predator.glb',
+	flying: '/assets/models/aliens/alien-flying-predator.glb',
+	brute: '/assets/models/aliens/armored-alien-brute.glb',
 }
 
 export const ALIENS = {
 	0: {
 		name: 'runner',
 		model: [
-			'assets/models/aliens/alien-predator.glb',
+			'/assets/models/aliens/alien-predator.glb',
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/alien-predator.glb',
 		],
 		stats: {
@@ -21,7 +21,7 @@ export const ALIENS = {
 	1: {
 		name: 'launcher',
 		model: [
-			'assets/models/aliens/armored-alien-brute.glb',
+			'/assets/models/aliens/armored-alien-brute.glb',
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/armored-alien-brute.glb',
 		],
 		stats: {
@@ -32,7 +32,7 @@ export const ALIENS = {
 	2: {
 		name: 'flyer',
 		model: [
-			'assets/models/aliens/alien-flying-predator.glb',
+			'/assets/models/aliens/alien-flying-predator.glb',
 			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/alien-flying-predator.glb',
 		],
 		stats: {

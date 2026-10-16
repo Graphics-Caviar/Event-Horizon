@@ -206,7 +206,7 @@ export class Level2 extends Level {
 			CHARACTERS[this.state.selectedCharacter] ||
 			CHARACTERS.zara
 		const cachedPilot = this.assetManager.getCachedModel(
-			pilot.gameplayModel || pilot.model
+			pilot.model
 		)
 		if (cachedPilot) {
 			this._installPilot(cachedPilot, pilot.key)
@@ -577,7 +577,7 @@ export class Level2 extends Level {
 			CHARACTERS.zara
 		try {
 			const model = await this.assetManager.loadModel(
-				config.gameplayModel || config.model
+				config.model
 			)
 			if (!this.playerRoot.parent) return
 			this._installPilot(model, config.key)

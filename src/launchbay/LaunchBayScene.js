@@ -21,7 +21,7 @@ import './styles/character-select.css'
 import './styles/launch-bay.css'
 
 const SHIP_ORDER = ['vanguard', 'starfighter', 'aegis']
-const SHIP_MODEL_PATH = 'assets/models/spaceship/spaceship.glb'
+const SHIP_MODEL_PATH = '/assets/models/spaceship/spaceship.glb'
 const TARGET_LENGTH = 6 // world units, matches roughly the procedural ship's scale
 
 export class LaunchBayScene {
