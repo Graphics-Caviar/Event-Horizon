@@ -1,13 +1,9 @@
 import * as THREE from 'three'
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 import { NitrogenCanister } from './Nitrogen'
-import { AssetManager } from '../../core/AssetManager'
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { assetUrl } from '../../core/assetUrl.js'
-import { trackModelLoad } from '../../core/modelLoading.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
-const ASTEROID_MODELS = ['/assets/models/asteroids/asteroid_01.glb']
+export const ASTEROID_MODELS = ['/assets/models/asteroids/asteroid_01.glb']
 
 function randomUnit() {
 	return new THREE.Vector3(
@@ -53,7 +49,8 @@ export class AsteroidField {
 		this.recycleLateralDistanceSq = this.recycleLateralDistance ** 2
 		this.baseSpeed = 200
 		this.speedVariance = 100
-		this.assetManager = new AssetManager()
+		// Use the game's shared cache so startup-preloaded asteroid assets are reused.
+		this.assetManager = level.assetManager
 
 		this.count = count
 		this.modelUrls = models
@@ -122,22 +119,29 @@ export class AsteroidField {
 		return { tangent, bitangent }
 	}
 
-	loadModel(loader, url) {
-		return trackModelLoad(loader.loadAsync(assetUrl(url))).then(
-			(gltf) => this.buildModel(gltf, url)
-		)
+	loadModel(url) {
+		return this.assetManager
+			.loadModel(url)
+			.then((model) => this.buildModel(model, url))
 	}
 
-	buildModel(gltf, url) {
-		gltf.scene.updateMatrixWorld(true)
+	buildModel(model, url) {
+		model.updateMatrixWorld(true)
 
 		const pieces = []
-		gltf.scene.traverse((obj) => {
+		model.traverse((obj) => {
 			if (!obj.isMesh) return
 			const geometry = obj.geometry
 				.clone()
 				.applyMatrix4(obj.matrixWorld)
-			pieces.push({ geometry, material: obj.material })
+			const material = obj.material.clone()
+			// The cached GLTF owns its textures, so clone them before this level
+			// takes ownership and disposes asteroid resources.
+			for (const key in material) {
+				if (material[key]?.isTexture)
+					material[key] = material[key].clone()
+			}
+			pieces.push({ geometry, material })
 		})
 		if (!pieces.length) throw new Error(`No meshes found in ${url}`)
 
@@ -239,9 +243,8 @@ export class AsteroidField {
 	}
 
 	createAsteroids() {
-		const loader = new GLTFLoader()
 		return Promise.all(
-			this.modelUrls.map((url) => this.loadModel(loader, url))
+			this.modelUrls.map((url) => this.loadModel(url))
 		).then((models) => {
 			this.models = models
 			this.populate()
