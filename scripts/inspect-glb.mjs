@@ -19,9 +19,7 @@ const collect = (targets, found = []) => {
 
 const targets = process.argv.slice(2)
 const files = collect(
-	targets.length
-		? targets
-		: ['c:/Users/mpilo/Downloads/graphics']
+	targets.length ? targets : ['c:/Users/mpilo/Downloads/graphics']
 )
 
 for (const file of files) {
@@ -62,7 +60,8 @@ for (const file of files) {
 					? 1
 					: 0
 			)
-			hasVertexColors ||= prim.attributes?.COLOR_0 !== undefined
+			hasVertexColors ||=
+				prim.attributes?.COLOR_0 !== undefined
 		}
 	const dims = max.map((v, i) => v - min[i])
 
@@ -97,19 +96,19 @@ for (const file of files) {
 	console.log(
 		`materials ${(g.materials ?? []).length}, textures ${
 			(g.textures ?? []).length
-		}, images ${(g.images ?? []).length}, extensions ${Object.keys(
-			g.extensionsUsed ?? {}
-		).join(', ') || 'none'}`
+		}, images ${(g.images ?? []).length}, extensions ${
+			Object.keys(g.extensionsUsed ?? {}).join(', ') || 'none'
+		}`
 	)
 	// Node names are the bone/parts map — needed for procedural bone work.
-	const names = (g.nodes ?? [])
-		.map((n) => n.name)
-		.filter(Boolean)
+	const names = (g.nodes ?? []).map((n) => n.name).filter(Boolean)
 	console.log(
 		`node names: ${
 			names.length
 				? names.slice(0, 24).join(', ') +
-					(names.length > 24 ? ` … (+${names.length - 24} more)` : '')
+					(names.length > 24
+						? ` … (+${names.length - 24} more)`
+						: '')
 				: '(none)'
 		}`
 	)

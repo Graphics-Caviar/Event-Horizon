@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { MeshoptSimplifier } from 'meshoptimizer/simplifier'
+import { assetUrl } from '../../core/assetUrl.js'
 
 /**
  * Central manifest for every Level 3 "Void of Gods" GLB. Enemies,
@@ -9,9 +10,10 @@ import { MeshoptSimplifier } from 'meshoptimizer/simplifier'
  * fit      — gameplay size of the longest bbox axis, in metres (the raw
  *            GLBs are authored at ~2 units; see Level2._fit).
  * simplify — meshopt decimation ratio applied once to the cached source
- *            geometry. The generated GLBs carry ~1.5M triangles each;
- *            without this the warband alone would push ~1 GB of vertices
- *            at the GPU.
+ *            geometry when the full-detail original is served. Browsers
+ *            normally get the pre-simplified -web.glb variants from
+ *            optimize-void-models.mjs (80k/20k tris) via assetUrl, for
+ *            which this pass is skipped entirely.
  */
 export const VOID_ASSETS = {
 	riftStalker: {
@@ -94,8 +96,9 @@ const _prepped = new Set()
  * Loads a void asset through the shared AssetManager cache and returns a
  * fresh clone — or null when the GLB is missing/unreadable, logged but
  * never fatal (a missing monument beats a crashed level). The first call
- * also decimates and compacts the cached source geometry, so this clone
- * and every later one share the lightened buffers.
+ * also decimates and compacts the cached source geometry — unless assetUrl
+ * resolves to a pre-optimized -web.glb variant, which is already light —
+ * so this clone and every later one share the lightened buffers.
  */
 export async function loadVoidModel(assetManager, key) {
 	const def = VOID_ASSETS[key]
@@ -106,11 +109,16 @@ export async function loadVoidModel(assetManager, key) {
 	try {
 		await assetManager.preloadModel(def.path)
 		if (!_prepped.has(key)) {
-			const raw = assetManager.getRawModel(def.path)
-			if (raw) {
-				await decimateModel(raw.scene, def.simplify)
-				_prepped.add(key)
+			if (!assetUrl(def.path).endsWith('-web.glb')) {
+				const raw = assetManager.getRawModel(def.path)
+				if (raw) {
+					await decimateModel(
+						raw.scene,
+						def.simplify
+					)
+				}
 			}
+			_prepped.add(key)
 		}
 		return await assetManager.loadModel(def.path)
 	} catch (error) {
@@ -127,9 +135,10 @@ export async function loadVoidModel(assetManager, key) {
  * triangles (position-only error metric, borders locked so the silhouette
  * keeps no holes), then rebuild the buffers holding only the vertices the
  * surviving index still references. Runs before any clone exists, so the
- * whole game shares the result.
+ * whole game shares the result. Fallback for the full-detail originals —
+ * -web.glb variants arrive already simplified and skip this pass.
  */
-async function decimateModel(root, ratio) {
+export async function decimateModel(root, ratio) {
 	await MeshoptSimplifier.ready
 	root.traverse((child) => {
 		if (!child.isMesh || !child.geometry?.index) return

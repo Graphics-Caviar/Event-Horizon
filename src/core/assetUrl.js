@@ -9,7 +9,7 @@ export function assetUrl(path, base = import.meta.env?.BASE_URL || './') {
 	) {
 		relative = relative.replace(/\.glb$/, '-gameplay.glb')
 	} else if (
-		/^assets\/models\/(aliens|rover|spaceship)\/[^/]+\.glb$/.test(
+		/^assets\/models\/(aliens|rover|spaceship|void)\/[^/]+\.glb$/.test(
 			relative
 		) &&
 		!relative.endsWith('-web.glb')
