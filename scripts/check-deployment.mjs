@@ -5,6 +5,7 @@ import { AssetManager } from '../src/core/AssetManager.js'
 import { SHIPS } from '../src/systems/ShipManager.js'
 import { CHARACTERS } from '../src/systems/CharacterManager.js'
 import { ALIEN_MODELS } from '../src/levels/Level2/Alien.js'
+import { VOID_ASSETS } from '../src/levels/Level3/voidAssets.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 globalThis.ProgressEvent ??= class {
@@ -18,6 +19,7 @@ const paths = [
 	),
 	...Object.values(CHARACTERS).map((c) => c.model[0]),
 	...Object.values(ALIEN_MODELS),
+	...Object.values(VOID_ASSETS).map((asset) => asset.path),
 	'/assets/models/rover/sci-fi-exploration-rover.glb',
 	'/assets/models/asteroids/asteroid_01.glb',
 ]

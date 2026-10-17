@@ -2,6 +2,12 @@ import * as THREE from 'three'
 import { Level2 } from '../Level2/Level2.js'
 import { StormLandscape } from './StormLandscape.js'
 import { CrystalPlanet } from './CrystalPlanet.js'
+import { STATUS } from '../../core/GameState.js'
+import { VoidAudio } from './voidAudio.js'
+import { VoidMonuments } from './VoidMonuments.js'
+import { EnergyBlade } from './EnergyBlade.js'
+import { VoidEnemy } from './VoidEnemy.js'
+import { VoidColossus } from './VoidColossus.js'
 
 // Shared locomotion and rover, with an independent Level 3 planet.
 export class Level3 extends Level2 {
@@ -17,7 +23,102 @@ export class Level3 extends Level2 {
 		this.dust.material.uniforms.uColor.value.set(0xb0b1ac)
 		this._buildJetpack()
 		this._buildFlightPose()
+		// The void warband: positional audio, the ancient monuments, the
+		// energy blade, then the enemy roster (Level2's constructor queued
+		// its own aliens virtually — the override below defers to here).
+		this.voidAudio = new VoidAudio(this.audio)
+		this.monuments = new VoidMonuments(this)
+		this.blade = new EnergyBlade(this)
+		this._voidKills = 0
+		this._bossDefeated = false
+		this._fWasDown = false
+		this._spawnVoidRoster()
 		if (import.meta.env.DEV) window.__level3 = this
+	}
+
+	/**
+	 * Level 3 swaps the inherited alien roster for the void warband.
+	 * Level2's constructor calls this virtually mid-build, before the
+	 * audio layer and monument sites exist — so it stays empty and the
+	 * real spawning happens in _spawnVoidRoster from the constructor tail.
+	 */
+	_spawnAliens() {}
+
+	_spawnVoidRoster() {
+		const sites = this.monuments.sites
+		// The colossus queues first: the heaviest GLB should reach the
+		// field earliest, and the arena is the fight that matters.
+		const defs = [
+			{
+				style: 'colossus',
+				home: sites.arena
+					.clone()
+					.add(new THREE.Vector3(30, 0, 24)),
+			},
+			// Rift stalkers hunt the routes in fast, darting packs.
+			{
+				style: 'stalker',
+				home: this.landingSite
+					.clone()
+					.add(new THREE.Vector3(70, 0, -95)),
+			},
+			{
+				style: 'stalker',
+				home: sites.rift
+					.clone()
+					.add(new THREE.Vector3(34, 0, 22)),
+			},
+			{
+				style: 'stalker',
+				home: this.portalSite
+					.clone()
+					.add(new THREE.Vector3(60, 0, -95)),
+			},
+			{
+				style: 'stalker',
+				home: this.crashSite
+					.clone()
+					.add(new THREE.Vector3(85, 0, 25)),
+			},
+			// Sentinels anchor the ruins.
+			{
+				style: 'sentinel',
+				home: sites.reactor
+					.clone()
+					.add(new THREE.Vector3(-18, 0, 26)),
+			},
+			{
+				style: 'sentinel',
+				home: sites.bridge
+					.clone()
+					.add(new THREE.Vector3(-24, 0, 18)),
+			},
+			// Void entities orbit the anomalies and rain energy bolts.
+			{ style: 'entity', home: sites.rift.clone() },
+			{ style: 'entity', home: sites.arena.clone() },
+		]
+		defs.forEach((def, index) => {
+			const spot = this._findAlienSpot(
+				def.home,
+				def.style === 'colossus' ? 6 : 3
+			)
+			if (spot) def.home = spot
+			const enemy =
+				def.style === 'colossus'
+					? new VoidColossus(this, {
+							home: def.home,
+						})
+					: new VoidEnemy(this, def.style, {
+							home: def.home,
+						})
+			this.aliens.push(enemy)
+			this._alienTimers.push(
+				setTimeout(
+					() => enemy.load(),
+					700 + index * 520
+				)
+			)
+		})
 	}
 
 	_lightEnvironment() {
@@ -272,8 +373,17 @@ export class Level3 extends Level2 {
 	}
 
 	update(delta) {
-		super.update(Math.min(delta, 0.05))
+		const step = Math.min(delta, 0.05)
+		super.update(step)
 		this.stormLandscape.update(delta)
+		// Void warband wiring: the audio listener tracks the camera, the
+		// monuments pulse and pull, the blade handles pickup and swings.
+		this.voidAudio?.update(this.sceneManager.camera)
+		this.monuments?.update(step)
+		this.blade?.update(step)
+		const fDown = this.keys.has('KeyF')
+		if (fDown && !this._fWasDown) this.blade?.trySwing()
+		this._fWasDown = fDown
 		const height = this.pilotWalk?.height ?? 3
 		this.jetpack.position.set(
 			0,
@@ -292,13 +402,80 @@ export class Level3 extends Level2 {
 				Math.sin(this.elapsedPlayTime * 45) * 0.15
 		}
 		if (!this.completed && !this.boarded) {
-			this.objectiveEl.innerHTML =
-				'<strong>LEVEL 3 · THE ASHEN WASTES</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Release to descend · E board rover<br>Reach the escape portal on foot, by jetpack or rover.</span>'
+			const bladeHint = this.blade?.equipped
+				? ' · F swing blade'
+				: ''
+			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · THE ASHEN WASTES</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Release to descend · E board rover${bladeHint}<br>Reach the escape portal on foot, by jetpack or rover.</span>`
 			this._objectiveKey = ''
 		}
 	}
 
+	/**
+	 * Level2's mission formula, extended with the void warband: every
+	 * kill pays 150 and the colossus 800, so the fights are worth taking.
+	 */
+	_completeMission() {
+		if (this.completed) return
+		this.completed = true
+		this.rover.inputEnabled = false
+		const time = this.elapsedPlayTime
+		const bonus =
+			(this._voidKills || 0) * 150 +
+			(this._bossDefeated ? 800 : 0)
+		const score = Math.round(
+			1500 +
+				Math.max(0, 600 - time) * 3 +
+				(this._hasBoarded ? 500 : 0) +
+				bonus
+		)
+		this.state.score = score
+		this.state.status = STATUS.LEVEL_COMPLETE
+		this.audio?.playEscape()
+		this.portal.playArrival()
+		// A beat of arrival burst before the results screen takes over.
+		this._endTimer = setTimeout(() => {
+			this.onEnd?.({
+				outcome: 'transited',
+				won: true,
+				score,
+				time,
+				hull: Math.max(0, this.state.integrity),
+				progress: 1,
+				level: this.level,
+			})
+		}, 1500)
+	}
+
+	/** Same flow as Level2's, but the results screen should say Level 3. */
+	_gameOver() {
+		if (this.completed) return
+		this.completed = true
+		this.state.status = STATUS.GAME_OVER
+		this.keys.clear()
+		this.velocity.set(0, 0, 0)
+		this.rover.inputEnabled = false
+		this.rover.speed = 0
+		this.audio?.stopRoverEngine()
+		this.audio?.playCrash()
+		const time = this.elapsedPlayTime
+		this.state.score = 0
+		this._endTimer = setTimeout(() => {
+			this.onEnd?.({
+				outcome: 'overrun',
+				won: false,
+				score: 0,
+				time,
+				hull: 0,
+				progress: 0,
+				level: this.level,
+			})
+		}, 1000)
+	}
+
 	dispose() {
+		this.blade?.dispose()
+		this.monuments?.dispose()
+		this.voidAudio?.dispose()
 		this.stormLandscape?.dispose()
 		if (import.meta.env.DEV && window.__level3 === this)
 			delete window.__level3
