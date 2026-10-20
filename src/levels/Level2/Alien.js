@@ -103,6 +103,9 @@ export class Alien {
 		level.addObject(this.group)
 
 		this.model = null
+		// _fit scales the loaded GLB to gameplay size; every later
+		// scale.set must build on this factor, never assume 1.
+		this._fitScale = 1
 		this.heading = Math.random() * Math.PI * 2
 		this.orbitAngle = Math.random() * Math.PI * 2
 		this._mode = 'idle'
@@ -183,6 +186,7 @@ export class Alien {
 			)
 			if (!this.group.parent) return // level torn down mid-load
 			this.level._fit(model, this.fit)
+			this._fitScale = model.scale.x
 			// Ground the feet: _fit centres the bounding box, so lift
 			// min.y back to the root origin.
 			model.updateMatrixWorld(true)
@@ -714,10 +718,11 @@ export class Alien {
 				Math.sin(this._hitWobble * 28) *
 				0.07 *
 				this._hitWobble
+			const s = this._fitScale
 			this.model.scale.set(
-				1 - shudder * 0.5,
-				1 + shudder,
-				1 - shudder * 0.5
+				s * (1 - shudder * 0.5),
+				s * (1 + shudder),
+				s * (1 - shudder * 0.5)
 			)
 		}
 		this._hitWobble = Math.max(0, this._hitWobble - delta * 2.2)
@@ -1107,10 +1112,11 @@ export class Alien {
 			const pop =
 				Math.sin(Math.min(1, t * 2.4) * Math.PI) * 0.9
 			const flatten = THREE.MathUtils.smoothstep(t, 0.15, 1)
+			const s = this._fitScale
 			this.model?.scale.set(
-				1 + 0.42 * flatten,
-				1 + 0.25 * pop - 0.9 * flatten,
-				1 + 0.3 * flatten
+				s * (1 + 0.42 * flatten),
+				s * (1 + 0.25 * pop - 0.9 * flatten),
+				s * (1 + 0.3 * flatten)
 			)
 			if (this.model) {
 				this.model.position.y = this._baseY + pop * 0.6

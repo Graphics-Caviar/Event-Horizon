@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { assetUrl } from './assetUrl.js'
 import { trackModelLoad } from './modelLoading.js'
@@ -10,6 +11,12 @@ export class AssetManager {
 	constructor() {
 		this._starfieldTexture = null
 		this.gltfLoader = new GLTFLoader()
+		// The Level 3 void GLBs are Draco-compressed. The decoder ships
+		// locally (unlike the launch bay's CDN copy) so level assets stay
+		// offline-capable; it only activates for meshes that use it.
+		this.dracoLoader = new DRACOLoader()
+		this.dracoLoader.setDecoderPath('assets/draco/')
+		this.gltfLoader.setDRACOLoader(this.dracoLoader)
 		this._modelCache = new Map()
 		this._readyModels = new Map()
 	}
@@ -37,6 +44,23 @@ export class AssetManager {
 		for (const path of paths.map((asset) => assetUrl(asset))) {
 			const gltf = this._readyModels.get(path)
 			if (gltf) return this._cloneModel(gltf)
+		}
+		return null
+	}
+
+	/**
+	 * The cached source gltf itself — not a clone — for one-time resource
+	 * prep (e.g. Level 3's meshopt decimation) before instances are made.
+	 * Maps through assetUrl so lookups hit the same cache key preloadModel
+	 * wrote (variant rewrites included).
+	 */
+	getRawModel(pathOrPaths) {
+		const paths = Array.isArray(pathOrPaths)
+			? pathOrPaths
+			: [pathOrPaths]
+		for (const path of paths.map((asset) => assetUrl(asset))) {
+			const gltf = this._readyModels.get(path)
+			if (gltf) return gltf
 		}
 		return null
 	}
