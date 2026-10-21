@@ -12,8 +12,13 @@ const PLANET_RADIUS = 650
 const MALFUNCTION_MIN_SECONDS = 5.2
 const MALFUNCTION_RAMP_SECONDS = 5.8
 const MALFUNCTION_FALLBACK_SECONDS = 9.5
-const EJECTION_SURFACE_DISTANCE = 650
-const EJECTION_FALLBACK_DISTANCE = 1280
+// The escape exchange is 13.6 s long and the spoken "Ejecting." lands at
+// 12.66 s, so the ship is held at the old proximity clearance until the word
+// is reached instead of falling through the planet while it waits.
+const EJECTION_HOLD_CLEARANCE = 650
+// Safety net only: if the recording cannot start or the audio clock stalls,
+// the cinematic still ejects rather than waiting on dead air forever.
+const EJECTION_AUDIO_DEADLINE = 42
 const PLANET_POV_CUT_SECONDS = 1.8
 const clamp01 = (value) => Math.min(1, Math.max(0, value))
 const smooth = (value) => {
@@ -97,6 +102,18 @@ export class Level1ToLevel2Cutscene {
 		this.onComplete = onComplete || (() => {})
 		this.handoff = handoff || {}
 		this.finished = false
+		// Low cockpit bed under the crash traffic. Level 1 faded its own bed
+		// out on dispose; this is the same recording, restarted quietly.
+		game.audio?.startAmbience?.('level1', {
+			volume: 0.22,
+			fade: 3,
+		})
+		// Radio traffic is cued from real phase transitions below, never from
+		// guessed wall-clock offsets. Game owns the engine instance.
+		this.radio = game.radio || null
+		this._radioStarted = false
+		this._radioEmergencyCued = false
+		this._radioChuteCued = false
 		this._disposed = false
 		this.ready = false
 		this.elapsed = 0
@@ -1562,9 +1579,22 @@ export class Level1ToLevel2Cutscene {
 	_advance(nextPhase) {
 		this.phase = nextPhase
 		this.phaseTime = 0
+		// Crash stages are hard takeovers pinned to real events, so the traffic
+		// always matches what is on screen: the diagnosis loop is cut when the
+		// failure lands, the escape exchange takes over when recovery is ruled
+		// out, and the canopy call is cut when the chute opens.
+		if (nextPhase === PHASE.MALFUNCTION)
+			this.radio?.play('l1.crash.control', {
+				interrupt: true,
+			})
 		if (nextPhase === PHASE.EJECTION) this._ejectPilot()
 		if (nextPhase === PHASE.SHIP_ENTRY) {
 			this.terrainRoot.visible = true
+			// Entering the atmosphere: the cockpit bed crossfades into the
+			// surface bed that Level 2 will keep using.
+			this.game.audio?.startAmbience?.('level2', {
+				fade: 4,
+			})
 			this.sceneManager.scene.fog = new THREE.FogExp2(
 				0x351823,
 				0.0005
@@ -1578,6 +1608,16 @@ export class Level1ToLevel2Cutscene {
 		const dt = Math.min(delta, 0.1)
 		this.elapsed += dt
 		this.phaseTime += dt
+
+		// Stage 1 (guidance fluctuations) keys up as the fade clears, so the
+		// pilot's first suspicion is on air before the failure becomes visible.
+		// It is cut by stage 2 on the MALFUNCTION frame.
+		if (!this._radioStarted && this.radio && this.elapsed >= 0.9) {
+			// Latch only once the controller accepts it: if another
+			// transmission still owns the radio, retry next frame rather
+			// than dropping the report entirely.
+			this._radioStarted = this.radio.play('l1.crash.warning')
+		}
 		this.stars.rotation.y += dt * 0.002
 		this.fadeEl.style.opacity = String(
 			clamp01(1 - this.elapsed / 0.9)
@@ -1640,7 +1680,11 @@ export class Level1ToLevel2Cutscene {
 			delta
 		)
 		if (this.phaseTime >= PHASE_DURATION[PHASE.APPROACH]) {
-			this._advance(PHASE.MALFUNCTION)
+			// Hold the establishing shot until the guidance report has played
+			// out: the failure must not interrupt the pilot's own diagnosis.
+			if (!this.radio?.isPlaying()) {
+				this._advance(PHASE.MALFUNCTION)
+			}
 		}
 	}
 
@@ -1701,17 +1745,70 @@ export class Level1ToLevel2Cutscene {
 		const surfaceDistance = this._distanceToPlanetSurface()
 		const malfunctionEstablished =
 			this.phaseTime >= MALFUNCTION_MIN_SECONDS
-		const closeEnough = surfaceDistance <= EJECTION_SURFACE_DISTANCE
-		const fallbackWindow =
-			this.phaseTime >= MALFUNCTION_FALLBACK_SECONDS &&
-			surfaceDistance <= EJECTION_FALLBACK_DISTANCE
 
-		if (malfunctionEstablished && (closeEnough || fallbackWindow)) {
+		// Recovery is ruled out once the loss-of-control report has finished
+		// (or could not play at all). The escape order takes the air then, on
+		// the same condition that arms the seat.
+		if (
+			malfunctionEstablished &&
+			!this._radioEmergencyCued &&
+			!this.radio?.isPlaying()
+		) {
+			this._radioEmergencyCued = true
+			this.radio?.play('l1.crash.emergency', {
+				interrupt: true,
+			})
+		}
+
+		// The recordings outlast the fall: the loss-of-control report and the
+		// escape exchange together run far longer than the 9.5 s this
+		// trajectory was tuned for, so the vessel is held at the clearance the
+		// cut used to eject at. Tumble, roll and momentum keep running, and
+		// the seat still fires on the spoken word.
+		this._holdShipAboveSurface()
+
+		// Ejection is pinned to the spoken word ("Ejecting."), not to a
+		// stopwatch; the deadline only covers a file that never plays.
+		const audioEjected =
+			this._radioEmergencyCued &&
+			Boolean(
+				this.radio?.hasReachedMarker(
+					'l1.crash.emergency',
+					'eject'
+				)
+			)
+		const stalled =
+			this._radioEmergencyCued &&
+			this.phaseTime >= EJECTION_AUDIO_DEADLINE
+		if (audioEjected || stalled) {
 			console.info(
 				`[Cutscene] Ejection at ${surfaceDistance.toFixed(0)} units above visual planet surface after ${this.phaseTime.toFixed(1)}s of malfunction.`
 			)
 			this._advance(PHASE.EJECTION)
 		}
+	}
+
+	/**
+	 * Keep the tumbling ship above the planet while the escape exchange
+	 * plays. Only the cutscene's scripted altitude is constrained; the
+	 * velocity, roll and inherited momentum all keep running, so the hold
+	 * reads as a vessel fighting the fall rather than a frozen frame.
+	 */
+	_holdShipAboveSurface() {
+		const min = PLANET_RADIUS + EJECTION_HOLD_CLEARANCE
+		const distance = this.shipPosition.distanceTo(this.planetCenter)
+		if (distance >= min || distance < 0.001) return
+		const radial = this.shipPosition
+			.clone()
+			.sub(this.planetCenter)
+			.divideScalar(distance)
+		this.shipPosition
+			.copy(this.planetCenter)
+			.addScaledVector(radial, min)
+		const inward = this.shipVelocity.dot(radial)
+		if (inward < 0)
+			this.shipVelocity.addScaledVector(radial, -inward)
+		this.shipRoot.position.copy(this.shipPosition)
 	}
 
 	_updateEjection(delta) {
@@ -1768,6 +1865,13 @@ export class Level1ToLevel2Cutscene {
 		const open = clamp01(this.phaseTime / 2.4)
 		this._deployParachute(open)
 		this._integratePilot(delta, open)
+		// "Canopy is open" goes out when the canopy is actually open, not on
+		// the frame the phase starts. It cuts the escape acknowledgement if
+		// that is still running, so the call matches the visible deployment.
+		if (!this._radioChuteCued && open >= 0.6) {
+			this._radioChuteCued = true
+			this.radio?.play('l1.crash.chute', { interrupt: true })
+		}
 
 		// Stay low on the surface so the player can actually watch the canopy
 		// open against the sky and see the pilot descend all the way to touchdown.
@@ -1937,12 +2041,21 @@ export class Level1ToLevel2Cutscene {
 			2.4,
 			delta
 		)
-		if (this.phaseTime >= PHASE_DURATION[PHASE.REVEAL])
+		// The canopy call is the last transmission of the cut. Handing off in
+		// the middle of it would clip Control's sign-off, so the reveal holds
+		// (for the few seconds the line has left) while the caption fades.
+		if (
+			this.phaseTime >= PHASE_DURATION[PHASE.REVEAL] &&
+			!this.radio?.isPlaying()
+		) {
 			this._finish()
+		}
 	}
 
 	skip() {
 		if (this.finished) return
+		// Skipping silences the radio with the rest of the cinematic.
+		this.radio?.stop()
 		if (!this.shipCrashed) {
 			// Skipping is the only non-physical fast-forward path. Store the
 			// planned sites so Level 2 still starts coherently.
@@ -1979,6 +2092,7 @@ export class Level1ToLevel2Cutscene {
 		if (this._disposed) return
 		this._disposed = true
 		clearTimeout(this._waitTimer)
+		this.radio?.stop()
 		window.removeEventListener('keydown', this._onKeyDown)
 		this.alarmEl?.remove()
 		this.fadeEl?.remove()

@@ -98,6 +98,7 @@ export class Level2 extends Level {
 			transition = {},
 			onEnd = null,
 			planetClass = AlienPlanet,
+			scriptSet = 2,
 		} = {}
 	) {
 		super(game, 2)
@@ -107,6 +108,14 @@ export class Level2 extends Level {
 		this.transition = transition
 		this.onEnd = onEnd
 		this.audio = game.audio
+		// Two-way radio. Level 3 reuses this whole class and passes
+		// scriptSet 3, then swaps the individual cue ids it needs.
+		this.radio = game.radio || null
+		this._radioScriptSet = scriptSet
+		this._radioIntroIn = 1.2
+		this._radioIntroScript =
+			scriptSet === 3 ? 'l3.opening' : 'l2.opening'
+		this._radioRoverScript = scriptSet === 3 ? null : 'l2.rover'
 		this.baseY = Number.isFinite(this.state.surfaceBaseY)
 			? this.state.surfaceBaseY
 			: -140
@@ -302,6 +311,10 @@ export class Level2 extends Level {
 		this._buildLevelHUD()
 		this._updateLevelHUD()
 		this._buildDamageFlash()
+		// Open the radio net for this run and warm the level's voice clips.
+		this.radio?.beginLevel(this._radioScriptSet)
+		// Surface/atmosphere bed for the level (Level 3 passes scriptSet 3).
+		this.audio?.startAmbience(scriptSet === 3 ? 'level3' : 'level2')
 		// Dev-only handle so automated smoke tests can inspect and drive
 		// the level without a visible viewport; stripped from production
 		// builds because import.meta.env.DEV is a static false there.
@@ -1214,6 +1227,7 @@ export class Level2 extends Level {
 			// chase camera follows the rover alone.
 			this.playerRoot.visible = false
 			this.audio?.playHatch()
+			this.radio?.play(this._radioRoverScript)
 			return
 		}
 
@@ -1238,6 +1252,18 @@ export class Level2 extends Level {
 		this._syncPlayerToTerrain()
 		this.playerRoot.visible = true
 		this.audio?.playHatch()
+	}
+
+	/**
+	 * Opening transmission: fire once the surface scene is live, not during
+	 * construction. Level 3 overrides _radioIntroScript to its own opening.
+	 */
+	_updateRadio(delta) {
+		if (!this.radio || this._radioIntroIn <= 0) return
+		this._radioIntroIn -= delta
+		if (this._radioIntroIn > 0) return
+		if (this._radioIntroScript)
+			this.radio.play(this._radioIntroScript)
 	}
 
 	/**
@@ -1669,7 +1695,10 @@ export class Level2 extends Level {
 		const dz =
 			this.playerRoot.position.z -
 			this.portal.group.position.z
-		if (Math.hypot(dx, dz) > PORTAL_ARRIVE_RADIUS) return
+		const distance = Math.hypot(dx, dz)
+		// No recording exists for the gate approach, so the radio stays
+		// silent and the portal itself carries the arrival.
+		if (distance > PORTAL_ARRIVE_RADIUS) return
 		this._completeMission()
 	}
 
@@ -1704,6 +1733,7 @@ export class Level2 extends Level {
 	}
 
 	update(delta) {
+		this._updateRadio(delta)
 		this.planet.update(delta)
 		this.hazards.update(delta)
 		if (this.wreckFlame) {
@@ -2059,6 +2089,8 @@ export class Level2 extends Level {
 
 		this.audio?.stopRoverEngine()
 		this.audio?.playCrash()
+		// The pilot cannot report a loss of signal that already happened.
+		this.radio?.stop()
 
 		const time = this.elapsedPlayTime
 		const score = 0
@@ -2089,6 +2121,8 @@ export class Level2 extends Level {
 		this.feedbackEl?.remove()
 		this.rover?.dispose()
 		this.audio?.stopRoverEngine()
+		this.audio?.stopAmbience()
+		this.radio?.stop()
 		this.gameplayColliders.length = 0
 		this.hazards?.dispose()
 		this.planet?.dispose()

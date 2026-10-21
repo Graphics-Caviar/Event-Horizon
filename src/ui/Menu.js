@@ -1,3 +1,42 @@
+/**
+ * Per-level intel for the main menu. Hints are ordered from a nudge to a
+ * full route, and are revealed one at a time — the modal never dumps the
+ * whole solution. Everything below describes mechanics that exist in
+ * Level1.js / Level2.js / Level3.js today.
+ */
+const LEVEL_INTEL = Object.freeze({
+	1: {
+		name: 'LEVEL 1 · THE SINGULARITY RUN',
+		overview: "Fly Horizon One out of the black hole's pull, thread the asteroid field and cross the escape ring. Hull integrity and elapsed time both feed your score.",
+		hints: [
+			'W thrusts, S brakes, A/D steer, Q/E climb and dive. The singularity pulls harder the longer you take.',
+			'Blue nitrogen canisters refill your boost. Fly through one when you need a burst of speed.',
+			'The beacon ring at 5000 units is the exit. Keep the nose on it and steer only around the rocks that are actually in your path.',
+			'Below 160 units of clearance the proximity alarm sounds. Thrust directly away from the horizon before the drift wins.',
+		],
+	},
+	2: {
+		name: 'LEVEL 2 · ALIEN PLANET EXODUS',
+		overview: 'Horizon One is down on an alien surface. Reach the exploration rover and drive through the escape portal before the local wildlife finishes the job.',
+		hints: [
+			'WASD walks, Shift sprints, Space jumps, V toggles the camera. Follow the yellow guide line to the rover.',
+			'Press E within 9 m of the rover to board; E again exits. Driving is far faster than walking.',
+			'The rover cannot climb the steepest ridges — back out and take the longer line. Lava and deep water will damage you.',
+			'Aliens bite if they catch you. Keep moving, and remember the yellow line switches to the portal once you have boarded.',
+		],
+	},
+	3: {
+		name: 'LEVEL 3 · THE VOID OF GODS',
+		overview: 'The gate opens onto the ashen wastes. Cross the storm, deal with the void warband and reach the escape portal.',
+		hints: [
+			'Hold Space to fly with the jetpack, release to descend. Shift still sprints on the ground.',
+			'An energy blade waits near the landing site. Walk within 3 m to equip it, then press F to swing.',
+			'Void constructs pay 150 points each and the colossus 800. The colossus shockwave only strikes grounded pilots — stay airborne when the ring passes.',
+			'The portal accepts you on foot, by jetpack or by rover. If the warband is overwhelming you, fly over them instead of fighting.',
+		],
+	},
+})
+
 export class Menu {
 	constructor({
 		onPlay,
@@ -6,6 +45,7 @@ export class Menu {
 		onLeaderboard,
 		onSignOut,
 		audioManager,
+		radio,
 		storage,
 	}) {
 		// PLAY no longer collects a callsign here — the pilot registry
@@ -14,6 +54,8 @@ export class Menu {
 		this.onLeaderboard = onLeaderboard || (() => {})
 		this.onSignOut = onSignOut || (() => {})
 		this.audio = audioManager
+		// Radio owns the subtitle overlay; the settings modal toggles it live.
+		this.radio = radio || null
 		this.storage = storage
 
 		// AuthScreen and LeaderboardScreen own their own show/hide, but they
@@ -65,6 +107,29 @@ export class Menu {
 				onTestLevel3?.()
 			}
 		})
+		// INTEL sits inside the clickable card, so it stops propagation:
+		// reading hints must never launch a level by accident.
+		for (const card of this.levelCards) {
+			const level = Number(card.dataset.level)
+			if (!LEVEL_INTEL[level]) continue
+			const intel = document.createElement('button')
+			intel.type = 'button'
+			intel.className = 'level-intel'
+			intel.textContent = 'INTEL'
+			intel.setAttribute(
+				'aria-label',
+				`Mission intel and hints for Level ${level}`
+			)
+			intel.addEventListener('click', (event) => {
+				event.stopPropagation()
+				this._openIntelModal(level)
+			})
+			// The card answers Enter/Space itself; keep those on the button.
+			intel.addEventListener('keydown', (event) =>
+				event.stopPropagation()
+			)
+			card.appendChild(intel)
+		}
 		this.accountEl = document.getElementById('menu-account')
 		this.accountGuestEl =
 			document.getElementById('menu-account-guest')
@@ -197,25 +262,120 @@ export class Menu {
 	}
 
 	_openSettingsModal() {
-		const muted = this.storage.load().settings.muted
+		const { settings } = this.storage.load()
+		const percent = (value) => Math.round(Number(value) * 100)
+		const checked = (value) => (value ? 'checked' : '')
 		this._openModal(`
       <h3>SETTINGS</h3>
       <div class="settings-row">
-        <span>Mute sound effects</span>
-        <input id="setting-mute" type="checkbox" ${muted ? 'checked' : ''} />
+        <span>Mute all audio</span>
+        <input id="setting-mute" type="checkbox" ${checked(settings.muted)} />
       </div>
+      <div class="settings-row">
+        <span>Radio subtitles</span>
+        <input id="setting-subtitles" type="checkbox" ${checked(settings.subtitles !== false)} />
+      </div>
+      <label class="settings-slider">
+        <span>Dialogue <output id="setting-dialogue-value">${percent(settings.dialogueVolume)}%</output></span>
+        <input id="setting-dialogue" type="range" min="0" max="1" step="0.05" value="${settings.dialogueVolume}" />
+      </label>
+      <label class="settings-slider">
+        <span>Music <output id="setting-music-value">${percent(settings.musicVolume)}%</output></span>
+        <input id="setting-music" type="range" min="0" max="1" step="0.05" value="${settings.musicVolume}" />
+      </label>
+      <label class="settings-slider">
+        <span>Sound effects <output id="setting-sfx-value">${percent(settings.sfxVolume)}%</output></span>
+        <input id="setting-sfx" type="range" min="0" max="1" step="0.05" value="${settings.sfxVolume}" />
+      </label>
+      <p class="modal-desc">Music ducks automatically while the radio is transmitting. Subtitles can stay on with the sound off.</p>
     `)
+
+		// One write path for every control: apply live, then persist.
+		const persist = (key, value) => {
+			const profile = this.storage.load()
+			profile.settings[key] = value
+			this.storage.save(profile)
+		}
 
 		document.getElementById('setting-mute').addEventListener(
 			'change',
 			(e) => {
 				const muted = e.target.checked
-				if (this.audio) this.audio.setMuted(muted)
-				const profile = this.storage.load()
-				profile.settings.muted = muted
-				this.storage.save(profile)
+				this.audio?.setMuted(muted)
+				persist('muted', muted)
 			}
 		)
+		document.getElementById('setting-subtitles').addEventListener(
+			'change',
+			(e) => {
+				const enabled = e.target.checked
+				this.radio?.setSubtitlesEnabled(enabled)
+				persist('subtitles', enabled)
+			}
+		)
+
+		for (const channel of ['dialogue', 'music', 'sfx']) {
+			const input = document.getElementById(
+				`setting-${channel}`
+			)
+			const output = document.getElementById(
+				`setting-${channel}-value`
+			)
+			if (!input) continue
+			input.addEventListener('input', (e) => {
+				const value = Number(e.target.value)
+				this.audio?.setChannelVolume(channel, value)
+				if (output)
+					output.textContent = `${percent(value)}%`
+				persist(`${channel}Volume`, value)
+			})
+		}
+	}
+
+	/**
+	 * Level intel: mission overview plus clues that reveal one at a time,
+	 * so the modal never hands over the whole route at once.
+	 */
+	_openIntelModal(level) {
+		const intel = LEVEL_INTEL[level]
+		if (!intel) return
+		const clues = intel.hints
+			.map(
+				(hint, index) => `
+      <li class="intel-clue" data-clue="${index}" hidden>
+        <span class="intel-clue-index">${String(index + 1).padStart(2, '0')}</span>
+        <p>${hint}</p>
+      </li>`
+			)
+			.join('')
+		this._openModal(`
+      <h3>${intel.name}</h3>
+      <p class="modal-desc">${intel.overview}</p>
+      <ol class="intel-clues">${clues}</ol>
+      <div class="modal-actions">
+        <button id="intel-reveal" class="btn-secondary" type="button"></button>
+      </div>
+    `)
+
+		const reveal = document.getElementById('intel-reveal')
+		const items = [
+			...this.modalContent.querySelectorAll('.intel-clue'),
+		]
+		let revealed = 0
+		const syncButton = () => {
+			if (revealed >= items.length) {
+				reveal.hidden = true
+				return
+			}
+			reveal.textContent = `REVEAL ${revealed === 0 ? 'FIRST' : 'NEXT'} CLUE · ${revealed}/${items.length}`
+		}
+		syncButton()
+		reveal.addEventListener('click', () => {
+			if (revealed >= items.length) return
+			items[revealed].hidden = false
+			revealed += 1
+			syncButton()
+		})
 	}
 
 	_openCreditsModal() {

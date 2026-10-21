@@ -9,6 +9,7 @@ import { AssetManager } from './AssetManager.js'
 import { GameState, STATUS } from './GameState.js'
 import { Menu } from '../ui/Menu.js'
 import { AudioManager } from '../audio/AudioManager.js'
+import { RadioDialogue } from '../audio/RadioDialogue.js'
 import { MenuBackground } from './MenuBackground.js'
 import storage from '../services/StorageService.js'
 import { HangarScene } from './HangarScene.js'
@@ -46,6 +47,18 @@ export class Game {
 		this.gameState.selectedCharacter = profile.selectedCharacter
 		this.gameState.selectedShip = profile.selectedShip
 		this.audio.setMuted(profile.settings.muted)
+		this.audio.setChannelVolumes({
+			music: profile.settings.musicVolume,
+			sfx: profile.settings.sfxVolume,
+			dialogue: profile.settings.dialogueVolume,
+		})
+
+		// The two-way radio lives for the whole session: levels only call
+		// radio.play('<script id>'), so playback, subtitles, ducking and
+		// teardown stay in one place (src/audio/RadioDialogue.js).
+		this.radio = new RadioDialogue(this.audio, {
+			subtitles: profile.settings.subtitles !== false,
+		})
 
 		// The Firebase SDK is ~550 kB, and nothing needs it until after the
 		// menu is on screen — so it is pulled in via dynamic import(),
@@ -80,6 +93,7 @@ export class Game {
 			onLeaderboard: () => this._showLeaderboard(),
 			onSignOut: () => this._signOut(),
 			audioManager: this.audio,
+			radio: this.radio,
 			storage,
 		})
 
@@ -448,6 +462,14 @@ export class Game {
 		this.gameState.selectedCharacter = profile.selectedCharacter
 		this.gameState.selectedShip = profile.selectedShip
 		this.audio.setMuted(profile.settings.muted)
+		this.audio.setChannelVolumes({
+			music: profile.settings.musicVolume,
+			sfx: profile.settings.sfxVolume,
+			dialogue: profile.settings.dialogueVolume,
+		})
+		this.radio.setSubtitlesEnabled(
+			profile.settings.subtitles !== false
+		)
 		this._preloadPilot()
 	}
 
@@ -680,6 +702,8 @@ export class Game {
 	/** Start (or restart) Level 1 with the pilot and ship from the hangar. */
 	_startLevel1() {
 		this._activeLevelNumber = 1
+		this.radio.stop()
+		this.radio.setCinematic(false)
 		this._preloadPilot()
 		this.levelScreens.hideAll()
 		this.menu.hideAll()
@@ -701,6 +725,11 @@ export class Game {
 	 * result screen never waits on the network.
 	 */
 	async _onLevelEnd(result) {
+		// Results/pause screens own the screen from here; the radio must not
+		// talk over them. Levels that hand straight to a cutscene re-key up
+		// their own traffic afterwards.
+		this.radio.stop()
+		this.audio.stopAmbience()
 		if (result.won && result.level === 2) {
 			this._testLevel3()
 			return
@@ -779,6 +808,10 @@ export class Game {
 		this.levelScreens.hideAll()
 		this.menu.hideAll()
 		this.currentLevel?.dispose()
+		// Cut the last gameplay transmission; the crash traffic starts fresh
+		// and subtitles move up over the comic captions.
+		this.radio.stop()
+		this.radio.setCinematic(true)
 		this.gameState.status = STATUS.CUTSCENE
 		this.currentLevel = new Level1ToLevel2Cutscene(this, {
 			handoff,
@@ -790,6 +823,8 @@ export class Game {
 	/** Direct menu entry for testing the current Level 2 implementation. */
 	_testLevel2() {
 		this.menu.hideAll()
+		this.radio.stop()
+		this.radio.setCinematic(false)
 		this.levelScreens.hideAll()
 		this.menuBackground?.dispose()
 		this.menuBackground = null
@@ -801,6 +836,10 @@ export class Game {
 
 	_startLevel2(transition = {}) {
 		this._activeLevelNumber = 2
+		// Reached from the crash cinematic: gameplay subtitles drop back
+		// over the HUD and the cinematic's last transmission is cut.
+		this.radio.stop()
+		this.radio.setCinematic(false)
 		this.currentLevel?.dispose()
 		this.currentLevel = new Level2(this, {
 			transition,
@@ -811,6 +850,8 @@ export class Game {
 	/** Results-screen retry: relaunch whichever level was just played. */
 	_testLevel3() {
 		this.menu.hideAll()
+		this.radio.stop()
+		this.radio.setCinematic(false)
 		this.levelScreens.hideAll()
 		this.currentLevel?.dispose()
 		this.currentLevel = null
@@ -834,6 +875,10 @@ export class Game {
 	/** Leave the level for the home page, restoring what the level cleared. */
 	_exitLevelToMenu() {
 		this.levelScreens.hideAll()
+		// Nothing may keep transmitting after the level is gone.
+		this.radio.stop()
+		this.audio.stopAmbience()
+		this.radio.setCinematic(false)
 		this.currentLevel?.dispose()
 		this.currentLevel = null
 		this.gameState.status = STATUS.MENU
@@ -858,6 +903,9 @@ export class Game {
 		if (this.hangarScene) {
 			this.hangarScene.update(delta)
 		}
+		// Radio timing is frame-driven so pausing/skipping a level freezes
+		// the conversation with it (no orphaned timers).
+		this.radio.update(delta)
 		this.currentLevel?.update?.(delta)
 		this.sceneManager.render()
 	}
