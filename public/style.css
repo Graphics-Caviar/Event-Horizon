@@ -2578,3 +2578,180 @@ button:hover {
 		flex: 1 1 auto;
 	}
 }
+
+/* ================= Radio subtitles ================= */
+/* One shared overlay for every level and the crash cinematic. z-index 15
+   keeps it above the HUD (10) and below the pause/results screens (20);
+   pointer-events none means it can never eat a gameplay input. */
+.radio-subtitles {
+	position: fixed;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 15;
+	width: min(680px, calc(100vw - 32px));
+	box-sizing: border-box;
+	padding: 10px 16px 12px;
+	background: rgba(4, 8, 16, 0.82);
+	border: 1px solid rgba(120, 200, 230, 0.35);
+	border-radius: 6px;
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+	text-align: center;
+	pointer-events: none;
+	font-family: 'Courier New', Consolas, monospace;
+	animation: radio-subtitles-in 160ms ease-out;
+}
+
+/* Gameplay variant: clears Level 1's control hint (bottom 24px) and
+   Level 2's movement feedback (bottom 9%). */
+.radio-subtitles-gameplay {
+	bottom: max(96px, 13vh);
+}
+
+/* Cinematic variant: rides above the crash sequence's comic caption. */
+.radio-subtitles-cinematic {
+	bottom: max(210px, 27vh);
+}
+
+.radio-subtitles-speaker {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 2.4px;
+	color: var(--cyan);
+	text-shadow: 0 0 8px rgba(77, 227, 255, 0.45);
+}
+
+/* Mission Control speaks from the ground: warmer, dimmer than the pilot. */
+.radio-subtitles[data-speaker='control'] .radio-subtitles-speaker {
+	color: #ffcf7a;
+	text-shadow: 0 0 8px rgba(255, 190, 90, 0.4);
+}
+
+.radio-subtitles[data-urgency='mid'] .radio-subtitles-speaker {
+	color: #ffb347;
+}
+.radio-subtitles[data-urgency='high'] .radio-subtitles-speaker {
+	color: var(--red);
+	text-shadow: 0 0 10px rgba(255, 77, 94, 0.7);
+}
+.radio-subtitles[data-urgency='high'] {
+	border-color: rgba(255, 77, 94, 0.55);
+	box-shadow:
+		0 8px 28px rgba(0, 0, 0, 0.5),
+		0 0 20px rgba(255, 77, 94, 0.18);
+}
+
+.radio-subtitles-text {
+	margin: 0;
+	font-size: clamp(14px, 1.5vw, 17px);
+	line-height: 1.45;
+	color: #eef8ff;
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes radio-subtitles-in {
+	from {
+		opacity: 0;
+		transform: translate(-50%, 6px);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, 0);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.radio-subtitles {
+		animation: none;
+	}
+}
+
+/* ================= Level intel (menu hints) ================= */
+.level-intel {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 2;
+	margin: 0;
+	padding: 4px 9px;
+	font-family: 'Courier New', Consolas, monospace;
+	font-size: 9.5px;
+	font-weight: 700;
+	letter-spacing: 1.6px;
+	color: var(--cyan);
+	background: rgba(4, 8, 16, 0.82);
+	border: 1px solid rgba(77, 227, 255, 0.45);
+	border-radius: 4px;
+	cursor: pointer;
+	transition:
+		color 0.15s ease,
+		background 0.15s ease,
+		box-shadow 0.15s ease;
+}
+.level-intel:hover,
+.level-intel:focus-visible {
+	color: #04121a;
+	background: var(--cyan);
+	box-shadow: 0 0 14px rgba(77, 227, 255, 0.5);
+	outline: none;
+}
+
+.intel-clues {
+	list-style: none;
+	margin: 0 0 18px;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.intel-clue {
+	display: flex;
+	gap: 10px;
+	padding: 10px 12px;
+	background: rgba(77, 227, 255, 0.05);
+	border: 1px solid rgba(77, 227, 255, 0.18);
+	border-radius: 6px;
+}
+.intel-clue[hidden] {
+	display: none;
+}
+.intel-clue-index {
+	padding-top: 1px;
+	font-size: 10.5px;
+	letter-spacing: 1px;
+	color: var(--cyan);
+}
+.intel-clue p {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.55;
+	color: rgba(220, 232, 245, 0.82);
+}
+
+/* ================= Settings sliders ================= */
+.settings-slider {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 0;
+	border-bottom: 1px solid rgba(120, 160, 220, 0.15);
+	font-size: 13px;
+	color: rgba(220, 232, 245, 0.85);
+}
+.settings-slider > span {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.settings-slider output {
+	font-size: 11px;
+	letter-spacing: 1px;
+	color: var(--cyan);
+}
+.settings-slider input[type='range'] {
+	width: 100%;
+	margin: 0;
+	accent-color: var(--cyan);
+}
+

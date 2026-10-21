@@ -12,7 +12,11 @@ import { VoidColossus } from './VoidColossus.js'
 // Shared locomotion and rover, with an independent Level 3 planet.
 export class Level3 extends Level2 {
 	constructor(game, options = {}) {
-		super(game, { ...options, planetClass: CrystalPlanet })
+		super(game, {
+			...options,
+			planetClass: CrystalPlanet,
+			scriptSet: 3,
+		})
 		this.level = this.state.currentLevel = 3
 		this.playerRoot.name = 'level3-pilot'
 		this.walkCameraOffset = new THREE.Vector3(8, 5.5, 17)
@@ -31,6 +35,11 @@ export class Level3 extends Level2 {
 		this.blade = new EnergyBlade(this)
 		this._voidKills = 0
 		this._bossDefeated = false
+		// Level 3 reuses Level 2's radio hooks; these cue ids replace the
+		// surface ones, and the mission beats are detected in _updateRadio.
+		this._radioIntroScript = 'l3.opening'
+		this._radioRoverScript = null
+		this._radioBeat = { activity: false, complete: false }
 		this._fWasDown = false
 		this._spawnVoidRoster()
 		if (import.meta.env.DEV) window.__level3 = this
@@ -375,6 +384,7 @@ export class Level3 extends Level2 {
 	update(delta) {
 		const step = Math.min(delta, 0.05)
 		super.update(step)
+		this._updateMissionRadio()
 		this.stormLandscape.update(delta)
 		// Void warband wiring: the audio listener tracks the camera, the
 		// monuments pulse and pull, the blade handles pickup and swings.
@@ -408,6 +418,52 @@ export class Level3 extends Level2 {
 			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · THE ASHEN WASTES</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Release to descend · E board rover${bladeHint}<br>Reach the escape portal on foot, by jetpack or rover.</span>`
 			this._objectiveKey = ''
 		}
+	}
+
+	/**
+	 * Mission-beat transmissions, read off the warband's real state rather
+	 * than a timer: the first construct close enough to register, then the
+	 * colossus going down. Each fires once per run. Beats with no recorded
+	 * conversation (the blade pickup) stay silent — there is no synthetic
+	 * speech to fall back on.
+	 */
+	_updateMissionRadio() {
+		if (!this.radio) return
+		// The opening transmission owns the first seconds of the level, and
+		// the radio carries one conversation at a time: a construct can
+		// already be in range on the first frame, so without this gate the
+		// activity report would land first and the opening would be
+		// silently dropped.
+		if (this._radioIntroIn > 0 || this.radio.isPlaying()) return
+		if (
+			!this._radioBeat.activity &&
+			this._nearestVoidDistance() < 85
+		) {
+			// play() refuses while another conversation is on air (the
+			// opening, usually), so the beat only latches when it is
+			// actually accepted and can retry next frame otherwise.
+			this._radioBeat.activity =
+				this.radio.play('l3.activity')
+		}
+		if (this._bossDefeated && !this._radioBeat.complete) {
+			// Same one-shot-on-accept rule: the last exchange is worth a
+			// frame or two of waiting rather than being dropped.
+			this._radioBeat.complete =
+				this.radio.play('l3.complete')
+		}
+	}
+
+	/** Nearest loaded, intact void construct to the player, in world units. */
+	_nearestVoidDistance() {
+		const player = this.playerRoot?.position
+		if (!player) return Number.POSITIVE_INFINITY
+		let nearest = Number.POSITIVE_INFINITY
+		for (const alien of this.aliens || []) {
+			if (!alien?._loaded || alien.smashed) continue
+			const distance = player.distanceTo(alien.position)
+			if (distance < nearest) nearest = distance
+		}
+		return nearest
 	}
 
 	/**
@@ -457,6 +513,7 @@ export class Level3 extends Level2 {
 		this.rover.speed = 0
 		this.audio?.stopRoverEngine()
 		this.audio?.playCrash()
+		this.radio?.stop()
 		const time = this.elapsedPlayTime
 		this.state.score = 0
 		this._endTimer = setTimeout(() => {

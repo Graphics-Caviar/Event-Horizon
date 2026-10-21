@@ -130,6 +130,10 @@ export class Level1 extends Level {
 		this.pilotKey = CHARACTERS[pilotKey] ? pilotKey : 'zara'
 		this.handling = handlingFor(this.shipKey)
 		this.audio = game.audio
+		// Two-way radio: scripts live in src/audio/dialogue/radioScripts.js;
+		// this level only decides when each transmission goes out.
+		this.radio = game.radio || null
+		this._radioIntroIn = 1.1
 
 		// Start from an empty scene (SceneManager's default lights included);
 		// this level brings its own. Game re-adds the defaults on the way back
@@ -206,7 +210,12 @@ export class Level1 extends Level {
 		this._updateHud(T.startDistance)
 
 		this.audio?.startThrusterHum()
+		// Cockpit/engine bed under both the thruster loop and the radio.
+		this.audio?.startAmbience('level1')
 		releaseButtonFocus()
+		// Opens the traffic for this run: clears stale transmissions and
+		// preloads this level's voice clips in the background.
+		this.radio?.beginLevel(1)
 
 		this._onKeyDown = (e) => {
 			if (e.code !== 'Escape' || this.ended) return
@@ -251,6 +260,8 @@ export class Level1 extends Level {
 		// Keys released while paused never deliver their keyup.
 		this.spaceship.clearInput()
 		this.audio?.setThrusterLevel(0)
+		this.audio?.setAmbiencePaused(paused)
+		this.radio?.setPaused(paused)
 		if (!paused) releaseButtonFocus()
 		this.onPauseChange(paused)
 	}
@@ -271,6 +282,8 @@ export class Level1 extends Level {
 			this._updatePortalEntry(delta)
 			return
 		}
+
+		this._updateRadio(delta)
 
 		const T = LEVEL1_TUNING
 		const dt = delta * this.timeScale
@@ -332,6 +345,17 @@ export class Level1 extends Level {
 		this._warningBeep(distance, dt)
 	}
 
+	/**
+	 * Level 1's opening call: fire it once the scene has had a beat to
+	 * settle, not on the constructor's frame, so the ship is already moving
+	 * when Horizon One checks in.
+	 */
+	_updateRadio(delta) {
+		if (!this.radio || this._radioIntroIn <= 0) return
+		this._radioIntroIn -= delta
+		if (this._radioIntroIn <= 0) this.radio.play('l1.opening')
+	}
+
 	_startPortalEntry() {
 		if (this.portalEntry || this.ended) return
 		this.portalEntry = true
@@ -340,6 +364,8 @@ export class Level1 extends Level {
 		this.spaceship.clearInput()
 		this.invulnerableFor = Number.POSITIVE_INFINITY
 		this.audio?.setThrusterLevel(1)
+		// No recording exists for a line here, so the radio stays silent:
+		// the portal whoosh and the cutscene take over.
 
 		// Preserve the player's forward momentum, but guarantee enough speed for
 		// the portal swallow to read clearly on slower/coasting finishes.
@@ -441,7 +467,7 @@ export class Level1 extends Level {
 		this.spaceship.velocity.multiplyScalar(T.hitSpeedKept)
 		this.asteroidField.removeAsteroid(asteroid)
 		this.audio?.playImpact()
-		this.hud.flashDamage()
+		this.hud?.flashDamage()
 	}
 
 	_onCanister(canister) {
@@ -453,6 +479,8 @@ export class Level1 extends Level {
 		this.state.nitrogenCollected = this.nitrogen
 		this.hud.updateBoost(5)
 		this.nitrogenScore += 1000
+		// No recording exists for a pickup line, so the boost sound and the
+		// HUD flash carry it on their own.
 	}
 
 	/** Nudge the camera for a moment after an impact. Applied after the
@@ -539,6 +567,11 @@ export class Level1 extends Level {
 			? STATUS.LEVEL_COMPLETE
 			: STATUS.GAME_OVER
 
+		// The run is over: nothing else should key up, including the intro
+		// if the ship was lost inside its first second.
+		this._radioIntroIn = 0
+		this.radio?.stop()
+
 		this.spaceship.clearInput()
 		this.audio?.stopThrusterHum()
 		if (won) this.audio?.playEscape()
@@ -605,6 +638,8 @@ export class Level1 extends Level {
 		)
 		this.spaceship?.dispose()
 		this.audio?.stopThrusterHum()
+		this.audio?.stopAmbience()
+		this.radio?.stop()
 		this.hud?.hide()
 		const camera = this.sceneManager.camera
 		if (camera && this._baseCameraFar !== undefined) {

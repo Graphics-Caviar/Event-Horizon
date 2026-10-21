@@ -28,8 +28,20 @@ export const DEFAULT_PROFILE = Object.freeze({
 	selectedShip: 'vanguard',
 	settings: Object.freeze({
 		muted: false,
+		subtitles: true,
+		// 0..1 channel levels for the three audio buses.
+		dialogueVolume: 1,
+		musicVolume: 0.8,
+		sfxVolume: 0.9,
 	}),
 })
+
+/** Clamp a stored volume back into 0..1, falling back to the default. */
+const readVolume = (value, fallback) => {
+	const number = Number(value)
+	if (!Number.isFinite(number)) return fallback
+	return Math.max(0, Math.min(1, number))
+}
 
 export class StorageService {
 	constructor() {
@@ -71,17 +83,41 @@ export class StorageService {
 					? parsed.selectedShip
 					: DEFAULT_PROFILE.selectedShip
 
+			const settings = parsed.settings || {}
 			const muted =
-				parsed.settings &&
-				typeof parsed.settings.muted === 'boolean'
-					? parsed.settings.muted
+				typeof settings.muted === 'boolean'
+					? settings.muted
 					: DEFAULT_PROFILE.settings.muted
+			// Subtitles default ON: they are the accessibility path for
+			// players who cannot hear the radio at all.
+			const subtitles =
+				typeof settings.subtitles === 'boolean'
+					? settings.subtitles
+					: DEFAULT_PROFILE.settings.subtitles
 
 			return {
 				playerName,
 				selectedCharacter,
 				selectedShip,
-				settings: { muted },
+				settings: {
+					muted,
+					subtitles,
+					dialogueVolume: readVolume(
+						settings.dialogueVolume,
+						DEFAULT_PROFILE.settings
+							.dialogueVolume
+					),
+					musicVolume: readVolume(
+						settings.musicVolume,
+						DEFAULT_PROFILE.settings
+							.musicVolume
+					),
+					sfxVolume: readVolume(
+						settings.sfxVolume,
+						DEFAULT_PROFILE.settings
+							.sfxVolume
+					),
+				},
 			}
 		} catch (error) {
 			console.warn(
