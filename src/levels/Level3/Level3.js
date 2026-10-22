@@ -45,6 +45,29 @@ export class Level3 extends Level2 {
 		if (import.meta.env.DEV) window.__level3 = this
 	}
 
+	/** Keep the cinematic's distant structure visible after landing. This is
+	 * decorative ownership only; existing terrain, objectives and roster stay put. */
+	adoptArrivalBackdrop(backdrop, ship = null) {
+		this.arrivalBackdrop?.dispose()
+		this.arrivalBackdrop = backdrop
+		this.addObject(backdrop.group)
+		this.arrivalShip?.dispose()
+		this.arrivalShip = ship
+		if (ship) {
+			this.addObject(ship.group)
+			const size = ship.hullBounds.getSize(
+				new THREE.Vector3()
+			)
+			this._registerGameplayCollider(
+				ship.group.position.x,
+				ship.group.position.z,
+				Math.min(9, Math.max(size.x, size.z) * 0.45),
+				'arrival-ship',
+				ship.group
+			)
+		}
+	}
+
 	/**
 	 * Level 3 swaps the inherited alien roster for the void warband.
 	 * Level2's constructor calls this virtually mid-build, before the
@@ -382,6 +405,8 @@ export class Level3 extends Level2 {
 	}
 
 	update(delta) {
+		this.arrivalBackdrop?.update(delta)
+		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
 		this._updateMissionRadio()
@@ -530,6 +555,8 @@ export class Level3 extends Level2 {
 	}
 
 	dispose() {
+		this.arrivalBackdrop?.dispose()
+		this.arrivalShip?.dispose()
 		this.blade?.dispose()
 		this.monuments?.dispose()
 		this.voidAudio?.dispose()

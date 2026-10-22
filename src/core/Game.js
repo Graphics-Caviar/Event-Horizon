@@ -4,6 +4,7 @@ import { clearScene } from './Level.js'
 import { Level2 } from '../levels/Level2/Level2.js'
 import { Level3 } from '../levels/Level3/Level3.js'
 import { Level1ToLevel2Cutscene } from '../cutscenes/Level1ToLevel2Cutscene.js'
+import { Level2ToLevel3Cutscene } from '../cutscenes/Level2ToLevel3Cutscene.js'
 import { SceneManager } from './SceneManager.js'
 import { AssetManager } from './AssetManager.js'
 import { GameState, STATUS } from './GameState.js'
@@ -725,15 +726,29 @@ export class Game {
 	 * result screen never waits on the network.
 	 */
 	async _onLevelEnd(result) {
+		// Ignore stale/doubled success events before touching the active radio
+		// or persistence. Level3 also extends Level2, so check its level number.
+		if (
+			result.won &&
+			result.level === 2 &&
+			(!(this.currentLevel instanceof Level2) ||
+				this.currentLevel.level !== 2 ||
+				this.currentLevel._transitStarted)
+		)
+			return
 		// Results/pause screens own the screen from here; the radio must not
 		// talk over them. Levels that hand straight to a cutscene re-key up
 		// their own traffic afterwards.
 		this.radio.stop()
-		this.audio.stopAmbience()
+		// Level 2's escape is a story transition now: the transit cinematic
+		// shoots the still-live surface world, so the Level 2 ambience keeps
+		// breathing under the alien-ship discovery before the ascent into space.
 		if (result.won && result.level === 2) {
-			this._testLevel3()
+			this._saveCompletedLevel2Run(result)
+			this._startLevel2ToLevel3Cutscene(result)
 			return
 		}
+		this.audio.stopAmbience()
 		// A successful escape is now a story transition rather than a results
 		// screen. Persist the Level 1 run in the background, then hand the exact
 		// exit transform/momentum into the cinematic. Failures keep the existing
@@ -802,6 +817,84 @@ export class Game {
 					error?.message
 				)
 			)
+	}
+
+	_saveCompletedLevel2Run(result) {
+		const status = this.backend?.status()
+		if (!status?.ready || !status?.signedIn) return
+
+		// Same snapshot rule as Level 1: plain values captured before the
+		// cinematic changes currentLevel/status, so asynchronous network work
+		// cannot accidentally submit the Level 3 state instead.
+		const completedState = {
+			playerName: this.gameState.playerName,
+			score: result.score,
+			elapsedTime: result.time,
+			nitrogenCollected: this.gameState.nitrogenCollected,
+			currentLevel: 2,
+		}
+		void this.backend
+			.submitRun(completedState, { completed: true })
+			.catch((error) =>
+				console.warn(
+					'[Backend] Level 2 completion could not be saved:',
+					error?.message
+				)
+			)
+	}
+
+	/**
+	 * The Level 2 escape: commandeering an alien vessel and wormhole transit into
+	 * Level 3. The still-live Level 2 world is handed to the cutscene (NOT
+	 * disposed here) — the cinematic shoots it, disposes it at the transit
+	 * and builds the existing Level 3 on the other side.
+	 */
+	_startLevel2ToLevel3Cutscene(result) {
+		const level = this.currentLevel
+		if (
+			!(level instanceof Level2) ||
+			level.level !== 2 ||
+			level._transitStarted
+		)
+			return
+		level._transitStarted = true
+		this.levelScreens.hideAll()
+		this.menu.hideAll()
+		// Cinematic subtitles ride higher over the letterbox; the transit
+		// conversation keys up fresh after _onLevelEnd's stop().
+		this.radio.setCinematic(true)
+		this.gameState.status = STATUS.CUTSCENE
+		// A skip or a load failure must never fall back to replaying Level 2.
+		this._activeLevelNumber = 3
+		let cinematic
+		cinematic = new Level2ToLevel3Cutscene(this, {
+			level,
+			result,
+			onComplete: (level3) => {
+				if (this.currentLevel !== cinematic) {
+					level3?.dispose()
+					return
+				}
+				this._onLevel2ToLevel3Complete(level3)
+			},
+		})
+		this.currentLevel = cinematic
+	}
+
+	_onLevel2ToLevel3Complete(level3) {
+		// Retire the finished cinematic shell (it disposes nothing more once
+		// complete); the live Level 3 world it built is what the loop takes
+		// over, exactly like the crash cutscene hands Level 2 back.
+		this.currentLevel?.dispose?.()
+		this.currentLevel = level3 || null
+		if (!level3) {
+			// Level 3 could not be built (the cutscene's failure path already
+			// cleaned the scene): recover to the menu rather than stranding
+			// the player on a black screen.
+			this._exitLevelToMenu()
+			return
+		}
+		this.gameState.status = STATUS.PLAYING
 	}
 
 	_startLevel1ToLevel2Cutscene(handoff) {

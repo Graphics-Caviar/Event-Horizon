@@ -99,6 +99,7 @@ export class Level2 extends Level {
 			onEnd = null,
 			planetClass = AlienPlanet,
 			scriptSet = 2,
+			onPrepared = null,
 		} = {}
 	) {
 		super(game, 2)
@@ -221,7 +222,7 @@ export class Level2 extends Level {
 			this._installPilot(cachedPilot, pilot.key)
 		} else {
 			this._setPilot(this._fallbackPilot())
-			this._loadPilot()
+			this.pilotReady = this._loadPilot()
 		}
 
 		this.wreckRoot = new THREE.Group()
@@ -279,6 +280,9 @@ export class Level2 extends Level {
 		this.boarded = false
 		this._hasBoarded = false
 		this.completed = false
+		// True while the Level 2 -> Level 3 transit cinematic is shooting
+		// this still-live world (input parked, HUD hidden, cutscene camera).
+		this.cinematic = false
 		this.elapsedPlayTime = 0
 		this._endTimer = null
 		this._eWasDown = false
@@ -289,7 +293,9 @@ export class Level2 extends Level {
 		this._suckPuff = 0
 		this._hitScratch = new THREE.Vector3()
 		this.keys = new Set()
-		this._onKeyDown = (e) => this.keys.add(e.code)
+		this._onKeyDown = (e) => {
+			if (!this.transitionHeld) this.keys.add(e.code)
+		}
 		this._onKeyUp = (e) => this.keys.delete(e.code)
 		// Losing focus mid-hold never delivers the matching keyup, which
 		// would leave the key stuck in the Set (frozen movement, and the
@@ -319,6 +325,8 @@ export class Level2 extends Level {
 		// the level without a visible viewport; stripped from production
 		// builds because import.meta.env.DEV is a static false there.
 		if (import.meta.env.DEV) window.__level2 = this
+		// Let a transition retain ownership if the derived constructor fails.
+		onPrepared?.(this)
 	}
 
 	_findWalkableSite(origin) {
@@ -1255,6 +1263,64 @@ export class Level2 extends Level {
 	}
 
 	/**
+	 * Park gameplay for the Level 2 -> Level 3 transit cinematic. Input can
+	 * never reach the world again (the key listeners are removed outright,
+	 * so no toggle or drive key can re-arm), the HUDs step aside for the
+	 * letterbox, and the world itself keeps living under the cutscene's
+	 * camera — the cinematic drives level.update() itself.
+	 */
+	enterCinematic() {
+		this.cinematic = true
+		this._radioIntroIn = 0
+		window.removeEventListener('keydown', this._onKeyDown)
+		window.removeEventListener('keyup', this._onKeyUp)
+		window.removeEventListener('blur', this._onBlur)
+		this.keys.clear()
+		this.firstPerson = false
+		// The completion timer has already fired (it is what started the
+		// cinematic); drop the stale handle defensively.
+		if (this._endTimer) {
+			clearTimeout(this._endTimer)
+			this._endTimer = null
+		}
+		this.rover.inputEnabled = false
+		this.rover.speed = 0
+		this.objectiveEl.style.display = 'none'
+		this.levelHudEl.style.display = 'none'
+		this.feedbackEl.style.display = 'none'
+	}
+
+	/**
+	 * Step the pilot out of the rover for cinematic boarding,
+	 * mirroring the disembark half of _toggleBoardRover (edge detection and
+	 * debounce are meaningless here — the cinematic calls this exactly once).
+	 */
+	dismountForCinematic() {
+		if (!this.boarded) return
+		this.boarded = false
+		this.rover.inputEnabled = false
+		this.rover.speed = 0
+		this.velocity.set(0, 0, 0)
+		this._airborne = false
+		this._verticalSpeed = 0
+		this._jumpWasDown = false
+		const exit = this.rover.getExitPosition(new THREE.Vector3())
+		if (this.rover.collider) this.rover.collider.enabled = false
+		this.planet.clampToBounds(exit, PLAYER_RADIUS)
+		this.planet.resolveCircleCollisions(
+			exit,
+			PLAYER_RADIUS,
+			this.gameplayColliders
+		)
+		if (this.rover.collider) this.rover.collider.enabled = true
+		this.playerRoot.position.x = exit.x
+		this.playerRoot.position.z = exit.z
+		this._syncPlayerToTerrain()
+		this.playerRoot.visible = true
+		this.audio?.playHatch()
+	}
+
+	/**
 	 * Opening transmission: fire once the surface scene is live, not during
 	 * construction. Level 3 overrides _radioIntroScript to its own opening.
 	 */
@@ -1557,7 +1623,9 @@ export class Level2 extends Level {
 	 */
 	_applyWormholeSuction(delta) {
 		if (this.completed) {
-			this.portal.suckLevel = 0
+			// The transit cinematic scripts the vortex strength itself while
+			// it shoots the approach; otherwise park the swirl.
+			if (!this.cinematic) this.portal.suckLevel = 0
 			this._suckShake = 0
 			return
 		}
@@ -1705,6 +1773,8 @@ export class Level2 extends Level {
 	_completeMission() {
 		if (this.completed) return
 		this.completed = true
+		this.transitionHeld = true
+		this.keys.clear()
 		// Stop the rover where it crossed; the pilot freeze happens in
 		// update() off the completed flag.
 		this.rover.inputEnabled = false
@@ -1716,9 +1786,7 @@ export class Level2 extends Level {
 		)
 		this.state.score = score
 		this.state.status = STATUS.LEVEL_COMPLETE
-		this.audio?.playEscape()
-		this.portal.playArrival()
-		// A beat of arrival burst before the results screen takes over.
+		// Transit owns the arrival burst and sound; completion only parks play.
 		this._endTimer = setTimeout(() => {
 			this.onEnd?.({
 				outcome: 'transited',
@@ -1729,7 +1797,7 @@ export class Level2 extends Level {
 				progress: 1,
 				level: this.level,
 			})
-		}, 1500)
+		}, 250)
 	}
 
 	update(delta) {
@@ -1790,7 +1858,8 @@ export class Level2 extends Level {
 			// isn't chasing a still-walking character.
 			this.velocity.set(0, 0, 0)
 			this._speed = 0
-			this.pilotWalk?.update(delta, 0, false)
+			if (!this.cinematic)
+				this.pilotWalk?.update(delta, 0, false)
 		} else {
 			this._updatePlayerMovement(delta)
 		}
@@ -1800,11 +1869,19 @@ export class Level2 extends Level {
 		this.elapsedPlayTime += delta
 		this._applyWormholeSuction(delta)
 		this.portal.update(delta)
+		// No waypoints on camera: the cinematic's gate is its own landmark,
+		// and a guide ribbon to the rover would cut through every wide shot.
 		this.guide.update(delta, this.playerRoot.position, {
-			active: !this.boarded && !this._hasBoarded,
+			active:
+				!this.cinematic &&
+				!this.boarded &&
+				!this._hasBoarded,
 		})
 		this.portalGuide.update(delta, this.playerRoot.position, {
-			active: this._hasBoarded && !this.completed,
+			active:
+				!this.cinematic &&
+				this._hasBoarded &&
+				!this.completed,
 		})
 		this.dust.update(delta)
 		this.damageCooldown = Math.max(0, this.damageCooldown - delta)
@@ -1894,6 +1971,10 @@ export class Level2 extends Level {
 		this._separateAliens()
 		this._updateMovementFeedback(delta)
 		this._checkPortalArrival()
+
+		// The transit cinematic now owns the camera, the HUD and the pilot;
+		// everything above keeps the valley alive under its shots.
+		if (this.cinematic) return
 
 		const camera = this.sceneManager.camera
 

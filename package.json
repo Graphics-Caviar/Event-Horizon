@@ -28,7 +28,8 @@
 		"seed": "node scripts/seedFirestore.js",
 		"test:backend": "node scripts/testBackend.js",
 		"test:level2": "node scripts/check-rover.mjs",
-		"test:pilots": "node scripts/check-pilot-loading.mjs"
+		"test:pilots": "node scripts/check-pilot-loading.mjs",
+		"test:cutscene": "node scripts/bundle-void-cutscene.mjs"
 	},
 	"type": "module",
 	"version": "1.0.0"

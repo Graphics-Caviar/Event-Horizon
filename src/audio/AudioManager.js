@@ -366,6 +366,33 @@ export class AudioManager {
 		this._stopEngine('ship')
 	}
 
+	/** Cinematic gravity texture; same effects bus and lifecycle as engines. */
+	setCinematicDrone(amount) {
+		if (amount <= 0.001 && !this._engines.has('cinematicVoid'))
+			return
+		this._startEngine('cinematicVoid', {
+			...THRUSTER_PROFILE,
+			base: 27,
+			detune: 7,
+			grind: 0.08,
+			rumble: 1,
+			air: 0.025,
+			airTone: 150,
+			baseFilter: 95,
+			filterRange: 70,
+			rev: 0.15,
+			idle: 0,
+			range: 0.13,
+		})
+		this._setEngineLevel(
+			'cinematicVoid',
+			Math.max(0, Math.min(1, amount))
+		)
+	}
+	stopCinematicDrone() {
+		this._stopEngine('cinematicVoid')
+	}
+
 	/** The rover's drive loop (deeper and rougher than the thruster). */
 	startRoverEngine() {
 		this._startEngine('rover', ROVER_PROFILE)
@@ -762,6 +789,11 @@ export class AudioManager {
 		this._blip(200, 2000, 2, 'square', 0.4)
 		this._blip(400, 2000, 2, 'sine', 0.4)
 	}
+	/** Soft boot contact through the existing effects bus. */
+	playFootstep() {
+		this._blip(95, 38, 0.09, 'triangle', 0.055)
+	}
+
 	/** Rover hatch: a body thud with a small latch click on top. */
 	playHatch() {
 		this._blip(150, 55, 0.16, 'square', 0.2)
