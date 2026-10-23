@@ -21,15 +21,15 @@ The existing alien-flying-predator-web.glb and armored-alien-brute-web.glb were 
 - Each enemy owns its HP. Nearby HUD text identifies the closest loaded living enemy within 35 units. Existing world health bars appear briefly after damage and remain hidden beyond that range.
 - Blade damage is 30; rover ram damage is 75. Enemy balance lives in VOID_STYLES. Player and encounter settings can be passed through Level3's combatConfig options.
 
-| Enemy | HP | Damage | Role |
-| --- | ---: | ---: | --- |
-| Rift stalker | 50 | 8 | Fast ground melee |
-| Flying predator | 60 | 10 | Telegraph, dive, recover, orbit; 2-second cooldown |
-| Alien brute | 180 | 20 / 30 | Alternating basic/heavy melee, longer heavy windup and recovery cooldown |
-| Void sentinel | 180 | 20 / 30 | Existing heavy guardian |
-| Void entity | 60 | 10 | Existing ranged aerial combatant |
-| Void colossus | 350 | 25 | Existing multi-phase boss |
-| Falling debris | — | 15 | Existing warning/impact event |
+| Enemy           |  HP |  Damage | Role                                                                     |
+| --------------- | --: | ------: | ------------------------------------------------------------------------ |
+| Rift stalker    |  50 |       8 | Fast ground melee                                                        |
+| Flying predator |  60 |      10 | Telegraph, dive, recover, orbit; 2-second cooldown                       |
+| Alien brute     | 180 | 20 / 30 | Alternating basic/heavy melee, longer heavy windup and recovery cooldown |
+| Void sentinel   | 180 | 20 / 30 | Existing heavy guardian                                                  |
+| Void entity     |  60 |      10 | Existing ranged aerial combatant                                         |
+| Void colossus   | 350 |      25 | Existing multi-phase boss                                                |
+| Falling debris  |   ï¿½ |      15 | Existing warning/impact event                                            |
 
 Brute basic cooldown is 2.5 seconds, heavy cooldown 5 seconds, plus its recovery window. Enemy movement retains exponential acceleration/turning, banking, stride, windup, strike and recovery choreography. Predators now telegraph before descending and climb during the recovery portion of the dive. Ground strikes require vertical proximity; incidental rover contact no longer inflicts untelegraphed damage. Steep ground steps stop and deflect ground movement. Flyers ignore ground prop collisions when above their clearance.
 
