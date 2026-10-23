@@ -25,3 +25,6 @@ Thumbs.db
 # so the intended folder structure survives in git even though it's empty
 # of real assets right now. Once real files land, this section is a no-op.
 node_modules
+
+# Generated cinematic tests and local browser review artifacts
+/.tmp-cutscene-test/

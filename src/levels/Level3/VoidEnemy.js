@@ -5,7 +5,7 @@ const CULL_DISTANCE = 260
 // Rover impact above this speed hurts the enemy instead of the crew
 // (same thresholds as Level2's Alien).
 const RAM_SPEED_MIN = 6
-const RAM_DAMAGE = 3
+const RAM_DAMAGE = 75
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
 const _forward = new THREE.Vector3()
@@ -58,7 +58,8 @@ const glowTexture = () => {
 export const VOID_STYLES = {
 	stalker: {
 		asset: 'riftStalker',
-		hp: 2,
+		hp: 50,
+		damage: 8,
 		fit: 5.4,
 		radius: 2,
 		speed: 5,
@@ -82,7 +83,9 @@ export const VOID_STYLES = {
 	},
 	sentinel: {
 		asset: 'voidSentinel',
-		hp: 4,
+		hp: 180,
+		damage: 20,
+		heavyDamage: 30,
 		fit: 7.2,
 		radius: 2.8,
 		speed: 2.6,
@@ -107,7 +110,8 @@ export const VOID_STYLES = {
 	},
 	entity: {
 		asset: 'voidEntity',
-		hp: 3,
+		hp: 60,
+		damage: 10,
 		fit: 6.6,
 		radius: 2.4,
 		speed: 6.5,
@@ -136,7 +140,8 @@ export const VOID_STYLES = {
 	},
 	colossus: {
 		asset: 'voidColossus',
-		hp: 14,
+		hp: 350,
+		damage: 25,
 		fit: 9.5,
 		radius: 3.6,
 		speed: 2.2,
@@ -159,6 +164,20 @@ export const VOID_STYLES = {
 		idleLoop: true,
 		slamRadius: 9,
 	},
+}
+
+VOID_STYLES.predator = {
+	...VOID_STYLES.entity,
+	asset: 'flyingPredator',
+	diveEvery: 1,
+	cooldown: [2, 2],
+	noticeRange: 65,
+}
+VOID_STYLES.brute = {
+	...VOID_STYLES.sentinel,
+	asset: 'alienBrute',
+	cooldown: [2.5, 2.5],
+	heavyCooldown: 5,
 }
 
 /**
@@ -239,7 +258,7 @@ export class VoidEnemy {
 			this.style.asset
 		)
 		if (!model || this._disposed || !this.group.parent) return
-		this.level._fit(model, this.fit)
+		this.level._fit(model, this.style.fit)
 		this._fitScale = model.scale.x
 		model.updateMatrixWorld(true)
 		const box = new THREE.Box3().setFromObject(model)
@@ -351,6 +370,18 @@ export class VoidEnemy {
 			return
 		}
 
+		if (
+			this.kind !== 'flyer' &&
+			this.level.survival?.isGone(
+				this.position.x,
+				this.position.z
+			)
+		) {
+			this._die()
+			this.group.visible = false
+			return
+		}
+
 		const dx = playerPos.x - this.position.x
 		const dz = playerPos.z - this.position.z
 		const distance = Math.hypot(dx, dz)
@@ -372,6 +403,9 @@ export class VoidEnemy {
 				this._hpBar.sprite.visible = false
 		}
 
+		if (this._hpBar)
+			this._hpBar.sprite.visible =
+				this._hpBar.timer > 0 && distance < 35
 		this._updateBolts(delta)
 		this._updateAudio(distance)
 		if (culled) return
@@ -403,6 +437,24 @@ export class VoidEnemy {
 	}
 
 	_enter(state) {
+		if (['prepare', 'charge', 'dive'].includes(state)) {
+			const count = this.level.aliens.filter(
+				(e) =>
+					e !== this &&
+					!e.smashed &&
+					[
+						'prepare',
+						'strike',
+						'charge',
+						'dive',
+					].includes(e.state)
+			).length
+			if (
+				count >=
+				(this.level.combatConfig?.maxAttackers ?? 3)
+			)
+				return
+		}
 		this.state = state
 		this._phaseT = 0
 	}
@@ -520,7 +572,15 @@ export class VoidEnemy {
 					this._enter('recover')
 					this._setGlow(0)
 					this._cooldown =
-						rand(this.style.cooldown) +
+						(this._heavyAttack
+							? (this.style
+									.heavyCooldown ??
+								5)
+							: rand(
+									this
+										.style
+										.cooldown
+								)) +
 						this.style.recover
 				}
 				break
@@ -591,7 +651,18 @@ export class VoidEnemy {
 	}
 
 	/** Hook for style-specific attack selection (boss slams vs sweeps). */
-	_onPrepareStart() {}
+	_onPrepareStart() {
+		this._attackCount = (this._attackCount ?? 0) + 1
+		this._heavyAttack =
+			!!this.style.heavyDamage && this._attackCount % 2 === 0
+		if (this._heavyAttack) this._windupOverride = 1.25
+	}
+
+	get attackDamage() {
+		return this._heavyAttack
+			? this.style.heavyDamage
+			: this.style.damage
+	}
 
 	_applyMeleeStrike(playerPos) {
 		const dx = playerPos.x - this.position.x
@@ -607,7 +678,11 @@ export class VoidEnemy {
 					(sweeping
 						? 0.05
 						: this.style.attackArc))
-		if (inArc) {
+		if (
+			inArc &&
+			Math.abs(playerPos.y - this.position.y) <
+				this.style.fit + 1
+		) {
 			// One boolean per attack; Level2 applies hull damage through
 			// its own cooldown + knockback path.
 			this.pendingStrike = true
@@ -749,7 +824,15 @@ export class VoidEnemy {
 			}
 			case 'dive': {
 				this._phaseT += delta
-				const t = this._phaseT / this.style.diveDuration
+				if (this._phaseT < this.style.windup) {
+					this._velocity.multiplyScalar(
+						Math.exp(-4 * delta)
+					)
+					break
+				}
+				const t =
+					(this._phaseT - this.style.windup) /
+					this.style.diveDuration
 				if (t < 0.55) {
 					this._moveTowards(playerPos, delta, 17)
 				} else if (t < 0.75) {
@@ -804,7 +887,10 @@ export class VoidEnemy {
 					this._enter('orbit')
 					this._setGlow(0)
 					this._cooldown =
-						rand(this.style.cooldown) + 1.4
+						rand(this.style.cooldown) +
+						(this.styleName === 'predator'
+							? 0
+							: 1.4)
 				}
 				break
 			}
@@ -1063,13 +1149,34 @@ export class VoidEnemy {
 		// Integrate the planar velocity, then resolve against props and
 		// bounds so nothing clips through rocks or leaves the map.
 		_step.copy(this._velocity).multiplyScalar(delta)
+		const nextGround = this.planet.heightAt(
+			this.position.x + _step.x,
+			this.position.z + _step.z
+		)
+		const oldGround = this.planet.heightAt(
+			this.position.x,
+			this.position.z
+		)
+		if (
+			this.kind !== 'flyer' &&
+			Math.abs(nextGround - oldGround) >
+				Math.max(1.5, _step.length() * 1.2)
+		) {
+			this._velocity.set(
+				-this._velocity.z * 0.5,
+				0,
+				this._velocity.x * 0.5
+			)
+			_step.set(0, 0, 0)
+		}
 		this.position.x += _step.x
 		this.position.z += _step.z
-		this.planet.resolveCircleCollisions(
-			this.position,
-			this.radius,
-			this.level.gameplayColliders
-		)
+		if (this.kind !== 'flyer' || this.position.y < nextGround + 18)
+			this.planet.resolveCircleCollisions(
+				this.position,
+				this.radius,
+				this.level.gameplayColliders
+			)
 		this.planet.clampToBounds(this.position, this.radius)
 		this._syncToTerrain(delta)
 
@@ -1145,7 +1252,12 @@ export class VoidEnemy {
 		}
 		// Flyers cruise on wing power above the terrain; dives drop to
 		// strike range and staggers dip low enough to be punished.
-		const hovering = this.state !== 'dive'
+		const hovering =
+			this.state !== 'dive' ||
+			this._phaseT < this.style.windup ||
+			this._phaseT >
+				this.style.windup +
+					this.style.diveDuration * 0.75
 		const staggerDip = this.state === 'stagger' ? 7 : 0
 		const targetY = hovering
 			? ground +
@@ -1256,10 +1368,7 @@ export class VoidEnemy {
 		}
 		if (this._contactCooldown > 0) return null
 		this._contactCooldown = 2.4
-		// Bumping a standing enemy earns a snap.
-		this._enter('stagger')
-		this._staggerT = this.style.stagger * 0.6
-		return 'bite'
+		return null
 	}
 
 	/**
@@ -1296,6 +1405,11 @@ export class VoidEnemy {
 	_die() {
 		this.smashed = true
 		this.state = 'dead'
+		if (this.collider) this.collider.enabled = false
+		for (const bolt of this._boltPool ?? []) {
+			bolt.active = false
+			bolt.mesh.visible = false
+		}
 		this.hp = 0
 		this.pendingStrike = false
 		this._setGlow(0)
@@ -1360,6 +1474,7 @@ export class VoidEnemy {
 
 	dispose() {
 		this._disposed = true
+		this._hpBar?.texture.dispose()
 		this._voidAudio?.stopLoop(this._loopId)
 		if (this._boltPool) {
 			for (const bolt of this._boltPool) {

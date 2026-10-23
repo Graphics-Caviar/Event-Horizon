@@ -8,6 +8,8 @@ import { VoidMonuments } from './VoidMonuments.js'
 import { EnergyBlade } from './EnergyBlade.js'
 import { VoidEnemy } from './VoidEnemy.js'
 import { VoidColossus } from './VoidColossus.js'
+import { MatterDimension } from './MatterDimension.js'
+import { MatterSurvival } from './MatterSurvival.js'
 
 // Shared locomotion and rover, with an independent Level 3 planet.
 export class Level3 extends Level2 {
@@ -18,10 +20,33 @@ export class Level3 extends Level2 {
 			scriptSet: 3,
 		})
 		this.level = this.state.currentLevel = 3
+		this.combatConfig = {
+			bladeDamage: 30,
+			encounterRange: 130,
+			maxAttackers: 3,
+			...options.combatConfig,
+		}
+		// Keep inherited controller references, but retire surface-only scenery.
+		this.wreckRoot.removeFromParent()
+		for (const collider of this.gameplayColliders) {
+			if (
+				collider.type === 'wreck' ||
+				collider.object === this.wreckRoot
+			)
+				collider.enabled = false
+		}
+		this.hazards.enabled = false
+		this.roverDisabled = true
+		this.rover.group.visible = false
+		if (this.rover.collider) this.rover.collider.enabled = false
+		this.guide?.group?.removeFromParent()
+		if (this.levelHudEl.firstElementChild)
+			this.levelHudEl.firstElementChild.textContent =
+				'LEVEL 03 // VOID OF GODS'
 		this.playerRoot.name = 'level3-pilot'
 		this.walkCameraOffset = new THREE.Vector3(8, 5.5, 17)
-		this.sceneManager.scene.background = new THREE.Color(0x303b50)
-		this.sceneManager.scene.fog = new THREE.Fog(0x303b50, 420, 2100)
+		this.sceneManager.scene.background = new THREE.Color(0x101222)
+		this.sceneManager.scene.fog = new THREE.Fog(0x100923, 90, 900)
 		this._lightEnvironment()
 		this.stormLandscape = new StormLandscape(this)
 		this.dust.material.uniforms.uColor.value.set(0xb0b1ac)
@@ -32,6 +57,8 @@ export class Level3 extends Level2 {
 		// its own aliens virtually — the override below defers to here).
 		this.voidAudio = new VoidAudio(this.audio)
 		this.monuments = new VoidMonuments(this)
+		this.matterDimension = new MatterDimension(this)
+		this.survival = new MatterSurvival(this, options.survivalConfig)
 		this.blade = new EnergyBlade(this)
 		this._voidKills = 0
 		this._bossDefeated = false
@@ -43,6 +70,29 @@ export class Level3 extends Level2 {
 		this._fWasDown = false
 		this._spawnVoidRoster()
 		if (import.meta.env.DEV) window.__level3 = this
+	}
+
+	/** Keep the cinematic's distant structure visible after landing. This is
+	 * decorative ownership only; existing terrain, objectives and roster stay put. */
+	adoptArrivalBackdrop(backdrop, ship = null) {
+		this.arrivalBackdrop?.dispose()
+		this.arrivalBackdrop = backdrop
+		this.addObject(backdrop.group)
+		this.arrivalShip?.dispose()
+		this.arrivalShip = ship
+		if (ship) {
+			this.addObject(ship.group)
+			const size = ship.hullBounds.getSize(
+				new THREE.Vector3()
+			)
+			this._registerGameplayCollider(
+				ship.group.position.x,
+				ship.group.position.z,
+				Math.min(9, Math.max(size.x, size.z) * 0.45),
+				'arrival-ship',
+				ship.group
+			)
+		}
 	}
 
 	/**
@@ -91,7 +141,7 @@ export class Level3 extends Level2 {
 			},
 			// Sentinels anchor the ruins.
 			{
-				style: 'sentinel',
+				style: 'brute',
 				home: sites.reactor
 					.clone()
 					.add(new THREE.Vector3(-18, 0, 26)),
@@ -103,7 +153,7 @@ export class Level3 extends Level2 {
 					.add(new THREE.Vector3(-24, 0, 18)),
 			},
 			// Void entities orbit the anomalies and rain energy bolts.
-			{ style: 'entity', home: sites.rift.clone() },
+			{ style: 'predator', home: sites.rift.clone() },
 			{ style: 'entity', home: sites.arena.clone() },
 		]
 		defs.forEach((def, index) => {
@@ -121,12 +171,7 @@ export class Level3 extends Level2 {
 							home: def.home,
 						})
 			this.aliens.push(enemy)
-			this._alienTimers.push(
-				setTimeout(
-					() => enemy.load(),
-					700 + index * 520
-				)
-			)
+			enemy._encounterPending = true
 		})
 	}
 
@@ -253,10 +298,61 @@ export class Level3 extends Level2 {
 	}
 
 	_updatePlayerMovement(delta) {
-		const thrust = this.keys.has('Space')
+		if (this.transitionHeld || this.completed) return
+		const thrust = this.survival
+			? this.survival.burn(delta, this.keys.has('Space'))
+			: this.keys.has('Space')
+		this.crouching =
+			this.keys.has('KeyC') && !this._airborne && !thrust
+		if (
+			this.survival?.isGone(
+				this.playerRoot.position.x,
+				this.playerRoot.position.z
+			)
+		)
+			this._airborne = true
 		this.thrusting = thrust
 		if (!thrust && !this._airborne) {
-			super._updatePlayerMovement(delta)
+			const oldFeet =
+				this.playerRoot.position.y -
+				(this.pilotWalk?.footOffset ?? 0)
+			const oldSupport =
+				this.matterDimension?.supportHeightAt(
+					this.playerRoot.position.x,
+					this.playerRoot.position.z,
+					oldFeet
+				)
+			super._updatePlayerMovement(
+				this.crouching ? delta * 0.45 : delta
+			)
+			if (
+				oldSupport >
+				this.planet.heightAt(
+					this.playerRoot.position.x,
+					this.playerRoot.position.z
+				) +
+					1
+			) {
+				const p = this.playerRoot.position
+				const support =
+					this.matterDimension.supportHeightAt(
+						p.x,
+						p.z,
+						oldFeet
+					)
+				if (support >= oldFeet - 1)
+					p.y =
+						support +
+						(this.pilotWalk?.footOffset ??
+							0)
+				else {
+					p.y =
+						oldFeet +
+						(this.pilotWalk?.footOffset ??
+							0)
+					this._airborne = true
+				}
+			}
 			return
 		}
 		this._airborne = true
@@ -311,7 +407,10 @@ export class Level3 extends Level2 {
 			this.planet.clampToBounds(candidate, 0.9)
 		}
 		if (
-			this.planet.heightAt(candidate.x, candidate.z) +
+			(this.survival?.surfaceHeightAt(
+				candidate.x,
+				candidate.z
+			) ?? this.planet.heightAt(candidate.x, candidate.z)) +
 				footOffset <=
 			position.y
 		) {
@@ -319,7 +418,11 @@ export class Level3 extends Level2 {
 			position.z = candidate.z
 		}
 		const floor =
-			this.planet.heightAt(position.x, position.z) +
+			(this.matterDimension?.supportHeightAt(
+				position.x,
+				position.z,
+				position.y - footOffset
+			) ?? this.planet.heightAt(position.x, position.z)) +
 			footOffset
 		const ceiling = this.baseY + 220 + footOffset
 		if (position.y >= ceiling) {
@@ -360,9 +463,54 @@ export class Level3 extends Level2 {
 		this.pilotWalk?.update(delta, 0, false)
 	}
 
-	_toggleBoardRover() {
-		if (!this.boarded && this._airborne) return
-		super._toggleBoardRover()
+	_toggleBoardRover() {}
+
+	async _loadWreck() {}
+	_setWreck() {}
+	_buildWreckEffects() {}
+
+	_updateLevelHUD() {
+		super._updateLevelHUD()
+		if (!this.levelHudEl || !this.aliens) return
+		if (!this.enemyStatusEl) {
+			this.enemyStatusEl = document.createElement('div')
+			this.enemyStatusEl.style.marginTop = '12px'
+			this.levelHudEl.appendChild(this.enemyStatusEl)
+		}
+		if (this.survival) {
+			if (!this.survivalHudEl) {
+				this.survivalHudEl =
+					document.createElement('div')
+				this.survivalHudEl.style.marginTop = '12px'
+				this.levelHudEl.appendChild(this.survivalHudEl)
+			}
+			const fuel = Math.ceil(this.survival.fuel)
+			const percent =
+				(100 * this.survival.fuel) /
+				this.survival.config.maxFuel
+			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
+		}
+		const target = this.aliens
+			.filter(
+				(e) =>
+					e._loaded &&
+					!e.smashed &&
+					e.position.distanceTo(
+						this.playerRoot.position
+					) < 35
+			)
+			.sort(
+				(a, b) =>
+					a.position.distanceToSquared(
+						this.playerRoot.position
+					) -
+					b.position.distanceToSquared(
+						this.playerRoot.position
+					)
+			)[0]
+		this.enemyStatusEl.textContent = target
+			? `${target.styleName.toUpperCase()}  ${target.hp} / ${target.maxHp} HP`
+			: ''
 	}
 
 	_checkPortalArrival() {
@@ -382,6 +530,62 @@ export class Level3 extends Level2 {
 	}
 
 	update(delta) {
+		if (!this.transitionHeld && !this.completed) {
+			let attacking = 0
+			for (const enemy of this.aliens) {
+				if (
+					[
+						'prepare',
+						'strike',
+						'charge',
+						'dive',
+					].includes(enemy.state)
+				)
+					attacking++
+			}
+			this._encounterDelay = Math.max(
+				0,
+				(this._encounterDelay ?? 0) - delta
+			)
+			for (const enemy of this.aliens) {
+				const distance = enemy.position.distanceTo(
+					this.playerRoot.position
+				)
+				if (
+					enemy._encounterPending &&
+					this._encounterDelay <= 0 &&
+					distance > 22 &&
+					distance <
+						this.combatConfig.encounterRange
+				) {
+					this._encounterDelay = 0.6
+					enemy._encounterPending = false
+					enemy.load().catch((error) =>
+						console.warn(
+							'[Level3] Encounter load failed',
+							error
+						)
+					)
+				}
+				if (
+					attacking >=
+						this.combatConfig
+							.maxAttackers &&
+					['chase', 'orbit'].includes(enemy.state)
+				)
+					enemy._cooldown = Math.max(
+						enemy._cooldown,
+						0.3
+					)
+			}
+		}
+		this.survival?.update(delta)
+		this.matterDimension?.update(
+			delta,
+			!!this.transitionHeld || this.completed
+		)
+		this.arrivalBackdrop?.update(delta)
+		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
 		this._updateMissionRadio()
@@ -402,6 +606,20 @@ export class Level3 extends Level2 {
 		)
 		this.jetpack.visible = !this.boarded
 		this._updateFlightPose(delta)
+		this.flightOffset.scale.y = THREE.MathUtils.damp(
+			this.flightOffset.scale.y,
+			this.crouching ? 0.5 : 1,
+			15,
+			step
+		)
+		if (
+			!this.completed &&
+			!this.transitionHeld &&
+			this.playerRoot.position.y < this.baseY - 120
+		) {
+			this.playerHP = 0
+			this._gameOver()
+		}
 		for (const jet of this.jets) {
 			jet.visible =
 				this.thrusting &&
@@ -415,7 +633,7 @@ export class Level3 extends Level2 {
 			const bladeHint = this.blade?.equipped
 				? ' · F swing blade'
 				: ''
-			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · THE ASHEN WASTES</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Release to descend · E board rover${bladeHint}<br>Reach the escape portal on foot, by jetpack or rover.</span>`
+			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly (uses fuel) · Release to descend / C duck · ${bladeHint}<br>Escape before the ground vanishes. Collect cyan nitrogen canisters. Dodge amber impacts; duck cyan fragments.</span>`
 			this._objectiveKey = ''
 		}
 	}
@@ -495,7 +713,9 @@ export class Level3 extends Level2 {
 				won: true,
 				score,
 				time,
-				hull: Math.max(0, this.state.integrity),
+				hull: Math.round(
+					(100 * this.playerHP) / this.maxPlayerHP
+				),
 				progress: 1,
 				level: this.level,
 			})
@@ -530,6 +750,10 @@ export class Level3 extends Level2 {
 	}
 
 	dispose() {
+		this.survival?.dispose()
+		this.matterDimension?.dispose()
+		this.arrivalBackdrop?.dispose()
+		this.arrivalShip?.dispose()
 		this.blade?.dispose()
 		this.monuments?.dispose()
 		this.voidAudio?.dispose()

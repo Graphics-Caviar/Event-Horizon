@@ -101,6 +101,7 @@ export class AudioManager {
 		// Multiplier applied to the music bus while dialogue is transmitting.
 		this._musicDuck = 1
 		this._engines = new Map() // key -> live engine voice (see _startEngine)
+		this._cinematicVoices = new Set()
 		this._noiseBuffer = null
 		this._music = null
 		// Live environmental bed: { id, source, gain, volume } | null.
@@ -364,6 +365,209 @@ export class AudioManager {
 
 	stopThrusterHum() {
 		this._stopEngine('ship')
+	}
+
+	/** Cinematic gravity texture; same effects bus and lifecycle as engines. */
+	setCinematicDrone(amount) {
+		if (amount <= 0.001 && !this._engines.has('cinematicVoid'))
+			return
+		this._startEngine('cinematicVoid', {
+			...THRUSTER_PROFILE,
+			base: 27,
+			detune: 7,
+			grind: 0.08,
+			rumble: 1,
+			air: 0.025,
+			airTone: 150,
+			baseFilter: 95,
+			filterRange: 70,
+			rev: 0.15,
+			idle: 0,
+			range: 0.13,
+		})
+		this._setEngineLevel(
+			'cinematicVoid',
+			Math.max(0, Math.min(1, amount))
+		)
+	}
+	stopCinematicDrone() {
+		this._stopEngine('cinematicVoid')
+	}
+
+	/** The incoming threat uses the existing engine voice and effects bus. */
+	startMissileIncoming() {
+		this._startEngine('cinematicMissile', {
+			...THRUSTER_PROFILE,
+			base: 110,
+			grind: 0.12,
+			rumble: 0.2,
+			air: 0.42,
+			airTone: 2200,
+			baseFilter: 580,
+			filterRange: 2400,
+			rev: 3,
+			idle: 0,
+			range: 0.15,
+		})
+	}
+	setMissileIncomingLevel(amount) {
+		this._setEngineLevel('cinematicMissile', clampVolume(amount, 0))
+	}
+	stopMissileIncoming() {
+		this._stopEngine('cinematicMissile')
+	}
+
+	/**
+	 * Owned cinematic one-shots. Unlike shared gameplay blips, these have a
+	 * cancellation handle so skipping cannot leave a warning or impact tail
+	 * playing over Level 3. The last source releases every connected node.
+	 */
+	_cinematicCue(duration, build) {
+		this._ensureContext()
+		const ctx = this.ctx
+		const out = ctx.createGain()
+		out.connect(this._getBus(AUDIO_CHANNELS.SFX))
+		const nodes = [out]
+		const sources = []
+		let cleaned = false
+		const clean = () => {
+			if (cleaned) return
+			cleaned = true
+			this._cinematicVoices.delete(voice)
+			for (const node of nodes) node.disconnect()
+		}
+		const voice = {
+			stop: () => {
+				if (cleaned) return
+				for (const source of sources) {
+					try {
+						source.stop()
+					} catch {
+						/* Already ended. */
+					}
+				}
+				clean()
+			},
+		}
+		const own = (node) => {
+			nodes.push(node)
+			return node
+		}
+		build({ ctx, out, own, sources, now: ctx.currentTime })
+		this._cinematicVoices.add(voice)
+		let pending = sources.length
+		for (const source of sources) {
+			source.onended = () => {
+				if (--pending === 0) clean()
+			}
+			source.start(ctx.currentTime)
+			source.stop(ctx.currentTime + duration)
+		}
+		if (!pending) clean()
+		return voice
+	}
+
+	playMissileWarning() {
+		return this._cinematicCue(
+			0.72,
+			({ ctx, out, own, sources, now }) => {
+				const tone = own(ctx.createOscillator())
+				tone.type = 'triangle'
+				tone.frequency.setValueAtTime(780, now)
+				tone.frequency.setValueAtTime(1040, now + 0.18)
+				tone.frequency.setValueAtTime(780, now + 0.36)
+				tone.frequency.setValueAtTime(1040, now + 0.54)
+				out.gain.setValueAtTime(0.0001, now)
+				for (const delay of [0, 0.36]) {
+					out.gain.linearRampToValueAtTime(
+						0.09,
+						now + delay + 0.018
+					)
+					out.gain.setValueAtTime(
+						0.09,
+						now + delay + 0.22
+					)
+					out.gain.linearRampToValueAtTime(
+						0.0001,
+						now + delay + 0.31
+					)
+				}
+				tone.connect(out)
+				sources.push(tone)
+			}
+		)
+	}
+
+	playMissileImpact() {
+		return this._cinematicCue(
+			2.4,
+			({ ctx, out, own, sources, now }) => {
+				const rumble = own(ctx.createOscillator())
+				rumble.frequency.setValueAtTime(110, now)
+				rumble.frequency.exponentialRampToValueAtTime(
+					25,
+					now + 1.8
+				)
+				const bass = own(ctx.createGain())
+				bass.gain.setValueAtTime(0.28, now)
+				bass.gain.exponentialRampToValueAtTime(
+					0.0001,
+					now + 2.35
+				)
+				rumble.connect(bass).connect(out)
+				const debris = own(ctx.createBufferSource())
+				debris.buffer = this._noise()
+				debris.loop = true
+				const filter = own(ctx.createBiquadFilter())
+				filter.type = 'lowpass'
+				filter.frequency.setValueAtTime(2200, now)
+				filter.frequency.exponentialRampToValueAtTime(
+					130,
+					now + 2.3
+				)
+				const dust = own(ctx.createGain())
+				dust.gain.setValueAtTime(0.32, now)
+				dust.gain.exponentialRampToValueAtTime(
+					0.0001,
+					now + 2.35
+				)
+				debris.connect(filter)
+					.connect(dust)
+					.connect(out)
+				sources.push(rumble, debris)
+			}
+		)
+	}
+
+	playWormholeExit() {
+		return this._cinematicCue(
+			1.3,
+			({ ctx, out, own, sources, now }) => {
+				const tone = own(ctx.createOscillator())
+				tone.type = 'sine'
+				tone.frequency.setValueAtTime(620, now)
+				tone.frequency.exponentialRampToValueAtTime(
+					70,
+					now + 1.25
+				)
+				out.gain.setValueAtTime(0.0001, now)
+				out.gain.linearRampToValueAtTime(
+					0.15,
+					now + 0.05
+				)
+				out.gain.exponentialRampToValueAtTime(
+					0.0001,
+					now + 1.25
+				)
+				tone.connect(out)
+				sources.push(tone)
+			}
+		)
+	}
+
+	stopCinematicEffects() {
+		this.stopMissileIncoming()
+		for (const voice of this._cinematicVoices) voice.stop()
 	}
 
 	/** The rover's drive loop (deeper and rougher than the thruster). */
@@ -762,6 +966,11 @@ export class AudioManager {
 		this._blip(200, 2000, 2, 'square', 0.4)
 		this._blip(400, 2000, 2, 'sine', 0.4)
 	}
+	/** Soft boot contact through the existing effects bus. */
+	playFootstep() {
+		this._blip(95, 38, 0.09, 'triangle', 0.055)
+	}
+
 	/** Rover hatch: a body thud with a small latch click on top. */
 	playHatch() {
 		this._blip(150, 55, 0.16, 'square', 0.2)

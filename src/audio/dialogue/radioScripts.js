@@ -34,7 +34,7 @@
  *   23_16_16_Radio_..._v4.mp3  level1_descent.mp3
  *   23_18_02_Radio_..._v4.mp3  level2_intro.mp3
  *   23_19_32_Radio_..._v4.mp3  level2_rover.mp3
- *   23_21_07_Radio_..._v4.mp3  level2_survey_ack.mp3  (unused, see below)
+ *   23_21_07_Radio_..._v4.mp3  level2_survey_ack.mp3
  *   23_23_33_Radio_..._v4.mp3  level3_intro.mp3
  *   23_25_09_Radio_..._v4.mp3  level3_activity.mp3
  *   23_27_20_Radio_..._v4.mp3  level3_complete.mp3
@@ -242,6 +242,32 @@ export const RADIO_SCRIPTS = Object.freeze({
 		],
 	},
 
+	// Level 2 complete: Mission Control signs off the survey while the
+	// pilot discovers the parked alien vessel (Level 2 -> Level 3 cinematic).
+	// This is the separately recorded take of l2.rover's Control reply — its
+	// first 7.16 s repeat that line verbatim, then it adds the sign-off that
+	// leads into the next sector.
+	'l2.transit': {
+		level: 2,
+		audio: 'audio/voice/level2_survey_ack.mp3',
+		duration: 13.244,
+		urgency: 0.25,
+		cues: [
+			{
+				speaker: CONTROL,
+				start: 0,
+				end: 7.16,
+				text: 'Understood, Horizon One. Maintain awareness of your surroundings. We have limited information about this region.',
+			},
+			{
+				speaker: CONTROL,
+				start: 7.16,
+				end: 13.244,
+				text: "Copy, Horizon One. Good work. Proceed carefully. We're still analyzing the environment ahead.",
+			},
+		],
+	},
+
 	// ── Level 3: the void of gods ───────────────────────────────────────
 	'l3.opening': {
 		level: 3,
@@ -314,22 +340,13 @@ export const RADIO_SCRIPTS = Object.freeze({
  * Recordings that were verified but deliberately left out of the cue table.
  * Kept on disk so nothing is lost, never triggered by the game.
  *
- * level2_survey_ack.mp3 is a second, separately recorded take of
- * l2.rover's Control reply: its first 7.16 s repeat the same line word for
- * word, then it adds "Copy, Horizon One. Good work. Proceed carefully. We're
- * still analyzing the environment ahead." There is no Level 2 event it
- * belongs to, and playing it after l2.rover would repeat a line the player
- * just heard, so it is documented here instead of being forced into a level.
+ * Currently empty: level2_survey_ack.mp3 — a second take of l2.rover's
+ * Control reply whose back half adds "Copy, Horizon One. Good work. Proceed
+ * carefully. We're still analyzing the environment ahead." — found its
+ * event in the Level 2 -> Level 3 transit cinematic and now plays as
+ * 'l2.transit'.
  */
-export const UNUSED_RECORDINGS = Object.freeze([
-	{
-		id: 'l2.survey_ack',
-		level: 2,
-		audio: 'audio/voice/level2_survey_ack.mp3',
-		duration: 13.244,
-		reason: 'Duplicate Control reply; no matching Level 2 event.',
-	},
-])
+export const UNUSED_RECORDINGS = Object.freeze([])
 
 /** Every script id whose `level` matches, in declaration order. */
 export function scriptsForLevel(level) {

@@ -89,6 +89,7 @@ export class EnergyBlade {
 			this._swingT >= 0 ||
 			this._cooldown > 0 ||
 			level.completed ||
+			level.transitionHeld ||
 			level.boarded
 		) {
 			return
@@ -206,7 +207,7 @@ export class EnergyBlade {
 			) {
 				continue
 			}
-			enemy.damage(1)
+			enemy.damage(this.level.combatConfig.bladeDamage)
 			hits += 1
 		}
 		if (hits > 0) {

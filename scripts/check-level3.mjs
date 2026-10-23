@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import { Level3 } from '../src/levels/Level3/Level3.js'
+import { MatterSurvival } from '../src/levels/Level3/MatterSurvival.js'
 
 // Exercise the real flight method without requiring WebGL or loading assets.
 function fixture() {
@@ -63,6 +64,34 @@ for (const fps of [30, 60, 120]) {
 		'landing must emit a single dust burst'
 	)
 }
+for (const fps of [30, 60, 120]) {
+	const pilot = fixture()
+	pilot._airborne = true
+	pilot.playerRoot.position.y = 30
+	pilot.survival = Object.assign(
+		Object.create(MatterSurvival.prototype),
+		{
+			level: pilot,
+			fuel: 0,
+			config: { burnRate: 5 },
+			isGone: () => false,
+			surfaceHeightAt: () => 0,
+		}
+	)
+	for (let i = 0; i < fps; i++) pilot._updatePlayerMovement(1 / fps)
+	assert.ok(
+		pilot.playerRoot.position.y < 25,
+		'empty jetpack descends even while Space is held'
+	)
+	assert.equal(pilot.thrusting, false)
+	pilot.survival.fuel = 50
+	for (let i = 0; i < fps * 2; i++) pilot._updatePlayerMovement(1 / fps)
+	assert.ok(pilot.playerRoot.position.y > 30, 'refilling restores thrust')
+	assert.ok(Math.abs(pilot.survival.fuel - 40) < 1e-8)
+}
+console.log(
+	'Real jetpack movement: empty-fuel descent and refilled takeoff passed at 30/60/120 FPS.'
+)
 const pilot = fixture()
 pilot.playerRoot.position.y = 10
 pilot.planet.heightAt = (x, z) => (z < -1 ? 50 : 0)

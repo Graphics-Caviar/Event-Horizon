@@ -113,11 +113,11 @@ export class CrystalPlanet extends AlienPlanet {
 		const positions = geometry.attributes.position
 		const colors = geometry.attributes.color
 		const normal = geometry.attributes.normal
-		const rock = new THREE.Color('#454c59')
-		const moss = new THREE.Color('#50515e')
-		const mineral = new THREE.Color('#594465')
-		const ochre = new THREE.Color('#594553')
-		const summitStone = new THREE.Color('#687384')
+		const rock = new THREE.Color('#171429')
+		const moss = new THREE.Color('#22213e')
+		const mineral = new THREE.Color('#64318a')
+		const ochre = new THREE.Color('#183b50')
+		const summitStone = new THREE.Color('#41335c')
 		const color = new THREE.Color()
 		for (let i = 0; i < positions.count; i++) {
 			const x = positions.getX(i) + this.center.x

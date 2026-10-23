@@ -16,6 +16,16 @@ import { assetUrl } from '../../core/assetUrl.js'
  *            which this pass is skipped entirely.
  */
 export const VOID_ASSETS = {
+	flyingPredator: {
+		path: '/assets/models/aliens/alien-flying-predator.glb',
+		fit: 6.6,
+		simplify: 0.2,
+	},
+	alienBrute: {
+		path: '/assets/models/aliens/armored-alien-brute.glb',
+		fit: 7.2,
+		simplify: 0.2,
+	},
 	riftStalker: {
 		path: '/assets/models/void/rift-stalker.glb',
 		role: 'enemy · fast melee',
