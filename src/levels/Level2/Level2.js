@@ -1,3 +1,4 @@
+import { FighterHub } from './FighterHub.js'
 import * as THREE from 'three'
 import { Level } from '../../core/Level.js'
 import { STATUS } from '../../core/GameState.js'
@@ -147,7 +148,7 @@ export class Level2 extends Level {
 				new THREE.Vector3(
 					...(scriptSet === 2
 						? [-150, 0, 460]
-						: [-238, 0, 212])
+						: [-340, 0, 320])
 				)
 			)
 		this.roverApproach =
@@ -159,7 +160,7 @@ export class Level2 extends Level {
 								[300, 150],
 								[235, 340],
 								[75, 440],
-								[-70, 460],
+								[130, 350],
 							].map(([x, z]) =>
 								this.landingSite
 									.clone()
@@ -176,9 +177,9 @@ export class Level2 extends Level {
 							.clone()
 							.add(
 								new THREE.Vector3(
-									-70,
+									130,
 									0,
-									460
+									350
 								)
 							),
 						radius: 24,
@@ -186,9 +187,9 @@ export class Level2 extends Level {
 							.clone()
 							.add(
 								new THREE.Vector3(
-									-70,
+									190,
 									0,
-									488
+									375
 								)
 							),
 						portalSite: this.portalSite,
@@ -255,7 +256,7 @@ export class Level2 extends Level {
 									.roverApproach
 									.shipSite
 									.z,
-								radius: 32,
+								radius: 115,
 							},
 						]
 					: []),
@@ -357,12 +358,20 @@ export class Level2 extends Level {
 			faceTowards:
 				this.roverApproach?.trigger || this.landingSite,
 		})
+		if (this.roverApproach) this.fighterHub = new FighterHub(this)
 		this.guide = new WaypointGuide(this, {
 			getTarget: () => this.rover.group.position,
 			name: 'rover',
 		})
 		this.portalGuide = new WaypointGuide(this, {
 			getTarget: () => this._getApproachTarget(),
+			getPath: () => {
+				if (!this.roverApproach) return null
+				this._getApproachTarget()
+				return this.roverApproach.points.slice(
+					this._approachWaypoint
+				)
+			},
 			beacon: false,
 			arriveDistance: 10,
 			name: 'portal',
@@ -2035,6 +2044,7 @@ export class Level2 extends Level {
 	update(delta) {
 		this._updateRadio(delta)
 		this.planet.update(delta)
+		this.fighterHub?.update(delta)
 		this.hazards.update(delta)
 		if (this.wreckFlame) {
 			const pulse =
@@ -2389,10 +2399,10 @@ export class Level2 extends Level {
 				located: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Get closer to board the rover.</span>',
 				board: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Press E to board the rover.</span>',
 				portal: this.roverApproach
-					? '<strong>REACH THE WORMHOLE APPROACH</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide around the lava basin toward the distant gate.</span>'
+					? '<strong>REACH THE ALIEN FIGHTER HUB</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide around the lava basin toward the alien fleet hangars.</span>'
 					: '<strong>ESCAPE VIA THE PORTAL</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide line · drive through the ring.</span>',
 				complete: this.roverApproach
-					? '<strong>FINAL APPROACH</strong><br><span style="font-size:12px;opacity:.8">Stay with the rover — the wormhole is ahead.</span>'
+					? '<strong>FINAL APPROACH</strong><br><span style="font-size:12px;opacity:.8">Stay with the rover — the fighter hub is ahead.</span>'
 					: '<strong>PORTAL REACHED</strong><br><span style="font-size:12px;opacity:.8">You made it off the planet.</span>',
 			}
 			this.objectiveEl.innerHTML = objectiveText[objectiveKey]
@@ -2458,6 +2468,7 @@ export class Level2 extends Level {
 		for (const timer of this._alienTimers || []) clearTimeout(timer)
 		this.objectiveEl?.remove()
 		this.feedbackEl?.remove()
+		this.fighterHub?.dispose()
 		this.rover?.dispose()
 		this.audio?.stopRoverEngine()
 		this.audio?.stopAmbience()

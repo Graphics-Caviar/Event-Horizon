@@ -43,11 +43,12 @@ export class VoidMonuments {
 			{
 				key: 'gravRift',
 				site: this.sites.rift,
+				portal: true,
 				fit: 30,
-				yaw: 0,
-				embed: 1.2,
+				yaw: level.portal.group.rotation.y,
+				embed: 0.15,
 				shadows: true,
-				colliders: [{ radius: 7.5 }],
+				colliders: [],
 				light: {
 					color: 0xb26bff,
 					intensity: 1.6,
@@ -90,9 +91,6 @@ export class VoidMonuments {
 	/** Deterministic region choices; exact spots walk to walkable ground. */
 	_chooseSites() {
 		const level = this.level
-		const midRoute = level.landingSite
-			.clone()
-			.lerp(level.portalSite, 0.55)
 		const yaw = () => Math.random() * Math.PI * 2
 		return {
 			arena: level._findWalkableSite(
@@ -105,11 +103,7 @@ export class VoidMonuments {
 					.clone()
 					.add(new THREE.Vector3(-65, 0, -75))
 			),
-			rift: level._findWalkableSite(
-				midRoute
-					.clone()
-					.add(new THREE.Vector3(55, 0, -80))
-			),
+			rift: level.portalSite.clone(),
 			bridge: level._findWalkableSite(
 				level.crashSite
 					.clone()
@@ -154,6 +148,14 @@ export class VoidMonuments {
 			}
 		})
 		this._group.add(model)
+		if (def.portal) {
+			// Keep the gameplay anchor and guide target; replace only the gate art
+			// after a successful load so a missing asset never removes the exit.
+			for (const child of this.level.portal.group.children)
+				child.visible = false
+			model.name = 'matter-dimension-rift-portal'
+			this.level.portal.riftModel = model
+		}
 
 		for (const collider of def.colliders) {
 			if (collider.along) {
@@ -200,6 +202,7 @@ export class VoidMonuments {
 				model,
 				position: model.position.clone(),
 				baseRotation: model.rotation.y,
+				portal: !!def.portal,
 			}
 		}
 		if (def.key === 'anomalyShip') {
@@ -220,9 +223,14 @@ export class VoidMonuments {
 		}
 		if (this._riftLight) {
 			this._riftLight.intensity =
-				1.5 + Math.sin(this._pulse * 3.3) * 0.4
+				1.5 +
+				Math.sin(this._pulse * 3.3) * 0.4 +
+				(this._rift?.portal
+					? this.level.portal._arrivalT * 10 +
+						this.level.portal.suckLevel * 3
+					: 0)
 		}
-		if (this._rift) {
+		if (this._rift && !this._rift.portal) {
 			this._rift.model.rotation.y =
 				this._rift.baseRotation + this._pulse * 0.22
 			this._applyRiftPull(delta)

@@ -25,7 +25,7 @@ export const CUTSCENE_DURATIONS = Object.freeze({
 	run_to_spacefighter: 18,
 	board_spacefighter: 4,
 	engine_start: 3.2,
-	takeoff: 7,
+	takeoff: 16,
 	wormhole_entry: 4,
 	level3_loading: 5,
 	wormhole_exit: 4,
@@ -348,6 +348,8 @@ export class Level2ToLevel3Cutscene {
 				start: offset(impact, -90, 150, -65),
 				impact,
 				heightAt: (x, z) => planet.heightAt(x, z),
+				onImpact: (p) =>
+					planet.addImpactCrater(p.x, p.z),
 			})
 			this.root.add(this.strike.group)
 			this.strike.group.visible = true
@@ -355,6 +357,8 @@ export class Level2ToLevel3Cutscene {
 			this.salvo = new CinematicMissileSalvo({
 				impact,
 				heightAt: (x, z) => planet.heightAt(x, z),
+				onImpact: (p) =>
+					planet.addImpactCrater(p.x, p.z),
 				duration: this.durations.missile_detected,
 			})
 			this.root.add(this.salvo.group)
@@ -367,6 +371,8 @@ export class Level2ToLevel3Cutscene {
 				this.audio?.stopMissileIncoming?.()
 				this.audio?.playMissileImpact?.()
 				this.level.disableRoverForCinematic()
+				this._roverRoll =
+					this.level.rover.group.quaternion.clone()
 			}
 		}
 		if (phase === 'astronaut_exit') this._makeRamp()
@@ -406,6 +412,19 @@ export class Level2ToLevel3Cutscene {
 		this.elapsed += dt
 		this.phaseTime += dt
 		this.level?.update(dt)
+		if (this._roverRoll && this.level) {
+			this._rollAge = (this._rollAge || 0) + dt
+			const roll = ease(this._rollAge / 1.15) * Math.PI * 0.52
+			this.level.rover.group.quaternion
+				.copy(this._roverRoll)
+				.multiply(
+					new THREE.Quaternion().setFromAxisAngle(
+						new THREE.Vector3(0, 0, 1),
+						roll
+					)
+				)
+		}
+		this._updatePursuit(dt)
 		if (this.level3) {
 			// Ambient visuals only: gameplay remains held throughout the arrival.
 			this.level3.planet.update(dt)
@@ -461,7 +480,7 @@ export class Level2ToLevel3Cutscene {
 		this.titleEl.style.opacity = String(ease(this.phaseTime))
 		this._camera(
 			offset(p, 24, 14, 32),
-			p.clone().lerp(this._entryCenter, 0.28),
+			p.clone().lerp(this._landing, 0.28),
 			dt,
 			{
 				terrain: this.level.planet,
@@ -486,6 +505,7 @@ export class Level2ToLevel3Cutscene {
 				0.3
 			this.ship.group.position.copy(this._landing)
 			this.ship.group.visible = true
+			this._buildFighterHub()
 			this._setPhase('missile_detected')
 		}
 	}
@@ -594,7 +614,7 @@ export class Level2ToLevel3Cutscene {
 			}
 		)
 		this._message(
-			'ALIEN VESSEL // COCKPIT ACCESS',
+			'ALIEN FIGHTER HUB // STEAL A SHIP',
 			clamp(this.phaseTime / 5)
 		)
 		if (arrived) this._setPhase('board_spacefighter')
@@ -707,7 +727,7 @@ export class Level2ToLevel3Cutscene {
 			{ terrain: level.planet, fov: 56 }
 		)
 		this._message(
-			'ALIEN VESSEL // ACCESSING FLIGHT SYSTEMS',
+			'STOLEN FIGHTER // BYPASSING SECURITY',
 			clamp(
 				this.phaseTime /
 					this.durations.board_spacefighter
@@ -722,6 +742,94 @@ export class Level2ToLevel3Cutscene {
 			)
 			this.skip()
 		}
+	}
+
+	_buildFighterHub() {
+		if (this._hubBuilt) return
+		this._hubBuilt = true
+		const hub = this.level.fighterHub
+		this._hub = hub?.group
+		this._fleet = hub?.fleet || []
+		if (hub) hub.hero.group.visible = false
+	}
+
+	_updatePursuit(dt) {
+		if (!this.level || !this._fleet?.length) return
+		const flying = ['takeoff', 'wormhole_entry'].includes(
+			this.phase
+		)
+		if (!flying) return
+		const p = this.ship.group.position
+		for (let i = 0; i < 3; i++) {
+			const fighter = this._fleet[i]
+			const target = new THREE.Vector3(
+				(i - 1) * 20 +
+					Math.sin(this.elapsed * 2 + i) * 8,
+				5 + i * 4,
+				38 + i * 15
+			)
+				.applyQuaternion(this.ship.group.quaternion)
+				.add(p)
+			target.y = Math.max(
+				target.y,
+				this.level.planet.heightAt(target.x, target.z) +
+					15
+			)
+			fighter.position.lerp(target, 1 - Math.exp(-dt * 2.5))
+			fighter.quaternion.slerp(
+				this.ship.group.quaternion,
+				1 - Math.exp(-dt * 4)
+			)
+		}
+		this._chaseMissiles ||= []
+		this._chaseClock = (this._chaseClock || 0) + dt
+		if (this._chaseClock >= 0.7) {
+			this._chaseClock = 0
+			const index = (this._chaseIndex =
+				(this._chaseIndex || 0) + 1)
+			const target = p
+				.clone()
+				.addScaledVector(
+					this._flightCurve.getTangentAt(
+						Math.min(
+							1,
+							Math.pow(
+								this
+									.flightTime /
+									this
+										._flightDuration,
+								2
+							)
+						)
+					),
+					32
+				)
+			target.x += index % 2 ? 9 : -9
+			const strike = new CinematicMissileStrike({
+				start: this._fleet[index % 3].position.clone(),
+				impact: target,
+				heightAt: (x, z) =>
+					this.level?.planet.heightAt(x, z) ??
+					target.y,
+			})
+			this.root.add(strike.group)
+			this._chaseMissiles.push({ strike, age: 0 })
+		}
+		for (const missile of this._chaseMissiles) {
+			missile.age += dt
+			missile.strike.setFlightProgress(
+				Math.min(1, missile.age / 0.85)
+			)
+			if (missile.age >= 0.85) missile.strike.impact()
+			missile.strike.update(dt)
+		}
+		this._chaseMissiles = this._chaseMissiles.filter(
+			({ strike, age }) => {
+				if (age < 3) return true
+				strike.dispose()
+				return false
+			}
+		)
 	}
 
 	_buildFlight() {
@@ -799,6 +907,10 @@ export class Level2ToLevel3Cutscene {
 			lookResponse: 8,
 			fov: 58,
 		})
+		this._message(
+			'HOSTILE FIGHTERS // MISSILE LOCK\nFULL THRUST ? REACH THE PORTAL',
+			clamp(this.phaseTime / this.durations.takeoff)
+		)
 		if (this.phaseTime >= this.durations.takeoff)
 			this._setPhase('wormhole_entry')
 	}
@@ -897,6 +1009,11 @@ export class Level2ToLevel3Cutscene {
 		const camera = this.sceneManager.camera
 		const cameraFov = camera.fov
 		this.wormhole.group.visible = !this._skipped
+		if (this._hub) this._hub.visible = false
+		for (const missile of this._chaseMissiles || [])
+			missile.strike.dispose()
+		this._chaseMissiles = []
+		for (const fighter of this._fleet || []) fighter.visible = false
 		this.root.removeFromParent()
 		this.level?.dispose()
 		this.level = null
@@ -1343,6 +1460,8 @@ export class Level2ToLevel3Cutscene {
 		this.overlay?.remove()
 		if (!this._shipTransferred) this.ship.dispose()
 		this.strike?.dispose()
+		for (const missile of this._chaseMissiles || [])
+			missile.strike.dispose()
 		this.salvo?.dispose()
 		this.wormhole.dispose()
 		if (!this._backdropTransferred) this.environment.dispose()

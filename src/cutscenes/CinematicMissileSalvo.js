@@ -4,7 +4,7 @@ import { CinematicMissileStrike } from './CinematicMissileStrike.js'
 // Three accompanying near misses; the host's primary strike owns rover damage,
 // warning audio and camera choreography. Fixed timing avoids frame-rate drift.
 export class CinematicMissileSalvo {
-	constructor({ impact, heightAt, duration = 3.2 }) {
+	constructor({ impact, heightAt, duration = 3.2, onImpact = null }) {
 		this.group = new THREE.Group()
 		this.group.name = 'cinematic-missile-salvo'
 		this.elapsed = 0
@@ -31,6 +31,7 @@ export class CinematicMissileSalvo {
 				start,
 				impact: target,
 				heightAt,
+				onImpact,
 			})
 			strike.group.visible = false
 			this.group.add(strike.group)

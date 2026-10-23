@@ -241,6 +241,48 @@ export class AlienPlanet {
 		return distance
 	}
 
+	/** Cinematic damage edits the same triangles used by heightAt. */
+	addImpactCrater(x, z, radius = 10, depth = 3) {
+		const geometry = this.terrain.geometry
+		const positions = geometry.attributes.position
+		const colors = geometry.attributes.color
+		for (let i = 0; i < positions.count; i++) {
+			const distance =
+				Math.hypot(
+					positions.getX(i) +
+						this.terrain.position.x -
+						x,
+					positions.getZ(i) +
+						this.terrain.position.z -
+						z
+				) / radius
+			if (distance >= 1.3) continue
+			const bowl =
+				-depth *
+				Math.pow(
+					Math.max(0, 1 - distance * distance),
+					2
+				)
+			const rim =
+				depth *
+				0.22 *
+				Math.exp(-Math.pow((distance - 0.95) / 0.18, 2))
+			positions.setY(i, positions.getY(i) + bowl + rim)
+			if (colors && distance < 0.85) {
+				colors.setXYZ(
+					i,
+					colors.getX(i) * 0.42,
+					colors.getY(i) * 0.38,
+					colors.getZ(i) * 0.35
+				)
+			}
+		}
+		positions.needsUpdate = true
+		if (colors) colors.needsUpdate = true
+		geometry.computeVertexNormals()
+		geometry.computeBoundingSphere()
+	}
+
 	/** Sample the visible terrain triangles so steep ground stays solid. */
 	heightAt(x, z) {
 		const positions = this.terrain?.geometry.attributes.position

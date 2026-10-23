@@ -20,8 +20,8 @@ import * as THREE from 'three'
 const GUIDE_COLOR = 0xffd23f
 const UP = new THREE.Vector3(0, 1, 0)
 const HEIGHT_OFFSET = 0.45
-const SEGMENT_LENGTH = 6
-const MAX_SAMPLES = 96
+const SEGMENT_LENGTH = 1.5
+const MAX_SAMPLES = 768
 const LINE_WIDTH = 1.5
 const DASH_PERIOD = 7
 
@@ -66,6 +66,7 @@ export class WaypointGuide {
 		level,
 		{
 			getTarget,
+			getPath = null,
 			beacon = true,
 			arriveDistance = 6,
 			name = 'waypoint',
@@ -73,6 +74,7 @@ export class WaypointGuide {
 	) {
 		this.level = level
 		this.getTarget = getTarget
+		this.getPath = getPath
 		this.arriveDistance = arriveDistance
 		this.time = 0
 
@@ -233,7 +235,10 @@ export class WaypointGuide {
 	 */
 	update(delta, playerPos, { active = true } = {}) {
 		this.time += delta
-		const target = active ? this.getTarget?.() : null
+		const path = active ? this.getPath?.() : null
+		const target = active
+			? path?.at(-1) || this.getTarget?.()
+			: null
 		const visible = Boolean(target)
 		if (this.group) this.group.visible = visible
 		this.ribbon.visible = visible
@@ -265,9 +270,13 @@ export class WaypointGuide {
 		// Dashes stream along the line.
 		this.dashTexture.offset.y -= delta * 0.35
 
-		const dx = anchor.x - playerPos.x
-		const dz = anchor.z - playerPos.z
-		const distance = Math.hypot(dx, dz)
+		const points = [playerPos, ...(path?.length ? path : [anchor])]
+		const lengths = points
+			.slice(1)
+			.map((p, i) =>
+				Math.hypot(p.x - points[i].x, p.z - points[i].z)
+			)
+		const distance = lengths.reduce((sum, value) => sum + value, 0)
 		if (distance < this.arriveDistance) {
 			this.ribbon.visible = false
 			return
@@ -278,7 +287,11 @@ export class WaypointGuide {
 		const moved =
 			this._lastFrom.distanceToSquared(playerPos) > 0.5 ||
 			this._lastTo.distanceToSquared(anchor) > 0.25
-		if (!moved && this._samples > 0) return
+		const pathKey =
+			path?.map((p) => `${p.x},${p.z}`).join(';') || ''
+		if (!moved && this._samples > 0 && pathKey === this._pathKey)
+			return
+		this._pathKey = pathKey
 		this._lastFrom.copy(playerPos)
 		this._lastTo.copy(anchor)
 
@@ -289,22 +302,46 @@ export class WaypointGuide {
 		)
 		this._samples = samples
 		const halfWidth = LINE_WIDTH / 2
-		const invLength = 1 / Math.max(distance, 1e-4)
-		// Straight route in XZ: the perpendicular is constant.
-		const perpX = -dz * invLength
-		const perpZ = dx * invLength
+		let segment = 0
+		let traversed = 0
 
 		for (let i = 0; i < samples; i++) {
 			const t = i / (samples - 1)
-			const x = THREE.MathUtils.lerp(playerPos.x, anchor.x, t)
-			const z = THREE.MathUtils.lerp(playerPos.z, anchor.z, t)
-			const y = planet.heightAt(x, z) + HEIGHT_OFFSET
+			const along = t * distance
+			while (
+				segment < lengths.length - 1 &&
+				traversed + lengths[segment] < along
+			) {
+				traversed += lengths[segment++]
+			}
+			const from = points[segment],
+				to = points[segment + 1]
+			const fraction = THREE.MathUtils.clamp(
+				(along - traversed) /
+					Math.max(lengths[segment], 0.0001),
+				0,
+				1
+			)
+			const x = THREE.MathUtils.lerp(from.x, to.x, fraction)
+			const z = THREE.MathUtils.lerp(from.z, to.z, fraction)
+			const invLength = 1 / Math.max(lengths[segment], 0.0001)
+			const perpX = -(to.z - from.z) * invLength
+			const perpZ = (to.x - from.x) * invLength
+
 			const p = i * 6
 			this._positions[p] = x + perpX * halfWidth
-			this._positions[p + 1] = y
+			this._positions[p + 1] =
+				planet.heightAt(
+					x + perpX * halfWidth,
+					z + perpZ * halfWidth
+				) + HEIGHT_OFFSET
 			this._positions[p + 2] = z + perpZ * halfWidth
 			this._positions[p + 3] = x - perpX * halfWidth
-			this._positions[p + 4] = y
+			this._positions[p + 4] =
+				planet.heightAt(
+					x - perpX * halfWidth,
+					z - perpZ * halfWidth
+				) + HEIGHT_OFFSET
 			this._positions[p + 5] = z - perpZ * halfWidth
 
 			const u = i * 4
@@ -326,14 +363,15 @@ export class WaypointGuide {
 				1
 			)
 			const alpha = 0.9 * fadeIn * fadeOut
-			this._colors[u] = 1
-			this._colors[u + 1] = 1
-			this._colors[u + 2] = 1
-			this._colors[u + 3] = alpha
-			this._colors[u + 4] = 1
-			this._colors[u + 5] = 1
-			this._colors[u + 6] = 1
-			this._colors[u + 7] = alpha
+			const colorIndex = i * 8
+			this._colors[colorIndex] = 1
+			this._colors[colorIndex + 1] = 1
+			this._colors[colorIndex + 2] = 1
+			this._colors[colorIndex + 3] = alpha
+			this._colors[colorIndex + 4] = 1
+			this._colors[colorIndex + 5] = 1
+			this._colors[colorIndex + 6] = 1
+			this._colors[colorIndex + 7] = alpha
 		}
 
 		this.lineGeometry.setDrawRange(0, (samples - 1) * 6)

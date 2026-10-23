@@ -13,3 +13,14 @@ Hold Space to thrust, release to descend, and hold C to crouch on the ground. Cr
 Balance defaults live in `SURVIVAL_DEFAULTS` in `src/levels/Level3/MatterSurvival.js`. Level3 accepts `survivalConfig` overrides for countdown, collapseSeconds, maxFuel, burnRate, refill and respawn. Health maxima remain configurable through combatConfig.playerHP and combatConfig.roverHP. Debris settings remain in MATTER_DEBRIS_DEFAULTS.
 
 Validation: `npm run test:survival` covers independent health/damage gates, rover destruction, countdown pause/reset, frame-independent fuel consumption, refill limits, warning target locking, dodging, crouching, collapsed ground support, stable pads and terrain shader wiring. Existing combat, flight, debris/platform, rover and cinematic regression suites are also used. Production build retains the existing large-chunk warning. GPU visuals and difficulty still require interactive playtesting.
+
+
+## Visual refinement
+
+Debris now uses irregular faceted stone or broken machinery with luminous edge seams, descent trails, closing warning brackets, impact shockwaves and pooled ejected shards. Cyan and amber danger cues retain their existing meaning and damage behavior. Visual effects recycle with each debris event.
+
+During the last five countdown seconds, glowing fracture lines appear and the terrain vibrates slightly. Grounded camera tremors intensify before collapse and near the advancing break line. Detached irregular slabs tumble and fall away behind the boundary, with nearby dust and impact audio. A fixed pool of 192 instanced slabs bounds draw and memory costs. Pilot support changes at the same existing collapse boundary; the advance warning does not move collision or alter health.
+
+Nitrogen pickups now have glowing cyan cores, metal end caps and fins, and counter-rotating orbital rings. They hover and bob about 4.5 units above the stable pads. Collection range is 5.5 units so a pilot with an empty tank can still collect a low-hovering cell. Landing pads, fuel capacity, burn rate, refill amounts and respawn timing remain unchanged.
+
+Validation includes tremor timing, floating pickup accessibility, falling slab motion, bounded allocation, visible impact effects and cleanup, plus existing survival/debris/flight regression checks. GPU appearance still needs an interactive visual review.
