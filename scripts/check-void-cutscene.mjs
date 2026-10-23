@@ -321,6 +321,51 @@ async function roverApproach() {
 	await flush()
 	const route = level.roverApproach
 	check(
+		'fighter hub and parked fleet exist before cinematic entry',
+		!level.cinematic &&
+			level.fighterHub?.group.parent ===
+				level.sceneManager.scene &&
+			level.fighterHub.fleet.length === 6 &&
+			level.fighterHub.hero.group.visible
+	)
+	level.portalGuide.update(0.016, level.roverSite)
+	const ribbon = level.portalGuide
+	const colors = ribbon.lineGeometry.attributes.color
+	const midpoint = Math.floor(ribbon._samples / 2) * 2
+	check(
+		'guide ribbon has independent opaque colours for both edges',
+		colors.getW(midpoint) > 0.8 &&
+			colors.getW(midpoint + 1) > 0.8 &&
+			colors.getX(midpoint) === 1 &&
+			colors.getX(midpoint + 1) === 1
+	)
+	const vertices = ribbon.lineGeometry.attributes.position
+	let clearance = Infinity
+	for (let i = 0; i < ribbon._samples * 2; i++)
+		clearance = Math.min(
+			clearance,
+			vertices.getY(i) -
+				level.planet.heightAt(
+					vertices.getX(i),
+					vertices.getZ(i)
+				)
+		)
+	check('both guide edges remain above uneven terrain', clearance > 0.4)
+	const last = (ribbon._samples - 1) * 2
+	check(
+		'guide follows route bends all the way to the hub approach',
+		Math.abs(
+			(vertices.getX(last) + vertices.getX(last + 1)) / 2 -
+				level.roverApproach.trigger.x
+		) < 0.01 &&
+			Math.abs(
+				(vertices.getZ(last) +
+					vertices.getZ(last + 1)) /
+					2 -
+					level.roverApproach.trigger.z
+			) < 0.01
+	)
+	check(
 		'Level 2 exposes a continuous rover route without scaling the world',
 		route?.points.length >= 5 && level.planet.size === 1100
 	)
@@ -328,6 +373,20 @@ async function roverApproach() {
 		f.dispose()
 		return
 	}
+	check(
+		'fighter hub is separated from portal by over 300 metres',
+		route.shipSite.distanceTo(level.portalSite) > 300
+	)
+	const impactSite = route.trigger
+		.clone()
+		.add(new THREE.Vector3(-25, 0, -25))
+	const beforeImpact = level.planet.heightAt(impactSite.x, impactSite.z)
+	level.planet.addImpactCrater(impactSite.x, impactSite.z)
+	check(
+		'missile crater lowers the actual terrain surface',
+		level.planet.heightAt(impactSite.x, impactSite.z) <
+			beforeImpact - 1
+	)
 	let length = 0
 	let maxSlope = 0
 	let inBounds = true
@@ -606,6 +665,9 @@ async function fullPath(fps, recordings = false, boarded = true) {
 	let exitBehindPlane = false
 	let exitInFrontOfPlane = false
 	let exitGateVisible = false
+	let fleetSeen = false
+	let rolloverSeen = false
+	let pursuitSeen = false
 	let launchHullClearance = Infinity
 	const seen = await drive(f, {
 		fps,
@@ -630,6 +692,9 @@ async function fullPath(fps, recordings = false, boarded = true) {
 					discoveredShip.distanceTo(position)
 				)
 			}
+			fleetSeen ||= cut._fleet?.length === 6
+			rolloverSeen ||= cut._rollAge > 1.15
+			pursuitSeen ||= (cut._chaseMissiles?.length || 0) >= 2
 			if (!cut._skipped && cut.level3) {
 				wormholeCrossedBeforeLoad ||=
 					cut._wormholeCrossed === true
@@ -829,6 +894,9 @@ async function fullPath(fps, recordings = false, boarded = true) {
 		'cinematic finishes without a blocked loading screen',
 		cut.finished
 	)
+	check('alien hub contains six parked fighters', fleetSeen)
+	check('missile strike visibly rolls the disabled rover', rolloverSeen)
+	check('multiple missiles pursue the stolen fighter', pursuitSeen)
 	for (const phase of [
 		'rover_approach',
 		'missile_detected',

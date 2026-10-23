@@ -14,6 +14,9 @@ function fixture() {
 		planet: { heightAt: () => 0, terrain: { material } },
 		addObject() {},
 		_showMovementFeedback() {},
+		_requestShake(value) {
+			this.shake = Math.max(this.shake ?? 0, value)
+		},
 	}
 	level.survival = new MatterSurvival(level)
 	return level
@@ -27,6 +30,14 @@ for (const fps of [30, 60, 120]) {
 	level.transitionHeld = false
 	for (let i = 0; i < fps * 29; i++) s.update(1 / fps)
 	assert.ok(s.remaining > 0)
+	assert.ok(
+		level.shake > 0,
+		'ground tremor warns before the countdown expires'
+	)
+	assert.ok(
+		s.pickups[0].can.position.y > s.pickups[0].point.y + 3,
+		'nitrogen visibly floats above its landing pad'
+	)
 	assert.equal(s.isGone(30, 0), false)
 	for (let i = 0; i < fps * 31; i++) s.update(1 / fps)
 	assert.equal(
@@ -40,6 +51,24 @@ for (const fps of [30, 60, 120]) {
 		'removed ground has no pilot support'
 	)
 	assert.equal(s.isGone(0, -400), false, 'exit stays accessible')
+	const fallingIndex = s.crumble.slabs.findIndex(
+		(slab) => slab.age > 0.1 && slab.age < 5
+	)
+	assert.ok(
+		fallingIndex >= 0,
+		'live collapse emits falling terrain slabs'
+	)
+	const falling = new THREE.Matrix4()
+	s.crumble.mesh.getMatrixAt(fallingIndex, falling)
+	assert.ok(
+		falling.elements[13] < s.crumble.slabs[fallingIndex].origin.y,
+		'detached slabs fall below their original terrain height'
+	)
+	assert.equal(
+		s.crumble.slabs.length,
+		192,
+		'terrain crumble keeps a fixed resource budget'
+	)
 	const support = Object.assign(
 		Object.create(MatterDimension.prototype),
 		{ level, platforms: [] }

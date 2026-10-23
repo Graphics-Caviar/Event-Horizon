@@ -39,7 +39,12 @@ void main() {
  * the repository. The impact and particles are deterministic at every time.
  */
 export class CinematicMissileStrike {
-	constructor({ start, impact, heightAt = () => impact.y } = {}) {
+	constructor({
+		start,
+		impact,
+		heightAt = () => impact.y,
+		onImpact = null,
+	} = {}) {
 		if (!start?.isVector3 || !impact?.isVector3)
 			throw new TypeError(
 				'Missile start and impact must be Vector3 positions'
@@ -53,6 +58,7 @@ export class CinematicMissileStrike {
 		this.impactTime = 0
 		this._disposed = false
 		this._heightAt = heightAt
+		this._onImpact = onImpact
 		this._owned = new Set()
 		this._tangent = new THREE.Vector3()
 		this._sample = new THREE.Vector3()
@@ -277,6 +283,7 @@ export class CinematicMissileStrike {
 		if (this._disposed || this.impacted) return false
 		this.setFlightProgress(1)
 		this.impacted = true
+		this._onImpact?.(this.impactPosition)
 		this.impactTime = 0
 		this.missile.visible = false
 		this.dust.points.visible =

@@ -70,7 +70,7 @@ export const VOID_ASSETS = {
 	},
 	gravRift: {
 		path: '/assets/models/void/grav-rift.glb',
-		role: 'hazard · gravity anomaly',
+		role: 'portal - Matter dimension exit',
 		fit: 30,
 		simplify: 0.14,
 	},

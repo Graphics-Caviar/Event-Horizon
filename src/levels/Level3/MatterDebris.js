@@ -36,11 +36,38 @@ export class MatterDebris {
 		this.nextEvent = 6
 		this.serial = 0
 		this.disposed = false
-		this.geometry = new THREE.IcosahedronGeometry(1, 0)
+		this.geometry = new THREE.IcosahedronGeometry(1, 1)
+		const rockVertices = this.geometry.attributes.position
+		for (let i = 0; i < rockVertices.count; i++) {
+			const x = rockVertices.getX(i),
+				y = rockVertices.getY(i),
+				z = rockVertices.getZ(i)
+			const r = 0.82 + Math.sin(x * 9 + y * 5 + z * 7) * 0.18
+			rockVertices.setXYZ(i, x * r, y * r, z * r)
+		}
+		this.geometry.computeVertexNormals()
+		this.shardGeometry = new THREE.OctahedronGeometry(0.25, 0)
+		this.trailGeometry = new THREE.ConeGeometry(0.45, 7, 5, 1, true)
+		this.rockEdges = new THREE.EdgesGeometry(this.geometry, 35)
+		this.seamMaterial = new THREE.LineBasicMaterial({
+			color: 0xbc79fc,
+			transparent: true,
+			opacity: 0.55,
+		})
+		this.fragmentMaterial = new THREE.MeshStandardMaterial({
+			color: 0x87739b,
+			emissive: 0x632b84,
+			emissiveIntensity: 0.7,
+			flatShading: true,
+		})
 		this.architectureGeometry = new THREE.BoxGeometry(1.5, 0.7, 2.4)
+		this.architectureEdges = new THREE.EdgesGeometry(
+			this.architectureGeometry
+		)
 		this.material = new THREE.MeshStandardMaterial({
 			color: 0x394255,
-			roughness: 0.85,
+			roughness: 0.9,
+			flatShading: true,
 			emissive: 0x201330,
 			emissiveIntensity: 0.5,
 		})
@@ -68,12 +95,58 @@ export class MatterDebris {
 				this.ringGeometry.clone(),
 				material
 			)
+			const outline = new THREE.LineSegments(
+				this.rockEdges,
+				this.seamMaterial
+			)
+			outline.scale.setScalar(1.015)
+			mesh.add(outline)
+			const shards = new THREE.InstancedMesh(
+				this.shardGeometry,
+				this.fragmentMaterial,
+				12
+			)
+			shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+			shards.frustumCulled = false
+			const trailMaterial = new THREE.MeshBasicMaterial({
+				color: 0xab75ff,
+				transparent: true,
+				opacity: 0.25,
+				depthWrite: false,
+				blending: THREE.AdditiveBlending,
+				side: THREE.DoubleSide,
+			})
+			const trail = new THREE.Mesh(
+				this.trailGeometry,
+				trailMaterial
+			)
+			const shock = new THREE.Mesh(
+				this.ringGeometry,
+				material.clone()
+			)
+			shock.rotation.x = -Math.PI / 2
+			const bracket = new THREE.Mesh(
+				this.ringGeometry,
+				material
+			)
+			bracket.rotation.x = -Math.PI / 2
+			shards.visible =
+				trail.visible =
+				shock.visible =
+				bracket.visible =
+					false
+			this.group.add(shards, trail, shock, bracket)
 			ring.rotation.x = -Math.PI / 2
 			mesh.visible = ring.visible = false
 			this.group.add(mesh, ring)
 			return {
 				mesh,
 				ring,
+				outline,
+				shards,
+				trail,
+				shock,
+				bracket,
 				active: false,
 				age: 0,
 				point: new THREE.Vector3(),
@@ -109,6 +182,12 @@ export class MatterDebris {
 		e.mesh.geometry = major
 			? this.architectureGeometry
 			: this.geometry
+		e.outline.geometry = major
+			? this.architectureEdges
+			: this.rockEdges
+		e.shards.visible = e.trail.visible = e.shock.visible = false
+		e.bracket.visible = !cinematic
+		e.trail.material.color.set(duckable ? 0x6cffff : 0xb178ff)
 		e.point.copy(point)
 		e.radius =
 			this.config.radius *
@@ -128,6 +207,7 @@ export class MatterDebris {
 		vertices.needsUpdate = true
 		e.ring.geometry.computeBoundingSphere()
 		e.ring.material.color.set(duckable ? 0x6cffff : 0xffb95c)
+		e.shock.material.color.copy(e.ring.material.color)
 		e.ring.visible = !cinematic
 		e.mesh.visible = false
 		if (!cinematic)
@@ -226,9 +306,15 @@ export class MatterDebris {
 				t < 0
 					? 0.55 + Math.sin(e.age * 9) * 0.25
 					: Math.max(0, 1 - t)
+			e.bracket.position.copy(e.point).y += 0.24
+			e.bracket.scale.setScalar(
+				e.radius * (1.05 + Math.max(0, -t) * 0.35)
+			)
+			e.bracket.rotation.z = e.age * 0.4
 			if (t < 0) continue
 			if (t <= 1) {
 				e.mesh.visible = true
+				e.trail.visible = true
 				e.mesh.position.copy(e.point)
 				e.mesh.position.y += 100 * (1 - t * t)
 				e.mesh.position.x +=
@@ -247,8 +333,33 @@ export class MatterDebris {
 					e.age * 0.7,
 					e.age * 0.4
 				)
+				e.trail.position.copy(e.mesh.position).y +=
+					e.radius * 2.4
+				e.trail.scale.set(
+					e.radius * 0.55,
+					e.radius * 0.65,
+					e.radius * 0.55
+				)
+				e.trail.material.opacity = 0.15 + t * 0.22
 			} else if (!e.impacted) {
 				e.impacted = true
+				e.trail.visible = e.bracket.visible = false
+				e.shards.visible = e.shock.visible = true
+				this.level._requestShake?.(
+					e.cinematic
+						? 0
+						: Math.max(
+								0,
+								1 -
+									e.point.distanceTo(
+										this
+											.level
+											.playerRoot
+											.position
+									) /
+										65
+							) * 0.35
+				)
 				e.mesh.visible = false
 				this.level.voidAudio?.play(
 					'shock',
@@ -286,9 +397,53 @@ export class MatterDebris {
 						this.config.damage
 					)
 			}
+			if (e.impacted) {
+				const age = Math.max(
+					0,
+					(t - 1) * this.config.fallSeconds
+				)
+				e.shock.position.copy(e.point).y += 0.25
+				e.shock.scale.setScalar(
+					e.radius * (1 + age * 3)
+				)
+				e.shock.material.opacity =
+					Math.max(0, 1 - age) * 0.65
+				for (let i = 0; i < 12; i++) {
+					const a =
+						(i / 12) * Math.PI * 2 + e.seed
+					const speed = 3 + noise(e.seed + i) * 8
+					this.matrix.position.copy(e.point)
+					this.matrix.position.x +=
+						Math.cos(a) * speed * age
+					this.matrix.position.z +=
+						Math.sin(a) * speed * age
+					this.matrix.position.y +=
+						1 + 7 * age - 10 * age * age
+					this.matrix.rotation.set(
+						age * 4 + i,
+						age * 3,
+						i
+					)
+					this.matrix.scale.setScalar(
+						Math.max(0, 1 - age) *
+							(e.major ? 3 : 1.5)
+					)
+					this.matrix.updateMatrix()
+					e.shards.setMatrixAt(
+						i,
+						this.matrix.matrix
+					)
+				}
+				e.shards.instanceMatrix.needsUpdate = true
+			}
 			if (t > 1.4) {
 				e.active = false
 				e.mesh.visible = e.ring.visible = false
+				e.trail.visible =
+					e.shards.visible =
+					e.shock.visible =
+					e.bracket.visible =
+						false
 			}
 		}
 	}
@@ -299,10 +454,19 @@ export class MatterDebris {
 		this.group.removeFromParent()
 		this.fragments.dispose()
 		this.geometry.dispose()
+		this.shardGeometry.dispose()
+		this.trailGeometry.dispose()
+		this.rockEdges.dispose()
+		this.architectureEdges.dispose()
+		this.seamMaterial.dispose()
+		this.fragmentMaterial.dispose()
 		this.architectureGeometry.dispose()
 		this.material.dispose()
 		this.ringGeometry.dispose()
 		for (const e of this.events) {
+			e.shards.dispose()
+			e.trail.material.dispose()
+			e.shock.material.dispose()
 			e.ring.material.dispose()
 			e.ring.geometry.dispose()
 		}

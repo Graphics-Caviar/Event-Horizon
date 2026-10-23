@@ -195,3 +195,29 @@ for (const fps of [30, 60, 120]) {
 console.log(
 	'Real Level 3 platform descent and terrain return passed at 30/60/120 FPS.'
 )
+
+const effects = fixture()
+effects.debris.trigger(effects.point)
+effects.debris.update(3.5)
+const impact = effects.debris.events[0]
+assert.ok(
+	impact.mesh.visible && impact.trail.visible,
+	'falling debris keeps its rock and trail visible'
+)
+effects.debris.update(2)
+assert.ok(
+	impact.shock.visible && impact.shock.material.opacity > 0,
+	'impact shockwave remains visible after warning fades'
+)
+assert.ok(impact.shards.visible, 'impact ejects a bounded shard burst')
+effects.debris.update(3)
+assert.ok(
+	!impact.shock.visible &&
+		!impact.shards.visible &&
+		!impact.trail.visible,
+	'pooled impact effects stop after recycling'
+)
+effects.debris.dispose()
+console.log(
+	'Debris visual lifecycle: descent trails, impact shockwave, shards and recycling passed.'
+)
