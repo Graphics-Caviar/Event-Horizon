@@ -119,7 +119,13 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 export class AlienPlanet {
 	constructor(
 		level,
-		{ center, baseY = -140, size = 1000, clearZones = [] } = {}
+		{
+			center,
+			baseY = -140,
+			size = 1000,
+			clearZones = [],
+			drivingRoute = [],
+		} = {}
 	) {
 		this.level = level
 		this.scene = level.sceneManager.scene
@@ -133,6 +139,13 @@ export class AlienPlanet {
 			x: zone.x,
 			z: zone.z,
 			radius: Math.max(0, zone.radius || 0),
+		}))
+		// The longer escape approach is carved into this same terrain mesh.
+		// Rapier consumes these exact triangles; there is no visual road floating
+		// above an unchanged collider, repeated terrain tile, or scaled world.
+		this.drivingRoute = drivingRoute.map((point) => ({
+			x: point.x,
+			z: point.z,
 		}))
 
 		this.root = new THREE.Group()
@@ -190,6 +203,11 @@ export class AlienPlanet {
 				1 - THREE.MathUtils.smoothstep(d, 16, 55)
 			)
 		}
+		const routeDistance = this._drivingRouteDistance(x, z)
+		weight = Math.max(
+			weight,
+			1 - THREE.MathUtils.smoothstep(routeDistance, 24, 76)
+		)
 		return THREE.MathUtils.lerp(
 			h,
 			this.baseY +
@@ -198,6 +216,29 @@ export class AlienPlanet {
 				sample(x, z, 6) * 0.3,
 			weight
 		)
+	}
+
+	/** Distance from the continuous escape corridor, without per-sample objects. */
+	_drivingRouteDistance(x, z) {
+		let distance = Infinity
+		const route = this.drivingRoute || []
+		for (let i = 1; i < route.length; i++) {
+			const a = route[i - 1],
+				b = route[i]
+			const dx = b.x - a.x,
+				dz = b.z - a.z
+			const t = clamp(
+				((x - a.x) * dx + (z - a.z) * dz) /
+					(dx * dx + dz * dz || 1),
+				0,
+				1
+			)
+			distance = Math.min(
+				distance,
+				Math.hypot(x - a.x - dx * t, z - a.z - dz * t)
+			)
+		}
+		return distance
 	}
 
 	/** Sample the visible terrain triangles so steep ground stays solid. */
@@ -356,6 +397,9 @@ export class AlienPlanet {
 	}
 
 	_isSpawnClear(x, z, radius) {
+		// Leave enough room for the real rover's chassis, its turning arc and
+		// the final astronaut escape. Props still populate both sides normally.
+		if (this._drivingRouteDistance(x, z) < 24 + radius) return false
 		const channel = lavaChannelAt(z, this.baseY)
 		if (
 			channel.active &&

@@ -21,8 +21,8 @@ const MAX_MOVEMENT_SUBSTEP = 0.8
 
 // Wormhole suction around the escape gate: inside this radius the gate
 // pulls the rover and the pilot toward the ring, gently at the rim and
-// irresistibly close in. Weak enough to drive out of, strong enough that
-// idling near the gate means getting eaten — which is how the run ends.
+// strongly near its throat. The Level 2 escape event begins on the final
+// rover approach before this field can take control of the vehicle.
 const SUCTION_RADIUS = 60
 const SUCTION_MAX_ROVER = 24 // m/s² on the chassis at full pull
 const SUCTION_MAX_PILOT = 16
@@ -86,10 +86,10 @@ const shortestAngle = (target, current) => {
  *   WASD, using a Rapier chassis and independent wheel suspension;
  * - the on-foot pilot carries momentum, leans into acceleration and turns,
  *   and plays a procedural idle/walk/run gait on its static mesh;
- * - a yellow guide line leads to the rover, then retargets to the escape
- *   portal once the rover is boarded — reaching the portal wins the level.
+ * - a yellow guide line leads to the rover, then along the longer safe
+ *   basin route toward the wormhole and its final cinematic trigger.
  *
- * Alien combat remains deliberately out of scope for this cinematic milestone.
+ * Existing alien combat and hazards remain active during the playable route.
  */
 export class Level2 extends Level {
 	constructor(
@@ -99,6 +99,7 @@ export class Level2 extends Level {
 			onEnd = null,
 			planetClass = AlienPlanet,
 			scriptSet = 2,
+			combatConfig = {},
 			onPrepared = null,
 		} = {}
 	) {
@@ -136,16 +137,79 @@ export class Level2 extends Level {
 		this.roverSite = this.landingSite
 			.clone()
 			.add(new THREE.Vector3(95, 0, -55))
-		// The escape portal waits far across the valley, well away from the
-		// rover and the wreck, so reaching it means a real traversal — and
-		// its suction field is felt long before the gate itself is reached.
+		// Level 2's escape route bends around the end of the existing lava
+		// channel. Its wider basin remains the original size, with a continuous
+		// driveable shelf instead of scaled terrain or repeated chunks. Level 3
+		// inherits this constructor and keeps its original objective positions.
 		this.portalSite = this.landingSite
 			.clone()
-			.add(new THREE.Vector3(-238, 0, 212))
+			.add(
+				new THREE.Vector3(
+					...(scriptSet === 2
+						? [-150, 0, 460]
+						: [-238, 0, 212])
+				)
+			)
+		this.roverApproach =
+			scriptSet === 2
+				? {
+						points: [
+							this.roverSite.clone(),
+							...[
+								[300, 150],
+								[235, 340],
+								[75, 440],
+								[-70, 460],
+							].map(([x, z]) =>
+								this.landingSite
+									.clone()
+									.add(
+										new THREE.Vector3(
+											x,
+											0,
+											z
+										)
+									)
+							),
+						],
+						trigger: this.landingSite
+							.clone()
+							.add(
+								new THREE.Vector3(
+									-70,
+									0,
+									460
+								)
+							),
+						radius: 24,
+						shipSite: this.landingSite
+							.clone()
+							.add(
+								new THREE.Vector3(
+									-70,
+									0,
+									488
+								)
+							),
+						portalSite: this.portalSite,
+					}
+				: null
+		this._approachWaypoint = 1
 
 		const center = this.landingSite
 			.clone()
 			.lerp(this.crashSite, 0.5)
+		if (this.roverApproach) {
+			new THREE.Box3()
+				.setFromPoints([
+					this.landingSite,
+					this.crashSite,
+					...this.roverApproach.points,
+					this.roverApproach.shipSite,
+					this.portalSite,
+				])
+				.getCenter(center)
+		}
 		center.y = this.baseY
 
 		this.gameplayColliders = []
@@ -153,6 +217,12 @@ export class Level2 extends Level {
 			center,
 			baseY: this.baseY,
 			size: 1100,
+			drivingRoute: this.roverApproach
+				? [
+						...this.roverApproach.points,
+						this.portalSite,
+					]
+				: [],
 			clearZones: [
 				{
 					x: this.landingSite.x,
@@ -174,6 +244,21 @@ export class Level2 extends Level {
 					z: this.portalSite.z,
 					radius: 40,
 				},
+				...(this.roverApproach
+					? [
+							{
+								x: this
+									.roverApproach
+									.shipSite
+									.x,
+								z: this
+									.roverApproach
+									.shipSite
+									.z,
+								radius: 32,
+							},
+						]
+					: []),
 			],
 		})
 
@@ -183,6 +268,14 @@ export class Level2 extends Level {
 		// obstacle-free.
 		this.roverSite.copy(this._findWalkableSite(this.roverSite))
 		this.portalSite.copy(this._findWalkableSite(this.portalSite))
+		if (this.roverApproach) {
+			for (const point of [
+				...this.roverApproach.points,
+				this.roverApproach.trigger,
+				this.roverApproach.shipSite,
+			])
+				point.y = this.planet.heightAt(point.x, point.z)
+		}
 
 		this.playerRoot = new THREE.Group()
 		this.playerRoot.name = 'level2-pilot'
@@ -248,7 +341,7 @@ export class Level2 extends Level {
 
 		this.rover = new Rover(this, {
 			position: this.roverSite,
-			heading: -0.55,
+			heading: this.roverApproach ? Math.PI / 4 : -0.55,
 		})
 		this.rover.collider = this._registerGameplayCollider(
 			this.rover.group.position.x,
@@ -261,14 +354,15 @@ export class Level2 extends Level {
 		// beacon visuals), so its guide line runs without a second beacon.
 		this.portal = new Portal(this, {
 			position: this.portalSite,
-			faceTowards: this.landingSite,
+			faceTowards:
+				this.roverApproach?.trigger || this.landingSite,
 		})
 		this.guide = new WaypointGuide(this, {
 			getTarget: () => this.rover.group.position,
 			name: 'rover',
 		})
 		this.portalGuide = new WaypointGuide(this, {
-			getTarget: () => this.portal.group.position,
+			getTarget: () => this._getApproachTarget(),
 			beacon: false,
 			arriveDistance: 10,
 			name: 'portal',
@@ -278,6 +372,7 @@ export class Level2 extends Level {
 		this._spawnAliens()
 
 		this.boarded = false
+		this.roverDisabled = false
 		this._hasBoarded = false
 		this.completed = false
 		// True while the Level 2 -> Level 3 transit cinematic is shooting
@@ -312,7 +407,11 @@ export class Level2 extends Level {
 		this.firstPerson = false
 		this._vWasDown = false
 		this.hazards = new Hazards(this)
-		this.playerHP = 5
+		this.maxPlayerHP = combatConfig.playerHP ?? 100
+		this.playerHP = this.maxPlayerHP
+		this.maxRoverHP = combatConfig.roverHP ?? 200
+		this.roverHP = this.maxRoverHP
+		this.roverDamageCooldown = 0
 		this.damageCooldown = 0
 		this._buildLevelHUD()
 		this._updateLevelHUD()
@@ -367,6 +466,27 @@ export class Level2 extends Level {
 			}
 		}
 		return origin.clone()
+	}
+
+	/** Keep the familiar guide on the safe bends, with the gate on the horizon. */
+	_getApproachTarget() {
+		const route = this.roverApproach?.points
+		if (!route) return this.portal.group.position
+		const position = this.boarded
+			? this.rover.group.position
+			: this.playerRoot.position
+		while (this._approachWaypoint < route.length - 1) {
+			const waypoint = route[this._approachWaypoint]
+			if (
+				Math.hypot(
+					position.x - waypoint.x,
+					position.z - waypoint.z
+				) > 30
+			)
+				break
+			this._approachWaypoint++
+		}
+		return route[this._approachWaypoint]
 	}
 
 	_alienSpotValid(x, z, radius) {
@@ -878,7 +998,7 @@ export class Level2 extends Level {
 			</div>
 
 			<div style="margin-bottom:6px;">
-				HP
+				PILOT HP
 				<span id="l2-hp-text"
 					style="float:right;">5 / 5</span>
 			</div>
@@ -940,8 +1060,19 @@ export class Level2 extends Level {
 	_updateLevelHUD() {
 		if (!this.levelHudEl) return
 
-		const hp = THREE.MathUtils.clamp(this.playerHP, 0, 5)
-		const hpPercent = (hp / 5) * 100
+		const hp = THREE.MathUtils.clamp(
+			this.playerHP,
+			0,
+			this.maxPlayerHP
+		)
+		const hpPercent = (hp / this.maxPlayerHP) * 100
+		if (!this.roverHealthEl) {
+			this.roverHealthEl = document.createElement('div')
+			this.roverHealthEl.style.marginBottom = '12px'
+			this.levelHudEl.appendChild(this.roverHealthEl)
+		}
+		this.roverHealthEl.hidden = this._radioScriptSet === 3
+		this.roverHealthEl.innerHTML = `ROVER HP ${Math.ceil(this.roverHP)} / ${this.maxRoverHP}<div style="height:6px;background:#263342;margin-top:5px"><div style="height:100%;background:#ffbd66;width:${(100 * this.roverHP) / this.maxRoverHP}%"></div></div>`
 
 		const hpText = this.levelHudEl.querySelector('#l2-hp-text')
 		const hpBar = this.levelHudEl.querySelector('#l2-hp-bar')
@@ -950,14 +1081,14 @@ export class Level2 extends Level {
 		const modeEl = this.levelHudEl.querySelector('#l2-mode')
 		const controlsEl = this.levelHudEl.querySelector('#l2-controls')
 
-		if (hpText) hpText.textContent = `${hp} / 5`
+		if (hpText) hpText.textContent = `${hp} / ${this.maxPlayerHP}`
 
 		if (hpBar) {
 			hpBar.style.width = `${hpPercent}%`
 			hpBar.style.background =
-				hp > 2
+				hpPercent > 40
 					? '#5cffb1'
-					: hp > 1
+					: hpPercent > 20
 						? '#ffb347'
 						: '#ff5268'
 		}
@@ -1200,6 +1331,7 @@ export class Level2 extends Level {
 	}
 
 	_toggleBoardRover() {
+		if (this.transitionHeld || this.roverDisabled) return
 		// Debounce: duplicated synthetic key events must not flap the
 		// board state through two toggles in one user action.
 		const now = performance.now()
@@ -1271,6 +1403,12 @@ export class Level2 extends Level {
 	 */
 	enterCinematic() {
 		this.cinematic = true
+		this.transitionHeld = true
+		// The completed encounter no longer rolls gameplay anomalies. Clear
+		// active gravity zones through their normal teardown so a random
+		// storm cannot lift the disabled rover or obscure the escape shots.
+		this.hazards.enabled = false
+		this.hazards.dispose()
 		this._radioIntroIn = 0
 		window.removeEventListener('keydown', this._onKeyDown)
 		window.removeEventListener('keyup', this._onKeyUp)
@@ -1284,10 +1422,69 @@ export class Level2 extends Level {
 			this._endTimer = null
 		}
 		this.rover.inputEnabled = false
-		this.rover.speed = 0
 		this.objectiveEl.style.display = 'none'
 		this.levelHudEl.style.display = 'none'
 		this.feedbackEl.style.display = 'none'
+	}
+
+	/** Controlled braking keeps the captured approach momentum visible. */
+	stopRoverForCinematic(delta, { disabled = false } = {}) {
+		if (disabled) this.roverDisabled = true
+		this.rover.inputEnabled = false
+		const dt = THREE.MathUtils.clamp(delta || 0, 0, 0.1)
+		const retention = Math.exp(-(this.roverDisabled ? 8 : 0.6) * dt)
+		const velocity = this.rover.body?.linvel?.()
+		if (velocity) {
+			const x =
+				Math.abs(velocity.x * retention) < 0.025
+					? 0
+					: velocity.x * retention
+			const z =
+				Math.abs(velocity.z * retention) < 0.025
+					? 0
+					: velocity.z * retention
+			this.rover.body.setLinvel({ x, y: velocity.y, z }, true)
+			const angular = this.rover.body.angvel()
+			const rotationRetention = Math.exp(-6 * dt)
+			this.rover.body.setAngvel(
+				{
+					x: angular.x * rotationRetention,
+					y: angular.y * rotationRetention,
+					z: angular.z * rotationRetention,
+				},
+				true
+			)
+		}
+		this.rover.speed *= retention
+		if (Math.abs(this.rover.speed) < 0.025) this.rover.speed = 0
+	}
+
+	disableRoverForCinematic() {
+		this.roverDisabled = true
+		this.rover.inputEnabled = false
+		this.audio?.stopRoverEngine()
+	}
+
+	/** Lateral exit uses the real rover footprint and existing collision policy. */
+	getCinematicExitPosition(target = new THREE.Vector3()) {
+		this.rover.getExitPosition(target)
+		const collider = this.rover.collider
+		const colliderEnabled = collider?.enabled
+		if (collider) collider.enabled = false
+		try {
+			this.planet.clampToBounds(target, PLAYER_RADIUS)
+			this.planet.resolveCircleCollisions(
+				target,
+				PLAYER_RADIUS,
+				this.gameplayColliders
+			)
+		} finally {
+			if (collider) collider.enabled = colliderEnabled
+		}
+		target.y =
+			this.planet.heightAt(target.x, target.z) +
+			(this.pilotWalk?.footOffset ?? 0)
+		return target
 	}
 
 	/**
@@ -1296,7 +1493,7 @@ export class Level2 extends Level {
 	 * debounce are meaningless here — the cinematic calls this exactly once).
 	 */
 	dismountForCinematic() {
-		if (!this.boarded) return
+		if (!this.boarded) return this.playerRoot.position.clone()
 		this.boarded = false
 		this.rover.inputEnabled = false
 		this.rover.speed = 0
@@ -1304,20 +1501,11 @@ export class Level2 extends Level {
 		this._airborne = false
 		this._verticalSpeed = 0
 		this._jumpWasDown = false
-		const exit = this.rover.getExitPosition(new THREE.Vector3())
-		if (this.rover.collider) this.rover.collider.enabled = false
-		this.planet.clampToBounds(exit, PLAYER_RADIUS)
-		this.planet.resolveCircleCollisions(
-			exit,
-			PLAYER_RADIUS,
-			this.gameplayColliders
-		)
-		if (this.rover.collider) this.rover.collider.enabled = true
-		this.playerRoot.position.x = exit.x
-		this.playerRoot.position.z = exit.z
-		this._syncPlayerToTerrain()
+		const exit = this.getCinematicExitPosition()
+		this.playerRoot.position.copy(exit)
 		this.playerRoot.visible = true
 		this.audio?.playHatch()
+		return exit
 	}
 
 	/**
@@ -1338,7 +1526,7 @@ export class Level2 extends Level {
 	 * synthesis; this only decides how hard the engine works.
 	 */
 	_updateRoverAudio() {
-		if (!this.boarded) {
+		if (!this.boarded || this.roverDisabled) {
 			this.audio?.stopRoverEngine()
 			return
 		}
@@ -1738,6 +1926,10 @@ export class Level2 extends Level {
 
 	/** Hull damage from a bite or talon strike; true when it was fatal. */
 	_applyAlienHit(amount = 1) {
+		if (this.completed || this.transitionHeld) return false
+		if (this.boarded) return this._applyRoverHit(amount)
+		if (this.damageCooldown > 0) return false
+		if (this._radioScriptSet === 2) amount *= 20
 		this.playerHP = Math.max(this.playerHP - amount, 0)
 		this.damageCooldown = 0.8
 		this._flashDamage()
@@ -1749,14 +1941,54 @@ export class Level2 extends Level {
 		return false
 	}
 
+	_applyRoverHit(amount = 1) {
+		if (
+			this.completed ||
+			this.transitionHeld ||
+			this.roverHP <= 0 ||
+			this.roverDamageCooldown > 0
+		)
+			return false
+		if (this._radioScriptSet === 2) amount *= 20
+		this.roverHP = Math.max(0, this.roverHP - amount)
+		this.roverDamageCooldown = 0.8
+		this._requestShake(0.35)
+		this._updateLevelHUD()
+		if (this.boarded) this._flashDamage()
+		if (this.roverHP <= 0) {
+			this._showMovementFeedback(
+				'ROVER DESTROYED - MISSION FAILED',
+				5
+			)
+			this._gameOver()
+			return true
+		}
+		return false
+	}
+
 	/** Impact shake for the camera; the strongest request this frame wins. */
 	_requestShake(amount) {
 		this._impactShake = Math.max(this._impactShake, amount)
 	}
 
-	/** Did the pilot (or the driven rover) reach the portal gate? */
+	/** The rover reaches the final escape approach; Level 3 keeps its gate. */
 	_checkPortalArrival() {
 		if (this.completed) return
+		if (this.roverApproach) {
+			if (!this.boarded || this._approachTriggered) return
+			const position = this.rover.group.position
+			const trigger = this.roverApproach.trigger
+			if (
+				Math.hypot(
+					position.x - trigger.x,
+					position.z - trigger.z
+				) > this.roverApproach.radius
+			)
+				return
+			this._approachTriggered = true
+			this._completeMission()
+			return
+		}
 		const dx =
 			this.playerRoot.position.x -
 			this.portal.group.position.x
@@ -1824,6 +2056,7 @@ export class Level2 extends Level {
 
 		this._vWasDown = vDown
 
+		if (this.cinematic) this.stopRoverForCinematic(delta)
 		this.rover.update(delta)
 		this._updateRoverAudio()
 		// Throttled: while grinding against a steep bank the message would
@@ -1874,17 +2107,23 @@ export class Level2 extends Level {
 		this.guide.update(delta, this.playerRoot.position, {
 			active:
 				!this.cinematic &&
+				this._radioScriptSet !== 3 &&
 				!this.boarded &&
 				!this._hasBoarded,
 		})
 		this.portalGuide.update(delta, this.playerRoot.position, {
 			active:
 				!this.cinematic &&
-				this._hasBoarded &&
+				(this._hasBoarded ||
+					this._radioScriptSet === 3) &&
 				!this.completed,
 		})
 		this.dust.update(delta)
 		this.damageCooldown = Math.max(0, this.damageCooldown - delta)
+		this.roverDamageCooldown = Math.max(
+			0,
+			this.roverDamageCooldown - delta
+		)
 
 		for (const alien of this.aliens) {
 			alien.update(delta, this.playerRoot.position)
@@ -1895,7 +2134,12 @@ export class Level2 extends Level {
 			if (alien.pendingStrike) {
 				alien.pendingStrike = false
 				if (this.damageCooldown <= 0) {
-					if (this._applyAlienHit(1)) return
+					if (
+						this._applyAlienHit(
+							alien.attackDamage ?? 1
+						)
+					)
+						return
 					const away = this._hitScratch
 						.copy(this.playerRoot.position)
 						.sub(alien.position)
@@ -1949,16 +2193,26 @@ export class Level2 extends Level {
 				this._requestShake(0.45)
 			} else if (
 				roverContact === 'bite' &&
-				this.damageCooldown <= 0
+				this.roverDamageCooldown <= 0
 			) {
-				if (this._applyAlienHit(1)) return
+				if (
+					this._applyRoverHit(
+						alien.attackDamage ?? 1
+					)
+				)
+					return
 			}
 
 			if (
 				this.damageCooldown <= 0 &&
 				alien.checkPlayerCollision(this.playerRoot)
 			) {
-				if (this._applyAlienHit(1)) return
+				if (
+					this._applyAlienHit(
+						alien.attackDamage ?? 1
+					)
+				)
+					return
 				// Knock the pilot back out of the jaws.
 				const away = this._hitScratch
 					.copy(this.playerRoot.position)
@@ -2134,8 +2388,12 @@ export class Level2 extends Level {
 				default: `<strong>REACH THE ROVER · ${distanceLabel} m</strong><br><span style="font-size:12px;opacity:.8">WASD to walk · Left Shift to sprint · E to board when close.</span>`,
 				located: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Get closer to board the rover.</span>',
 				board: '<strong>ROVER LOCATED</strong><br><span style="font-size:12px;opacity:.8">Press E to board the rover.</span>',
-				portal: '<strong>ESCAPE VIA THE PORTAL</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide line · drive through the ring.</span>',
-				complete: '<strong>PORTAL REACHED</strong><br><span style="font-size:12px;opacity:.8">You made it off the planet.</span>',
+				portal: this.roverApproach
+					? '<strong>REACH THE WORMHOLE APPROACH</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide around the lava basin toward the distant gate.</span>'
+					: '<strong>ESCAPE VIA THE PORTAL</strong><br><span style="font-size:12px;opacity:.8">Follow the yellow guide line · drive through the ring.</span>',
+				complete: this.roverApproach
+					? '<strong>FINAL APPROACH</strong><br><span style="font-size:12px;opacity:.8">Stay with the rover — the wormhole is ahead.</span>'
+					: '<strong>PORTAL REACHED</strong><br><span style="font-size:12px;opacity:.8">You made it off the planet.</span>',
 			}
 			this.objectiveEl.innerHTML = objectiveText[objectiveKey]
 		}

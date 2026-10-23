@@ -234,6 +234,10 @@ export class CinematicShip {
 	}
 
 	_measureHull(model) {
+		model.traverse((node) => {
+			if (node.isMesh)
+				node.castShadow = node.receiveShadow = true
+		})
 		model.updateMatrixWorld(true)
 		this.hullBounds.setFromObject(model, this.craft === 'anomaly')
 		this.hullBottom = this.hullBounds.min.y
@@ -363,6 +367,31 @@ export class CinematicShip {
 			}
 			this._runningLights[2].position.z = 0
 		}
+	}
+
+	setTransitOpacity(opacity) {
+		if (!this._transitMaterials) {
+			this._transitMaterials = []
+			this.group.traverse((node) => {
+				if (!node.isMesh) return
+				const clone = (source) => {
+					const material = this._own(
+						source.clone()
+					)
+					this._transitMaterials.push({
+						material,
+						opacity: source.opacity,
+					})
+					material.transparent = true
+					return material
+				}
+				node.material = Array.isArray(node.material)
+					? node.material.map(clone)
+					: clone(node.material)
+			})
+		}
+		for (const entry of this._transitMaterials)
+			entry.material.opacity = entry.opacity * opacity
 	}
 
 	update(delta, { thrust = 0.3, interference = 0 } = {}) {

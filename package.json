@@ -27,6 +27,8 @@
 		"preview:subpath": "node scripts/preview-subpath.mjs",
 		"seed": "node scripts/seedFirestore.js",
 		"test:backend": "node scripts/testBackend.js",
+		"test:survival": "node scripts/check-level3-survival.mjs",
+		"test:combat": "node scripts/check-level3-combat.mjs",
 		"test:level2": "node scripts/check-rover.mjs",
 		"test:pilots": "node scripts/check-pilot-loading.mjs",
 		"test:cutscene": "node scripts/bundle-void-cutscene.mjs"

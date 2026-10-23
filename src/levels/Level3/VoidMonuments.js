@@ -76,15 +76,6 @@ export class VoidMonuments {
 				shadows: false,
 				colliders: [],
 			},
-			{
-				key: 'anomalyShip',
-				site: this.sites.ship,
-				fit: 30,
-				yaw: this.sites.shipYaw,
-				hover: 20,
-				shadows: false,
-				colliders: [],
-			},
 		]
 		defs.forEach((def, index) => {
 			this._timers.push(

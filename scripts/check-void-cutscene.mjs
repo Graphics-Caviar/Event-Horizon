@@ -11,9 +11,12 @@ import {
 import { Game } from '../src/core/Game.js'
 import { GameState, STATUS } from '../src/core/GameState.js'
 import { Level2 } from '../src/levels/Level2/Level2.js'
+import { Hazards } from '../src/levels/Level2/Hazards.js'
+import { GravityStorm } from '../src/levels/Level2/GravityStorm.js'
 import { Level3 } from '../src/levels/Level3/Level3.js'
 import { Level2ToLevel3Cutscene } from '../src/cutscenes/Level2ToLevel3Cutscene.js'
 import { CinematicShip } from '../src/cutscenes/CinematicShip.js'
+import { CinematicMissileStrike } from '../src/cutscenes/CinematicMissileStrike.js'
 import { VoidTransitEnvironment } from '../src/cutscenes/VoidTransitEnvironment.js'
 import { RadioDialogue } from '../src/audio/RadioDialogue.js'
 import { RADIO_SCRIPTS } from '../src/audio/dialogue/radioScripts.js'
@@ -283,10 +286,12 @@ async function start(options = {}) {
 	await source.rover.ready
 	await flush()
 	// Exercise the actual success condition but route now, so no wall timer is needed.
-	source.playerRoot.position.copy(source.portal.group.position)
+	const trigger =
+		source.roverApproach?.trigger || source.portal.group.position
+	source.playerRoot.position.copy(trigger)
 	source._syncPlayerToTerrain()
-	if (options.boarded) {
-		const p = source.portal.group.position
+	if (options.boarded !== false) {
+		const p = trigger
 		const y = source.planet.heightAt(p.x, p.z)
 		source.rover.group.position.set(p.x, y + 1, p.z)
 		source.rover.body.setTranslation(
@@ -299,11 +304,208 @@ async function start(options = {}) {
 		source.rover.getSeatPosition(source.playerRoot.position)
 	}
 	source._checkPortalArrival()
-	check('portal arrival completes Level 2', source.completed)
+	check('boarded final approach completes Level 2', source.completed)
 	await f.game._onLevelEnd(completion)
 	f.source = source
 	f.cut = f.game.currentLevel
 	return f
+}
+
+async function roverApproach() {
+	console.log('\nExtended driving corridor and one-shot approach trigger')
+	const f = fixture()
+	let completedCallbacks = 0
+	const level = new Level2(f.game, { onEnd: () => completedCallbacks++ })
+	f.game.currentLevel = level
+	await level.rover.ready
+	await flush()
+	const route = level.roverApproach
+	check(
+		'Level 2 exposes a continuous rover route without scaling the world',
+		route?.points.length >= 5 && level.planet.size === 1100
+	)
+	if (!route) {
+		f.dispose()
+		return
+	}
+	let length = 0
+	let maxSlope = 0
+	let inBounds = true
+	let clear = true
+	let groundFinite = true
+	const extraColliders = level.gameplayColliders.filter(
+		(collider) => collider !== level.rover.collider
+	)
+	for (let i = 1; i < route.points.length; i++) {
+		const a = route.points[i - 1]
+		const b = route.points[i]
+		length += Math.hypot(b.x - a.x, b.z - a.z)
+		for (let sample = 0; sample <= 80; sample++) {
+			const point = a.clone().lerp(b, sample / 80)
+			point.y = level.planet.heightAt(point.x, point.z)
+			groundFinite &&= Number.isFinite(point.y)
+			maxSlope = Math.max(
+				maxSlope,
+				level.planet.slopeDegreesAt(point.x, point.z)
+			)
+			inBounds &&= level.planet.isInsideBounds(
+				point.x,
+				point.z,
+				7
+			)
+			const resolved = point.clone()
+			level.planet.resolveCircleCollisions(
+				resolved,
+				6.8,
+				extraColliders
+			)
+			clear &&=
+				Math.hypot(
+					resolved.x - point.x,
+					resolved.z - point.z
+				) < 0.001
+		}
+	}
+	check(
+		'extended playable driving route exceeds 750 metres',
+		length > 750,
+		`length=${length.toFixed(1)}`
+	)
+	check(
+		'driving corridor has finite continuous ground and gentle slopes',
+		groundFinite && maxSlope < 12,
+		`peak slope=${maxSlope.toFixed(2)} degrees`
+	)
+	check(
+		'full rover footprint remains inside the existing terrain',
+		inBounds
+	)
+	check(
+		'rover corridor is clear of existing environment and gameplay colliders',
+		clear
+	)
+	check(
+		'wormhole stays beyond the final approach trigger',
+		route.trigger.distanceTo(level.portal.group.position) >
+			route.radius + 35
+	)
+	level.playerRoot.position.copy(route.trigger)
+	level.rover.group.position.copy(route.trigger)
+	level._checkPortalArrival()
+	check(
+		'walking into the approach cannot start the rover missile event',
+		!level.completed
+	)
+	level.boarded = level._hasBoarded = true
+	level.rover.group.position.copy(level.portal.group.position)
+	level._checkPortalArrival()
+	check(
+		'the old portal-arrival trigger does not bypass the rover escape',
+		!level.completed
+	)
+	level.rover.group.position
+		.copy(route.trigger)
+		.add(new THREE.Vector3(route.radius + 1, 0, 0))
+	level._checkPortalArrival()
+	check(
+		'driving outside the designated approach does not trigger early',
+		!level.completed
+	)
+	level.rover.group.position.copy(route.trigger)
+	level._checkPortalArrival()
+	const timer = level._endTimer
+	level._checkPortalArrival()
+	check(
+		'boarded approach triggers once and holds the existing rover controls',
+		level.completed &&
+			level._approachTriggered &&
+			level.transitionHeld &&
+			!level.rover.inputEnabled &&
+			level._endTimer === timer
+	)
+	f.dispose()
+	await new Promise((resolve) => setTimeout(resolve, 300))
+	check(
+		'approach teardown removes the pending completion and listeners',
+		completedCallbacks === 0 && listenerCount('keydown') === 0
+	)
+}
+
+async function cinematicHazards() {
+	console.log('\nExisting gameplay hazards stop at cinematic ownership')
+	const f = fixture()
+	const level = new Level2(f.game)
+	f.game.currentLevel = level
+	await level.rover.ready
+	await flush()
+	const hazards = level.hazards
+	check(
+		'normal Level 2 gameplay retains the real enabled hazard manager',
+		hazards instanceof Hazards &&
+			hazards.enabled &&
+			hazards.active.length === 0
+	)
+	const storm = hazards.spawn('gravityStorm')
+	check(
+		'normal gameplay can create the existing storm cloud and ground ring',
+		storm instanceof GravityStorm &&
+			storm.group.parent === f.scene &&
+			storm.ring.parent === f.scene
+	)
+	hazards.update(4.01)
+	check(
+		'an active gameplay storm registers a real gravity modifier',
+		GravityStorm.active.includes(storm) &&
+			hazards.gravityMultiplierAt(storm.center) ===
+				storm.multiplier &&
+			storm.multiplier !== 1
+	)
+	const disposals = new Map()
+	for (const resource of storm._disposables) {
+		disposals.set(resource, 0)
+		resource.addEventListener('dispose', () =>
+			disposals.set(resource, disposals.get(resource) + 1)
+		)
+	}
+	level.enterCinematic()
+	check(
+		'cinematic ownership disables future gameplay hazard rolls',
+		!hazards.enabled && level.cinematic && level.transitionHeld
+	)
+	check(
+		'cinematic ownership disposes the active storm through its normal lifecycle',
+		hazards.active.length === 0 && storm.done
+	)
+	check(
+		'storm cloud and ground ring leave the departure scene',
+		!storm.group.parent && !storm.ring.parent
+	)
+	check(
+		'cinematic departure restores normal gravity and unregisters the old zone',
+		!GravityStorm.active.includes(storm) &&
+			hazards.gravityMultiplierAt(storm.center) === 1 &&
+			hazards.getGravityZones().length === 0
+	)
+	hazards.rollTimer = 0
+	for (let frame = 0; frame < 600; frame++) hazards.update(1 / 60)
+	check(
+		'continued cinematic ambient updates cannot roll or respawn hazards',
+		hazards.rollTimer === 0 &&
+			hazards.active.length === 0 &&
+			hazards.getGravityZones().length === 0
+	)
+	level.enterCinematic()
+	f.dispose()
+	check(
+		'repeated cinematic entry and level disposal release storm resources once',
+		disposals.size > 0 &&
+			[...disposals.values()].every((count) => count === 1)
+	)
+	check(
+		'hazard regression teardown leaves no gravity zones or input listeners',
+		GravityStorm.active.length === 0 &&
+			listenerCount('keydown') === 0
+	)
 }
 
 const gameplayTicks = new WeakMap()
@@ -336,7 +538,7 @@ async function drive(
 	return seen
 }
 
-async function fullPath(fps, recordings = false, boarded = false) {
+async function fullPath(fps, recordings = false, boarded = true) {
 	console.log(
 		`\nFull path at ${fps} fps (${recordings ? 'recording clock' : 'missing recording fallback'})`
 	)
@@ -395,10 +597,32 @@ async function fullPath(fps, recordings = false, boarded = false) {
 	let wormholeVisible = false
 	let hullEnteredWormhole = false
 	let prematureWormholeCrossing = false
+	let runningPrevious = null
+	let runningDistance = 0
+	let runningMaxSpeed = 0
+	let runningPeak = ''
+	let groundedRun = true
+	let visibleRun = true
+	let exitBehindPlane = false
+	let exitInFrontOfPlane = false
+	let exitGateVisible = false
+	let launchHullClearance = Infinity
 	const seen = await drive(f, {
 		fps,
 		sample(dt) {
-			if (cut.phase === 'discovery' && cut.ship?.group) {
+			if (
+				[
+					'rover_approach',
+					'missile_detected',
+					'missile_impact',
+					'rover_disabled',
+					'astronaut_exit',
+					'run_to_spacefighter',
+					'board_spacefighter',
+					'engine_start',
+				].includes(cut.phase) &&
+				cut.ship?.group?.visible
+			) {
 				const position = cut.ship.group.position.clone()
 				if (!discoveredShip) discoveredShip = position
 				discoveryDrift = Math.max(
@@ -412,23 +636,124 @@ async function fullPath(fps, recordings = false, boarded = false) {
 				earlyLevel3Load ||=
 					cut._wormholeCrossed !== true
 			}
-			if (cut.phase === 'wormhole' && cut.wormhole?.group) {
+			if (cut.phase === 'run_to_spacefighter') {
+				const position = source.playerRoot.position
+				if (runningPrevious) {
+					const distance = Math.hypot(
+						position.x - runningPrevious.x,
+						position.z - runningPrevious.z
+					)
+					runningDistance += distance
+					if (distance / dt > runningMaxSpeed) {
+						runningMaxSpeed = distance / dt
+						runningPeak = `at ${cut.phaseTime.toFixed(3)}s position=${position.x.toFixed(2)},${position.z.toFixed(2)}`
+					}
+				}
+				runningPrevious = position.clone()
+				const floor =
+					source.planet.heightAt(
+						position.x,
+						position.z
+					) + (source.pilotWalk?.footOffset || 0)
+				groundedRun &&=
+					Math.abs(position.y - floor) < 0.15
+				visibleRun &&=
+					source.playerRoot.visible &&
+					!source.boarded
+			} else runningPrevious = null
+			if (cut.phase === 'wormhole_exit') {
+				const distance =
+					cut.ship.group.position.z -
+					cut._exitCenter.z
+				exitBehindPlane ||= distance > 10
+				exitInFrontOfPlane ||= distance < -20
+				exitGateVisible ||=
+					cut.wormhole.group.visible &&
+					cut.ship.group.visible
+			}
+			if (cut.phase === 'takeoff' && cut.ship.group.visible) {
+				cut.ship.group.updateMatrixWorld(true)
+				const bounds = cut.ship.hullBounds
+				for (const x of [bounds.min.x, bounds.max.x])
+					for (const y of [
+						bounds.min.y,
+						bounds.max.y,
+					])
+						for (const z of [
+							bounds.min.z,
+							bounds.max.z,
+						]) {
+							const corner =
+								new THREE.Vector3(
+									x,
+									y,
+									z
+								).applyMatrix4(
+									cut.ship
+										.group
+										.matrixWorld
+								)
+							launchHullClearance =
+								Math.min(
+									launchHullClearance,
+									corner.y -
+										source.planet.heightAt(
+											corner.x,
+											corner.z
+										)
+								)
+						}
+			}
+			if (
+				cut.phase === 'wormhole_entry' &&
+				cut.wormhole?.group
+			) {
 				wormholeVisible ||= Boolean(
 					cut.wormhole.group.visible &&
 					cut.wormhole.group.parent
 				)
-				const ship = cut.ship.group.getWorldPosition(
-					new THREE.Vector3()
-				)
-				const aperture =
-					cut.wormhole.group.getWorldPosition(
-						new THREE.Vector3()
-					)
 				if (cut._wormholeCrossed) {
-					hullEnteredWormhole ||=
-						ship.z < aperture.z - 18
+					cut.ship.group.updateMatrixWorld(true)
+					const bounds = cut.ship.hullBounds
+					let nearSide = -Infinity
+					for (const x of [
+						bounds.min.x,
+						bounds.max.x,
+					])
+						for (const y of [
+							bounds.min.y,
+							bounds.max.y,
+						])
+							for (const z of [
+								bounds.min.z,
+								bounds.max.z,
+							]) {
+								const corner =
+									new THREE.Vector3(
+										x,
+										y,
+										z
+									).applyMatrix4(
+										cut
+											.ship
+											.group
+											.matrixWorld
+									)
+								nearSide =
+									Math.max(
+										nearSide,
+										corner
+											.sub(
+												cut._entryCenter
+											)
+											.dot(
+												cut._entryNormal
+											)
+									)
+							}
+					hullEnteredWormhole ||= nearSide < -0.5
 					prematureWormholeCrossing ||=
-						ship.z >= aperture.z - 18
+						nearSide >= -0.5
 				}
 			}
 			if (cut.ship?.group?.parent && cut.ship.group.visible) {
@@ -486,16 +811,12 @@ async function fullPath(fps, recordings = false, boarded = false) {
 					fireKey('keydown', key)
 				inputLeak ||= cut.level3.keys.size !== 0
 			}
-			if (
-				['reveal', 'interference', 'presence'].includes(
-					cut.phase
-				)
-			)
+			if (['wormhole_exit', 'arrival'].includes(cut.phase))
 				environmentRevealed ||= Boolean(
 					cut.environment?.group?.visible &&
 					cut.environment.group.parent
 				)
-			if (cut.phase === 'boarding')
+			if (cut.phase === 'run_to_spacefighter')
 				roverDismounted ||=
 					!source.boarded &&
 					source.playerRoot.visible
@@ -509,27 +830,28 @@ async function fullPath(fps, recordings = false, boarded = false) {
 		cut.finished
 	)
 	for (const phase of [
-		'victory',
-		'discovery',
-		'boarding',
-		'ascent',
-		'signal',
-		'reveal',
-		'interference',
-		'presence',
-		'approach',
-		'wormhole',
+		'rover_approach',
+		'missile_detected',
+		'missile_impact',
+		'rover_disabled',
+		'astronaut_exit',
+		'run_to_spacefighter',
+		'board_spacefighter',
+		'engine_start',
+		'takeoff',
+		'wormhole_entry',
+		'level3_loading',
+		'wormhole_exit',
 		'arrival',
-		'disembark',
 		'handoff',
 	])
 		check(`story beat present: ${phase}`, seen.has(phase))
 	check(
 		'boarding the stolen ship completes without a recovery skip',
-		!cut._skipped && seen.has('ascent')
+		!cut._skipped && seen.has('takeoff')
 	)
 	check(
-		'alien craft stays parked throughout its discovery',
+		'alien craft stays parked until its engines are started',
 		discoveredShip !== null && discoveryDrift < 0.001,
 		`drift=${discoveryDrift.toFixed(3)}`
 	)
@@ -538,12 +860,28 @@ async function fullPath(fps, recordings = false, boarded = false) {
 		wormholeCrossedBeforeLoad && !earlyLevel3Load
 	)
 	check(
-		'wormhole entry shows a dedicated aperture in space',
+		'wormhole entry keeps the surface gate aperture visible',
 		wormholeVisible
 	)
 	check(
 		'whole ship clears the wormhole before transit is complete',
 		hullEnteredWormhole && !prematureWormholeCrossing
+	)
+	check(
+		'astronaut visibly runs a real ground route from the rover',
+		visibleRun && groundedRun && runningDistance > 10,
+		`distance=${runningDistance.toFixed(2)}`
+	)
+	check(
+		'astronaut run has no position jump or foot sliding from excessive speed',
+		runningMaxSpeed > 3 && runningMaxSpeed <= 7.1,
+		`peak=${runningMaxSpeed.toFixed(2)} units/s ${runningPeak}`
+	)
+	check(
+		'dimensional arrival keeps the consumed ship hidden',
+		!exitGateVisible &&
+			cut._wormholeExited &&
+			!cut.ship.group.visible
 	)
 	check(
 		'cinematic never overwrites the player ship selection',
@@ -555,7 +893,7 @@ async function fullPath(fps, recordings = false, boarded = false) {
 			roverDismounted
 		)
 	check(
-		'megastructure appears before the landing approach',
+		'destination environment is revealed during wormhole exit',
 		environmentRevealed
 	)
 	check('normal playback has no black transition', !blackNormalFrame)
@@ -563,6 +901,12 @@ async function fullPath(fps, recordings = false, boarded = false) {
 		'ship flight has bounded linear motion',
 		maxSpeed < 450,
 		`peak=${maxSpeed.toFixed(2)} units/s at ${peakMotion}`
+	)
+	check(
+		'launch keeps the complete pitched hull above the terrain',
+		launchHullClearance >= -0.05 &&
+			Number.isFinite(launchHullClearance),
+		`minimum clearance=${launchHullClearance.toFixed(3)}m`
 	)
 	check(
 		'ship turns smoothly through phase changes',
@@ -591,6 +935,12 @@ async function fullPath(fps, recordings = false, boarded = false) {
 		'existing nine-enemy roster preserved',
 		level3?.aliens?.length === 9
 	)
+	check('Level 3 starts with 100 HP', level3?.playerHP === 100)
+	check('Level 3 removes the surface wreck', !level3?.wreckRoot.parent)
+	check(
+		'Level 3 hides and disables the surface rover',
+		!level3?.rover.group.visible && level3?.roverDisabled
+	)
 	check(
 		'jetpack, blade and monuments preserved',
 		level3?.jetpack && level3?.blade && level3?.monuments
@@ -603,10 +953,10 @@ async function fullPath(fps, recordings = false, boarded = false) {
 			level3.playerRoot.visible
 	)
 	check(
-		'Level 3 retains the same landed alien ship without a clone',
-		level3?.arrivalShip === cut.ship &&
-			!cut.ship._disposed &&
-			Boolean(cut.ship.group.parent)
+		'Level 3 has no arrival spacecraft and cinematic ship is disposed',
+		!level3?.arrivalShip &&
+			cut.ship._disposed &&
+			!cut.ship.group.parent
 	)
 	if (level3) {
 		const p = level3.playerRoot.position
@@ -628,14 +978,13 @@ async function fullPath(fps, recordings = false, boarded = false) {
 				level3.levelHudEl.style.display !== 'none'
 		)
 		const before = p.clone()
-		const parkedShip = cut.ship.group.position.clone()
 		fireKey('keydown', 'KeyW')
 		level3.update(1 / 60)
 		fireKey('keyup', 'KeyW')
 		check('movement works after handoff', p.distanceTo(before) > 0)
 		check(
-			'alien ship remains parked after on-foot gameplay resumes',
-			cut.ship.group.position.distanceTo(parkedShip) < 0.001
+			'cinematic ship stays absent after gameplay resumes',
+			!cut.ship.group.visible && !cut.ship.group.parent
 		)
 	}
 	cut.skip()
@@ -655,9 +1004,31 @@ async function fullPath(fps, recordings = false, boarded = false) {
 		'dialogue subtitles available without synthetic speech',
 		f.subtitles.length > 0
 	)
+	for (const name of [
+		'playMissileWarning',
+		'playMissileImpact',
+		'playWormholeExit',
+	])
+		check(
+			`${name} fires once at its cinematic event`,
+			f.log.filter((entry) => entry.name === name).length ===
+				1
+		)
+	const cueTime = (name) => f.log.find((entry) => entry.name === name)?.at
+	check(
+		'missile warning, impact, footsteps and wormhole exit follow the scene order',
+		cueTime('playMissileWarning') < cueTime('playMissileImpact') &&
+			cueTime('playMissileImpact') <
+				cueTime('playFootstep') &&
+			cueTime('playFootstep') < cueTime('playWormholeExit')
+	)
+	check(
+		'handoff stops cinematic-only sound effects',
+		f.log.some((entry) => entry.name === 'stopCinematicEffects')
+	)
 	f.dispose()
 	check(
-		'Level 3 teardown releases its adopted alien ship',
+		'Level 3 teardown keeps the cinematic ship disposed',
 		cut.ship._disposed && !cut.ship.group.parent
 	)
 	check(
@@ -670,17 +1041,23 @@ async function fullPath(fps, recordings = false, boarded = false) {
 }
 
 async function skips() {
-	for (const phase of [
-		'victory',
-		'discovery',
-		'boarding',
-		'signal',
-		'presence',
-		'wormhole',
+	const phases = [
+		'rover_approach',
+		'missile_detected',
+		'missile_impact',
+		'rover_disabled',
+		'astronaut_exit',
+		'run_to_spacefighter',
+		'board_spacefighter',
+		'engine_start',
+		'takeoff',
+		'wormhole_entry',
+		'level3_loading',
+		'wormhole_exit',
 		'arrival',
-		'disembark',
 		'handoff',
-	]) {
+	]
+	for (const phase of phases) {
 		console.log(`\nSkip at ${phase}`)
 		const f = await start()
 		await drive(f, {
@@ -690,17 +1067,7 @@ async function skips() {
 		// Simulate a deliberate key press after the accidental-press debounce.
 		f.cut._startedAt = performance.now() - 1000
 		const skipKey = ['Space', 'Enter', 'Escape'][
-			[
-				'victory',
-				'discovery',
-				'boarding',
-				'signal',
-				'presence',
-				'wormhole',
-				'arrival',
-				'disembark',
-				'handoff',
-			].indexOf(phase) % 3
+			phases.indexOf(phase) % 3
 		]
 		fireKey('keydown', skipKey)
 		check(`${skipKey} invokes the skip path`, f.cut._skipped)
@@ -761,7 +1128,13 @@ async function failureAndCancellation() {
 	)
 	f.dispose()
 
-	for (const phase of ['ascent', 'reveal', 'arrival']) {
+	for (const phase of [
+		'missile_detected',
+		'run_to_spacefighter',
+		'takeoff',
+		'wormhole_exit',
+		'arrival',
+	]) {
 		console.log(`\nQuit while ${phase}`)
 		const q = await start()
 		await drive(q, {
@@ -784,6 +1157,115 @@ async function failureAndCancellation() {
 		)
 		q.dispose()
 	}
+}
+
+function missileStrike() {
+	console.log('\nControlled missile flight and terrain-aware impact')
+	const start = new THREE.Vector3(45, 160, 110)
+	const impact = new THREE.Vector3(20, 3, -10)
+	let referenceDust = null
+	for (const fps of [30, 60, 120]) {
+		const strike = new CinematicMissileStrike({
+			start,
+			impact,
+			heightAt: (x, z) =>
+				3 + Math.sin(x * 0.02) + Math.cos(z * 0.03),
+		})
+		const scene = new THREE.Scene()
+		scene.add(strike.group)
+		check(
+			`missile begins at its authored sky position (${fps}fps)`,
+			strike.missilePosition.distanceTo(start) < 1e-8
+		)
+		let previousDistance = Infinity
+		let approachValid = true
+		for (let frame = 0; frame <= fps * 3; frame++) {
+			strike.setFlightProgress(frame / (fps * 3))
+			const distance =
+				strike.missilePosition.distanceTo(impact)
+			approachValid &&=
+				distance <= previousDistance + 1e-6 &&
+				finite([
+					...strike.missilePosition.toArray(),
+					...strike.missile.quaternion.toArray(),
+				])
+			previousDistance = distance
+		}
+		check(
+			`missile travels continuously to the ground target (${fps}fps)`,
+			approachValid && previousDistance < 1e-8
+		)
+		check(
+			`missile impact fires only once (${fps}fps)`,
+			strike.impact() === true && strike.impact() === false
+		)
+		check(
+			`impact replaces the missile with dust and shockwave (${fps}fps)`,
+			!strike.missile.visible &&
+				strike.dust.points.visible &&
+				strike.shockwave.visible
+		)
+		for (let frame = 0; frame < fps; frame++) strike.update(1 / fps)
+		const dust = [...strike.dust.geometry.attributes.position.array]
+		if (!referenceDust) referenceDust = dust
+		check(
+			`impact particles are deterministic across frame rates (${fps}fps)`,
+			dust.every(
+				(value, i) =>
+					Number.isFinite(value) &&
+					Math.abs(value - referenceDust[i]) <
+						1e-4
+			)
+		)
+		let particlesAboveTerrain = true
+		for (let i = 0; i < dust.length; i += 3) {
+			const floor =
+				3 +
+				Math.sin(dust[i] * 0.02) +
+				Math.cos(dust[i + 2] * 0.03)
+			particlesAboveTerrain &&= dust[i + 1] >= floor
+		}
+		check(
+			`impact dust follows the existing terrain floor (${fps}fps)`,
+			particlesAboveTerrain
+		)
+		strike.update(10)
+		check(
+			`impact visuals stop drawing after their bounded lifetime (${fps}fps)`,
+			!strike.dust.points.visible &&
+				!strike.debris.visible &&
+				!strike.shockwave.visible &&
+				!strike.trail.points.visible
+		)
+		const disposals = new Map()
+		for (const resource of strike._owned) {
+			disposals.set(resource, 0)
+			resource.addEventListener('dispose', () =>
+				disposals.set(
+					resource,
+					disposals.get(resource) + 1
+				)
+			)
+		}
+		strike.dispose()
+		strike.dispose()
+		strike.setFlightProgress(0.5)
+		strike.update(1)
+		check(
+			`missile cleanup is idempotent and cannot resurrect visuals (${fps}fps)`,
+			!strike.group.parent &&
+				strike.group.children.length === 0 &&
+				strike.impact() === false &&
+				[...disposals.values()].every(
+					(count) => count === 1
+				)
+		)
+	}
+	check(
+		'missile choreography preserves its input positions',
+		start.equals(new THREE.Vector3(45, 160, 110)) &&
+			impact.equals(new THREE.Vector3(20, 3, -10))
+	)
 }
 
 async function assetLifecycles() {
@@ -1042,6 +1524,9 @@ const baselineChildren = bodyEl.children.length
 try {
 	await failedLevelDoesNotTransit()
 	await persistenceAndAudioClock()
+	await roverApproach()
+	await cinematicHazards()
+	missileStrike()
 	await fullPath(30)
 	await fullPath(60, true)
 	await fullPath(120, false, true)
