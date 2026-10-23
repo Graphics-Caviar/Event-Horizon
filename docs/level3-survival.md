@@ -14,7 +14,6 @@ Balance defaults live in `SURVIVAL_DEFAULTS` in `src/levels/Level3/MatterSurviva
 
 Validation: `npm run test:survival` covers independent health/damage gates, rover destruction, countdown pause/reset, frame-independent fuel consumption, refill limits, warning target locking, dodging, crouching, collapsed ground support, stable pads and terrain shader wiring. Existing combat, flight, debris/platform, rover and cinematic regression suites are also used. Production build retains the existing large-chunk warning. GPU visuals and difficulty still require interactive playtesting.
 
-
 ## Visual refinement
 
 Debris now uses irregular faceted stone or broken machinery with luminous edge seams, descent trails, closing warning brackets, impact shockwaves and pooled ejected shards. Cyan and amber danger cues retain their existing meaning and damage behavior. Visual effects recycle with each debris event.
