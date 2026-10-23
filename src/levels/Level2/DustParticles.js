@@ -71,6 +71,7 @@ export class DustParticles {
 		)
 		this.geometry.setAttribute(
 			'aSize',
+
 			new THREE.BufferAttribute(this._size, 1)
 		)
 		this.geometry.setAttribute(

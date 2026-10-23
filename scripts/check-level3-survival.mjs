@@ -84,7 +84,18 @@ for (const fps of [30, 60, 120]) {
 		fragmentShader: THREE.ShaderLib.physical.fragmentShader,
 	}
 	level.planet.terrain.material.onBeforeCompile(shader)
-	assert.ok(shader.fragmentShader.includes('collapseDistance < 0.0'))
+	assert.ok(
+		shader.vertexShader.includes('4.9 * vFallAge * vFallAge'),
+		'terrain falls under gravity before retirement'
+	)
+	assert.ok(
+		shader.fragmentShader.includes('vFallAge > 10.0'),
+		'visible fragments survive the boundary crossing'
+	)
+	assert.ok(
+		!shader.fragmentShader.includes('collapseDistance < 0.0'),
+		'no instantaneous surface cutoff'
+	)
 	assert.equal(shader.uniforms.collapseEdge, s.uniform)
 
 	const pad = s.pickups[1]

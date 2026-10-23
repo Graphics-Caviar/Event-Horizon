@@ -120,6 +120,13 @@ export class MatterDimension {
 			this.level.survival?.supportHeightAt(x, z, feetY) ??
 			this.level.planet.heightAt(x, z)
 		for (const p of this.platforms) {
+			if (
+				this.level.survival?.isGone(
+					p.mesh.position.x,
+					p.mesh.position.z
+				)
+			)
+				continue
 			const dx = x - p.mesh.position.x,
 				dz = z - p.mesh.position.z
 			const top = p.mesh.position.y + 1.5
