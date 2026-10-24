@@ -10,6 +10,7 @@ import { VoidEnemy } from './VoidEnemy.js'
 import { VoidColossus } from './VoidColossus.js'
 import { MatterDimension } from './MatterDimension.js'
 import { MatterSurvival } from './MatterSurvival.js'
+import { VoidDimension } from './VoidDimension.js'
 
 // Shared locomotion and rover, with an independent Level 3 planet.
 export class Level3 extends Level2 {
@@ -241,7 +242,7 @@ export class Level3 extends Level2 {
 		const y = this.playerRoot.position.y
 		const oldOffset = this.pilotWalk?.footOffset ?? 0
 		super._setPilot(model, character)
-		if (this._airborne)
+		if (this._airborne || this.voidDimension)
 			this.playerRoot.position.y =
 				y - oldOffset + this.pilotWalk.footOffset
 		// A late-loaded pilot uses the same visual pivot as the placeholder.
@@ -531,6 +532,10 @@ export class Level3 extends Level2 {
 
 	update(delta) {
 		if (this.paused) return
+		if (this.voidDimension) {
+			this.voidDimension.update(delta)
+			return
+		}
 		if (!this.transitionHeld && !this.completed) {
 			let attacking = 0
 			for (const enemy of this.aliens) {
@@ -589,6 +594,7 @@ export class Level3 extends Level2 {
 		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
+		if (this.voidDimension) return
 		this._updateMissionRadio()
 		this.stormLandscape.update(delta)
 		// Void warband wiring: the audio listener tracks the camera, the
@@ -634,7 +640,7 @@ export class Level3 extends Level2 {
 			const bladeHint = this.blade?.equipped
 				? ' · F swing blade'
 				: ''
-			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly (uses fuel) · Release to descend / C duck · ${bladeHint}<br>Escape before the ground vanishes. Collect cyan nitrogen canisters. Dodge amber impacts; duck cyan fragments.</span>`
+			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly (uses fuel) · Release to descend / C duck · ${bladeHint}<br>Escape the crumbling terrain through the wormhole. Collect cyan nitrogen canisters. Dodge amber impacts; duck cyan fragments.</span>`
 			this._objectiveKey = ''
 		}
 	}
@@ -691,6 +697,11 @@ export class Level3 extends Level2 {
 	 */
 	_completeMission() {
 		if (this.completed) return
+		if (!this.voidDimension) {
+			this.audio?.playEscape()
+			this.voidDimension = new VoidDimension(this)
+			return
+		}
 		this.completed = true
 		this.rover.inputEnabled = false
 		const time = this.elapsedPlayTime
@@ -751,6 +762,7 @@ export class Level3 extends Level2 {
 	}
 
 	dispose() {
+		this.voidDimension?.dispose()
 		this.survival?.dispose()
 		this.matterDimension?.dispose()
 		this.arrivalBackdrop?.dispose()
