@@ -189,6 +189,7 @@ export class Level1 extends Level {
 			this,
 			new THREE.Vector3(0, 0, T.escapeDistance)
 		)
+		this._buildObjective()
 
 		// The camera stops drawing at 3000 units by default, which hid the
 		// ring until the player was ~2000 units in — the opposite of the
@@ -208,6 +209,7 @@ export class Level1 extends Level {
 			shipName: ship.name,
 		})
 		this._updateHud(T.startDistance)
+		this._updateObjective()
 
 		this.audio?.startThrusterHum()
 		// Cockpit/engine bed under both the thruster loop and the radio.
@@ -264,6 +266,37 @@ export class Level1 extends Level {
 		this.blackHoleLight = new THREE.PointLight(0xffaa44, 3, 400, 2)
 		this.blackHoleLight.position.set(0, 0, 0)
 		this.addObject(this.blackHoleLight)
+	}
+
+	_buildObjective() {
+		this.objectiveEl = document.createElement('div')
+		Object.assign(this.objectiveEl.style, {
+			position: 'fixed',
+			left: '50%',
+			top: '7%',
+			transform: 'translateX(-50%)',
+			zIndex: '30',
+			padding: '12px 18px',
+			border: '1px solid rgba(110,235,255,.45)',
+			background: 'rgba(3,10,18,.72)',
+			color: '#dffcff',
+			fontFamily: 'monospace',
+			letterSpacing: '.08em',
+			textAlign: 'center',
+			pointerEvents: 'none',
+		})
+		this.objectiveDistance = null
+		document.body.appendChild(this.objectiveEl)
+	}
+
+	_updateObjective() {
+		if (!this.objectiveEl || this.portalEntry || this.ended) return
+		const distance = Math.ceil(
+			this.spaceship.position.distanceTo(this.endpoint.position)
+		)
+		if (distance === this.objectiveDistance) return
+		this.objectiveDistance = distance
+		this.objectiveEl.innerHTML = `<strong>REACH THE BLUE PORTAL · ${distance} m</strong><br><span style="font-size:12px;opacity:.8">Fly through the blue portal to escape the singularity.</span>`
 	}
 
 	setPaused(paused) {
@@ -355,6 +388,7 @@ export class Level1 extends Level {
 			this.spaceship.isThrusting ? 1 : 0.15
 		)
 		this._updateHud(distance)
+		this._updateObjective()
 		this._warningBeep(distance, dt)
 	}
 
@@ -373,6 +407,7 @@ export class Level1 extends Level {
 		if (this.portalEntry || this.ended) return
 		this.portalEntry = true
 		this.portalEntryTime = 0
+		this.objectiveEl.style.display = 'none'
 		this.endpoint.beginEntry()
 		this.spaceship.clearInput()
 		this.invulnerableFor = Number.POSITIVE_INFINITY
@@ -558,6 +593,7 @@ export class Level1 extends Level {
 		if (this.ended) return
 		const T = LEVEL1_TUNING
 		this.ended = true
+		if (this.objectiveEl) this.objectiveEl.style.display = 'none'
 		const won = outcome === 'escaped'
 		const time = this.elapsedPlayTime
 		const hull = Math.max(0, this.state.integrity)
@@ -654,6 +690,7 @@ export class Level1 extends Level {
 		this.audio?.stopAmbience()
 		this.radio?.stop()
 		this.hud?.hide()
+		this.objectiveEl?.remove()
 		const camera = this.sceneManager.camera
 		if (camera && this._baseCameraFar !== undefined) {
 			camera.far = this._baseCameraFar
