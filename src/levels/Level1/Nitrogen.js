@@ -2,6 +2,7 @@ import * as THREE from 'three'
 
 export class NitrogenCanister {
 	constructor(assetManager) {
+		this.glowRadius = 12
 		this.object = this._buildNitrogen(assetManager)
 	}
 
@@ -47,7 +48,11 @@ export class NitrogenCanister {
 			depthWrite: false,
 		})
 
-		const glowGeometry = new THREE.SphereGeometry(12, 32, 32)
+		const glowGeometry = new THREE.SphereGeometry(
+			this.glowRadius,
+			32,
+			32
+		)
 
 		const glow = new THREE.Mesh(glowGeometry, glowMaterial)
 
