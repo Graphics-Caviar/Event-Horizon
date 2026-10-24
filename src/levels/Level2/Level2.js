@@ -409,7 +409,8 @@ export class Level2 extends Level {
 		this.keys = new Set()
 		this._onKeyDown = (e) => {
 			if (e.code === 'Escape') {
-				if (this.completed || this.transitionHeld) return
+				if (this.completed || this.transitionHeld)
+					return
 				e.preventDefault()
 				this.setPaused(!this.paused)
 				return
