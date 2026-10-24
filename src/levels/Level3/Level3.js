@@ -531,6 +531,7 @@ export class Level3 extends Level2 {
 	}
 
 	update(delta) {
+		if (this.paused) return
 		if (this.voidDimension) {
 			this.voidDimension.update(delta)
 			return

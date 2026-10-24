@@ -32,6 +32,12 @@ const OUTCOMES = {
 	},
 }
 
+const LEVEL_NAMES = {
+	1: 'LEVEL 1 · THE SINGULARITY RUN',
+	2: 'LEVEL 2 · ALIEN PLANET EXODUS',
+	3: 'LEVEL 3 · THE VOID OF GODS',
+}
+
 /** 63.4 -> "1:03.4" */
 function formatTime(seconds) {
 	const total = Math.max(0, Number(seconds) || 0)
@@ -49,6 +55,9 @@ export class LevelScreens {
 	 */
 	constructor({ onResume, onRestart, onQuit }) {
 		this.pauseEl = document.getElementById('screen-pause')
+		this.pauseKickerEl = this.pauseEl.querySelector(
+			'.level-panel-kicker'
+		)
 		this.resultsEl = document.getElementById('screen-results')
 
 		this.titleEl = document.getElementById('results-title')
@@ -73,7 +82,9 @@ export class LevelScreens {
 		bind('btn-results-menu', onQuit)
 	}
 
-	showPause() {
+	showPause(level = 1) {
+		this.pauseKickerEl.textContent =
+			LEVEL_NAMES[level] || LEVEL_NAMES[1]
 		this.pauseEl.classList.remove('hidden')
 		this.resumeBtn.focus()
 	}

@@ -700,6 +700,15 @@ export class Game {
 		this._startLevel1()
 	}
 
+	/** Keep the shared pause overlay in sync with the active level. */
+	_handleLevelPauseChange(paused) {
+		if (paused)
+			this.levelScreens.showPause(
+				this.currentLevel?.level || 1
+			)
+		else this.levelScreens.hidePause()
+	}
+
 	/** Start (or restart) Level 1 with the pilot and ship from the hangar. */
 	_startLevel1() {
 		this._activeLevelNumber = 1
@@ -713,9 +722,7 @@ export class Game {
 			shipKey: this.gameState.selectedShip,
 			pilotKey: this.gameState.selectedCharacter,
 			onPauseChange: (paused) =>
-				paused
-					? this.levelScreens.showPause()
-					: this.levelScreens.hidePause(),
+				this._handleLevelPauseChange(paused),
 			onEnd: (result) => this._onLevelEnd(result),
 		})
 	}
@@ -870,6 +877,8 @@ export class Game {
 		cinematic = new Level2ToLevel3Cutscene(this, {
 			level,
 			result,
+			onPauseChange: (paused) =>
+				this._handleLevelPauseChange(paused),
 			onComplete: (level3) => {
 				if (this.currentLevel !== cinematic) {
 					level3?.dispose()
@@ -936,6 +945,8 @@ export class Game {
 		this.currentLevel?.dispose()
 		this.currentLevel = new Level2(this, {
 			transition,
+			onPauseChange: (paused) =>
+				this._handleLevelPauseChange(paused),
 			onEnd: (result) => this._onLevelEnd(result),
 		})
 	}
@@ -955,6 +966,8 @@ export class Game {
 		document.activeElement?.blur?.()
 		this._activeLevelNumber = 3
 		this.currentLevel = new Level3(this, {
+			onPauseChange: (paused) =>
+				this._handleLevelPauseChange(paused),
 			onEnd: (result) => this._onLevelEnd(result),
 		})
 	}

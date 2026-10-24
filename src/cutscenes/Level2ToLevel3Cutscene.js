@@ -51,7 +51,13 @@ const angleDelta = (to, from) =>
 export class Level2ToLevel3Cutscene {
 	constructor(
 		game,
-		{ level = null, result = null, onComplete, durations = {} } = {}
+		{
+			level = null,
+			result = null,
+			onComplete,
+			onPauseChange,
+			durations = {},
+		} = {}
 	) {
 		this.game = game
 		this.sceneManager = game.sceneManager
@@ -61,6 +67,7 @@ export class Level2ToLevel3Cutscene {
 		this.result = result
 		this.level3 = null
 		this.onComplete = onComplete || (() => {})
+		this.onPauseChange = onPauseChange || (() => {})
 		this.durations = Object.fromEntries(
 			Object.entries(CUTSCENE_DURATIONS).map(
 				([key, value]) => [
@@ -1020,6 +1027,7 @@ export class Level2ToLevel3Cutscene {
 		clearScene(this.sceneManager.scene)
 		try {
 			this.level3 = new Level3(this.game, {
+				onPauseChange: this.onPauseChange,
 				onPrepared: (level) => {
 					this.level3 = level
 				},
