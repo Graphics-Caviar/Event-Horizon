@@ -102,6 +102,8 @@ export class Spaceship {
 		this.cameraLookAhead = new THREE.Vector3(0, 4, -60)
 		this.cameraSmoothing = 5
 		this._cameraOrientation = new THREE.Quaternion()
+		this._cameraPitch = new THREE.Quaternion()
+		this._pitchAxis = new THREE.Vector3(1, 0, 0)
 		// Speed-reactive camera and engine effects (Mpilo, PR #13).
 		this.baseCameraFov = this.level.sceneManager.camera?.fov || 75
 		this.bankAmount = 0.42
@@ -443,7 +445,13 @@ export class Spaceship {
 		)
 		const cameraOrientation = this._cameraOrientation
 			.copy(this.shipGroup.quaternion)
-			.multiply(this.visualGroup.quaternion)
+		if (this.firstPerson) {
+			this._cameraPitch.setFromAxisAngle(
+				this._pitchAxis,
+				this.visualGroup.rotation.x
+			)
+			cameraOrientation.multiply(this._cameraPitch)
+		}
 		camera.up.set(0, 1, 0).applyQuaternion(cameraOrientation)
 		let lookTarget
 		if (this.firstPerson) {
