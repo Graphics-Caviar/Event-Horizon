@@ -292,7 +292,9 @@ export class Level1 extends Level {
 	_updateObjective() {
 		if (!this.objectiveEl || this.portalEntry || this.ended) return
 		const distance = Math.ceil(
-			this.spaceship.position.distanceTo(this.endpoint.position)
+			this.spaceship.position.distanceTo(
+				this.endpoint.position
+			)
 		)
 		if (distance === this.objectiveDistance) return
 		this.objectiveDistance = distance

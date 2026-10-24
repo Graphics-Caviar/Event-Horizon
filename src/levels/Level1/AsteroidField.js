@@ -424,7 +424,8 @@ export class AsteroidField {
 		const shipRadius = ship.collisionRadius
 
 		for (const canister of this.canisters) {
-			const distanceSq = canister.position.distanceToSquared(shipPos)
+			const distanceSq =
+				canister.position.distanceToSquared(shipPos)
 			const collectionRadius =
 				canister.collisionRadius + shipRadius
 			const attractionRadius =

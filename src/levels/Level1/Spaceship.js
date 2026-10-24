@@ -443,8 +443,9 @@ export class Spaceship {
 			0,
 			1
 		)
-		const cameraOrientation = this._cameraOrientation
-			.copy(this.shipGroup.quaternion)
+		const cameraOrientation = this._cameraOrientation.copy(
+			this.shipGroup.quaternion
+		)
 		if (this.firstPerson) {
 			this._cameraPitch.setFromAxisAngle(
 				this._pitchAxis,
