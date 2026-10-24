@@ -530,6 +530,7 @@ export class Level3 extends Level2 {
 	}
 
 	update(delta) {
+		if (this.paused) return
 		if (!this.transitionHeld && !this.completed) {
 			let attacking = 0
 			for (const enemy of this.aliens) {

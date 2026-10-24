@@ -28,6 +28,13 @@ const SUCTION_RADIUS = 60
 const SUCTION_MAX_ROVER = 24 // m/s² on the chassis at full pull
 const SUCTION_MAX_PILOT = 16
 
+/** Resume/restart buttons treat Space and Enter as clicks while focused. */
+function releaseButtonFocus() {
+	const el = document.activeElement
+	if (el && el !== document.body && typeof el.blur === 'function')
+		el.blur()
+}
+
 // On-foot locomotion feel. The pilot carries momentum instead of snapping
 // to a fixed speed and turns through its body; the measured ground speed
 // and turn rate then drive the procedural gait in PilotWalk.
@@ -102,6 +109,7 @@ export class Level2 extends Level {
 			scriptSet = 2,
 			combatConfig = {},
 			onPrepared = null,
+			onPauseChange = null,
 		} = {}
 	) {
 		super(game, 2)
@@ -110,6 +118,7 @@ export class Level2 extends Level {
 		this.state.status = STATUS.PLAYING
 		this.transition = transition
 		this.onEnd = onEnd
+		this.onPauseChange = onPauseChange || (() => {})
 		this.audio = game.audio
 		// Two-way radio. Level 3 reuses this whole class and passes
 		// scriptSet 3, then swaps the individual cue ids it needs.
@@ -384,6 +393,7 @@ export class Level2 extends Level {
 		this.roverDisabled = false
 		this._hasBoarded = false
 		this.completed = false
+		this.paused = false
 		// True while the Level 2 -> Level 3 transit cinematic is shooting
 		// this still-live world (input parked, HUD hidden, cutscene camera).
 		this.cinematic = false
@@ -398,16 +408,33 @@ export class Level2 extends Level {
 		this._hitScratch = new THREE.Vector3()
 		this.keys = new Set()
 		this._onKeyDown = (e) => {
-			if (!this.transitionHeld) this.keys.add(e.code)
+			if (e.code === 'Escape') {
+				if (this.completed || this.transitionHeld) return
+				e.preventDefault()
+				this.setPaused(!this.paused)
+				return
+			}
+			if (!this.paused && !this.transitionHeld)
+				this.keys.add(e.code)
 		}
 		this._onKeyUp = (e) => this.keys.delete(e.code)
 		// Losing focus mid-hold never delivers the matching keyup, which
 		// would leave the key stuck in the Set (frozen movement, and the
 		// E toggle's edge detection blocked forever).
-		this._onBlur = () => this.keys.clear()
+		this._onBlur = () => {
+			this.keys.clear()
+			this.setPaused(true)
+		}
+		this._onVisibility = () => {
+			if (document.hidden) this.setPaused(true)
+		}
 		window.addEventListener('keydown', this._onKeyDown)
 		window.addEventListener('keyup', this._onKeyUp)
 		window.addEventListener('blur', this._onBlur)
+		document.addEventListener(
+			'visibilitychange',
+			this._onVisibility
+		)
 
 		this.feedbackTimer = 0
 		this._buildObjective()
@@ -531,6 +558,26 @@ export class Level2 extends Level {
 			}
 		}
 		return null
+	}
+
+	/** Pause gameplay and its level audio while the pause screen is open. */
+	setPaused(paused) {
+		if (
+			this.completed ||
+			this.cinematic ||
+			this.transitionHeld ||
+			paused === this.paused
+		)
+			return
+		this.paused = paused
+		this.state.status = paused ? STATUS.PAUSED : STATUS.PLAYING
+		// A key held during blur or pause may never deliver its keyup.
+		this.keys.clear()
+		this.audio?.stopRoverEngine()
+		this.audio?.setAmbiencePaused(paused)
+		this.radio?.setPaused(paused)
+		if (!paused) releaseButtonFocus()
+		this.onPauseChange(paused)
 	}
 
 	/**
@@ -1422,6 +1469,10 @@ export class Level2 extends Level {
 		window.removeEventListener('keydown', this._onKeyDown)
 		window.removeEventListener('keyup', this._onKeyUp)
 		window.removeEventListener('blur', this._onBlur)
+		document.removeEventListener(
+			'visibilitychange',
+			this._onVisibility
+		)
 		this.keys.clear()
 		this.firstPerson = false
 		// The completion timer has already fired (it is what started the
@@ -2042,6 +2093,7 @@ export class Level2 extends Level {
 	}
 
 	update(delta) {
+		if (this.paused) return
 		this._updateRadio(delta)
 		this.planet.update(delta)
 		this.fighterHub?.update(delta)
@@ -2464,6 +2516,10 @@ export class Level2 extends Level {
 		window.removeEventListener('keydown', this._onKeyDown)
 		window.removeEventListener('keyup', this._onKeyUp)
 		window.removeEventListener('blur', this._onBlur)
+		document.removeEventListener(
+			'visibilitychange',
+			this._onVisibility
+		)
 		if (this._endTimer) clearTimeout(this._endTimer)
 		for (const timer of this._alienTimers || []) clearTimeout(timer)
 		this.objectiveEl?.remove()
