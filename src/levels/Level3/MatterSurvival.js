@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { TerrainCrumble } from './TerrainCrumble.js'
+import { installCollapseEffect } from './collapseEffect.js'
 
 export const SURVIVAL_DEFAULTS = Object.freeze({
 	countdown: 30,
@@ -139,7 +140,15 @@ export class MatterSurvival {
 		return (
 			(x - this.start.x) * this.direction.x +
 				(z - this.start.z) * this.direction.z <
-			this.edge
+			this.edge + this.edgeOffset(x, z)
+		)
+	}
+	edgeOffset(x, z) {
+		return (
+			Math.sin(
+				Math.floor(x / 12) * 1.7 +
+					Math.floor(z / 12) * 2.3
+			) * 8
 		)
 	}
 	surfaceHeightAt(x, z) {
@@ -195,6 +204,13 @@ export class MatterSurvival {
 			? this.edge
 			: -100000
 		this.crumble.update(delta)
+		this._scanScenery()
+		for (const c of [
+			...(this.level.planet.colliders || []),
+			...(this.level.gameplayColliders || []),
+		]) {
+			if (this.isGone(c.x, c.z)) c.enabled = false
+		}
 		this.tremorUniform.value =
 			this.remaining > 0
 				? Math.max(0, 1 - this.remaining / 5)
@@ -246,61 +262,48 @@ export class MatterSurvival {
 		this.uniform = { value: -100000 }
 		this.tremorUniform = { value: 0 }
 		this.timeUniform = { value: 0 }
-		const material = this.level.planet.terrain.material
-		this.previousCompile = material.onBeforeCompile
-		this.previousKey = material.customProgramCacheKey
-		material.onBeforeCompile = (shader) => {
-			this.previousCompile.call(material, shader)
-			shader.uniforms.collapseEdge = this.uniform
-			shader.uniforms.collapseTremor = this.tremorUniform
-			shader.uniforms.collapseTime = this.timeUniform
-			shader.uniforms.collapseStart = { value: this.start }
-			shader.uniforms.collapseDirection = {
-				value: this.direction,
-			}
-			shader.uniforms.collapseExit = { value: this.end }
-			shader.vertexShader =
-				'varying vec3 vCollapseWorld; uniform float collapseTime; uniform float collapseTremor; uniform float collapseEdge; uniform vec3 collapseStart; uniform vec3 collapseDirection;\n' +
-				shader.vertexShader
-			shader.vertexShader = shader.vertexShader.replace(
-				'#include <begin_vertex>',
-				`#include <begin_vertex>
- vCollapseWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
- float ahead = dot(vCollapseWorld.xz - collapseStart.xz, collapseDirection.xz) - collapseEdge;
- float vibration = collapseTremor * (1.0 - step(0.0, collapseEdge + 99999.0)) + (1.0 - smoothstep(0.0, 20.0, abs(ahead)));
- transformed.y += sin(collapseTime * 46.0 + floor(vCollapseWorld.x / 12.0) * 7.0 + floor(vCollapseWorld.z / 12.0) * 3.0) * vibration * 0.13;`
-			)
-			shader.fragmentShader =
-				'varying vec3 vCollapseWorld; uniform float collapseEdge; uniform vec3 collapseStart; uniform vec3 collapseDirection; uniform vec3 collapseExit; uniform float collapseTremor; uniform float collapseTime;\n' +
-				shader.fragmentShader
-			shader.fragmentShader = shader.fragmentShader.replace(
-				'#include <clipping_planes_fragment>',
-				`#include <clipping_planes_fragment>
-        float collapseDistance = dot(vCollapseWorld.xz - collapseStart.xz, collapseDirection.xz) - collapseEdge;
-        if (collapseDistance < 0.0 && distance(vCollapseWorld.xz, collapseExit.xz) > 28.0) discard;`
-			)
-			shader.fragmentShader = shader.fragmentShader.replace(
-				'#include <opaque_fragment>',
-				`vec2 fractureCell = abs(fract(vCollapseWorld.xz / 12.0) - 0.5);
- float fracture = smoothstep(0.46, 0.49, max(fractureCell.x, fractureCell.y));
- float instability = max(collapseTremor * 0.5, 1.0 - smoothstep(0.0, 22.0, abs(collapseDistance)));
- outgoingLight *= 1.0 - fracture * instability * 0.8;
- outgoingLight += vec3(0.9, 0.15, 0.45) * fracture * instability * (0.65 + 0.35 * sin(collapseTime * 12.0));
- outgoingLight += vec3(0.65, 0.08, 0.45) * (1.0 - smoothstep(0.0, 3.0, abs(collapseDistance)));
-#include <opaque_fragment>`
-			)
+		this.effects = new Map()
+		this._applyEffect(this.level.planet.terrain.material)
+	}
+	_applyEffect(material) {
+		if (
+			!material ||
+			this.effects.has(material) ||
+			material.isShaderMaterial
+		)
+			return
+		this.effects.set(
+			material,
+			installCollapseEffect(material, this)
+		)
+	}
+	_scanScenery() {
+		for (const root of [
+			this.level.planet.root,
+			this.level.stormLandscape?.root,
+			this.level.monuments?._group,
+			this.level.matterDimension?.group,
+		]) {
+			root?.traverse((node) => {
+				if (
+					!node.isMesh ||
+					node === this.level.stormLandscape?.sky
+				)
+					return
+				for (const material of Array.isArray(
+					node.material
+				)
+					? node.material
+					: [node.material])
+					this._applyEffect(material)
+			})
 		}
-		material.customProgramCacheKey = () => 'matter-collapse-v2'
-		material.needsUpdate = true
 	}
 	dispose() {
 		if (this.disposed) return
 		this.disposed = true
 		this.crumble?.dispose()
-		const material = this.level.planet.terrain.material
-		material.onBeforeCompile = this.previousCompile
-		material.customProgramCacheKey = this.previousKey
-		material.needsUpdate = true
+		for (const restore of this.effects.values()) restore()
 		this.group.removeFromParent()
 		for (const r of this.resources) r.dispose()
 	}
