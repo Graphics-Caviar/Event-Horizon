@@ -9,7 +9,7 @@ const LEVEL_INTEL = Object.freeze({
 		name: 'LEVEL 1 · THE SINGULARITY RUN',
 		overview: "Fly Horizon One out of the black hole's pull, thread the asteroid field and cross the escape ring. Hull integrity and elapsed time both feed your score.",
 		hints: [
-			'W thrusts, S brakes, A/D steer, Q/E climb and dive. The singularity pulls harder the longer you take.',
+			'W thrusts, S brakes, A/D steer, Q/E climb and dive, and V switches camera view. The singularity pulls harder the longer you take.',
 			'Blue nitrogen canisters refill your boost. Fly through one when you need a burst of speed.',
 			'The beacon ring at 5000 units is the exit. Keep the nose on it and steer only around the rocks that are actually in your path.',
 			'Below 160 units of clearance the proximity alarm sounds. Thrust directly away from the horizon before the drift wins.',

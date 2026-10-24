@@ -82,6 +82,7 @@ export class AsteroidField {
 		this._scale = new THREE.Vector3()
 		this._center = new THREE.Vector3()
 		this._corridorOffset = new THREE.Vector3()
+		this._canisterTarget = new THREE.Vector3()
 
 		this.loaded = false
 		this._pendingClear = null
@@ -423,15 +424,26 @@ export class AsteroidField {
 		const shipRadius = ship.collisionRadius
 
 		for (const canister of this.canisters) {
-			const combinedRadius =
+			const distanceSq =
+				canister.position.distanceToSquared(shipPos)
+			const collectionRadius =
 				canister.collisionRadius + shipRadius
+			const attractionRadius =
+				(canister.attractionRadius || 0) + shipRadius
+
+			// Crossing the visible glow starts a magnetic pull. Collection still
+			// waits until the canister reaches the ship's collision volume.
+			if (
+				!canister.attracted &&
+				distanceSq < attractionRadius * attractionRadius
+			)
+				canister.attracted = true
 
 			if (
-				canister.position.distanceToSquared(shipPos) <
-				combinedRadius * combinedRadius
-			) {
+				canister.attracted &&
+				distanceSq < collectionRadius * collectionRadius
+			)
 				return canister
-			}
 		}
 
 		return null
@@ -661,6 +673,8 @@ export class AsteroidField {
 			object,
 			position,
 			velocity,
+			attractionRadius: canister.glowRadius,
+			attracted: false,
 
 			rotationAxis: new THREE.Vector3(
 				Math.random(),
@@ -704,7 +718,26 @@ export class AsteroidField {
 
 		// Nitrogen canisters
 		for (const canister of this.canisters) {
-			canister.position.addScaledVector(canister.velocity, dt)
+			if (canister.attracted) {
+				// Track the moving ship quickly enough to reel in pickups at full
+				// flight speed after the ship brushes their glow. Lead by one
+				// physics step so the canister converges on the ship's next position.
+				this._canisterTarget
+					.copy(shipPosition)
+					.addScaledVector(
+						this.level.spaceship.velocity,
+						dt
+					)
+				canister.position.lerp(
+					this._canisterTarget,
+					1 - Math.exp(-16 * dt)
+				)
+			} else {
+				canister.position.addScaledVector(
+					canister.velocity,
+					dt
+				)
+			}
 
 			canister.rotation += canister.rotationSpeed * dt
 

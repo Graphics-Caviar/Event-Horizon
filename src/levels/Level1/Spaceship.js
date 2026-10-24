@@ -101,6 +101,9 @@ export class Spaceship {
 		this.cameraOffset = new THREE.Vector3(0, 9, 44)
 		this.cameraLookAhead = new THREE.Vector3(0, 4, -60)
 		this.cameraSmoothing = 5
+		this._cameraOrientation = new THREE.Quaternion()
+		this._cameraPitch = new THREE.Quaternion()
+		this._pitchAxis = new THREE.Vector3(1, 0, 0)
 		// Speed-reactive camera and engine effects (Mpilo, PR #13).
 		this.baseCameraFov = this.level.sceneManager.camera?.fov || 75
 		this.bankAmount = 0.42
@@ -115,6 +118,7 @@ export class Spaceship {
 		this.setupInitialCamera()
 
 		this.model = null
+		this.firstPerson = false
 		this._disposed = false
 		if (modelPath) this.loadModel(modelPath)
 	}
@@ -348,12 +352,18 @@ export class Spaceship {
 			desiredPosition.y,
 			desiredPosition.z
 		)
+		camera.up.set(0, 1, 0)
 
 		const lookTarget = this.cameraLookAhead
 			.clone()
 			.applyQuaternion(this.shipGroup.quaternion)
 			.add(this.position)
 		camera.lookAt(lookTarget)
+	}
+
+	setFirstPerson(enabled) {
+		this.firstPerson = Boolean(enabled)
+		this.visualGroup.visible = !this.firstPerson
 	}
 
 	bindInput() {
@@ -409,6 +419,7 @@ export class Spaceship {
 		// it, the menu and hangar would render zoomed out after a run, and
 		// each retry would read the widened FOV as its new baseline.
 		const camera = this.level.sceneManager.camera
+		if (camera) camera.up.set(0, 1, 0)
 		if (camera && camera.fov !== this.baseCameraFov) {
 			camera.fov = this.baseCameraFov
 			camera.updateProjectionMatrix()
@@ -432,26 +443,54 @@ export class Spaceship {
 			0,
 			1
 		)
-		const dynamicOffset = this.cameraOffset.clone()
-		dynamicOffset.z += speedRatio * 10
-		dynamicOffset.y += speedRatio * 2
-
-		const desiredPosition = dynamicOffset
-			.applyQuaternion(this.shipGroup.quaternion)
-			.add(this.position)
-
-		// A small acceleration shake makes thrust readable without making the
-		// camera uncomfortable while coasting.
-		if (this.input.forward && speedRatio > 0.08) {
-			const shake = 0.08 + speedRatio * 0.16
-			desiredPosition.x +=
-				Math.sin(this.elapsedTime * 37) * shake
-			desiredPosition.y +=
-				Math.cos(this.elapsedTime * 43) * shake
+		const cameraOrientation = this._cameraOrientation.copy(
+			this.shipGroup.quaternion
+		)
+		if (this.firstPerson) {
+			this._cameraPitch.setFromAxisAngle(
+				this._pitchAxis,
+				this.visualGroup.rotation.x
+			)
+			cameraOrientation.multiply(this._cameraPitch)
 		}
+		camera.up.set(0, 1, 0).applyQuaternion(cameraOrientation)
+		let lookTarget
+		if (this.firstPerson) {
+			this.visualGroup.visible = false
+			const cockpitPosition = new THREE.Vector3(0, 1.4, -2.5)
+				.applyQuaternion(cameraOrientation)
+				.add(this.position)
+			camera.position.copy(cockpitPosition)
+			lookTarget = new THREE.Vector3(0, 1.4, -80)
+				.applyQuaternion(cameraOrientation)
+				.add(this.position)
+		} else {
+			this.visualGroup.visible = true
+			const dynamicOffset = this.cameraOffset.clone()
+			dynamicOffset.z += speedRatio * 10
+			dynamicOffset.y += speedRatio * 2
 
-		const t = 1 - Math.exp(-this.cameraSmoothing * dt)
-		camera.position.lerp(desiredPosition, t)
+			const desiredPosition = dynamicOffset
+				.applyQuaternion(this.shipGroup.quaternion)
+				.add(this.position)
+
+			// A small acceleration shake makes thrust readable without making the
+			// camera uncomfortable while coasting.
+			if (this.input.forward && speedRatio > 0.08) {
+				const shake = 0.08 + speedRatio * 0.16
+				desiredPosition.x +=
+					Math.sin(this.elapsedTime * 37) * shake
+				desiredPosition.y +=
+					Math.cos(this.elapsedTime * 43) * shake
+			}
+
+			const t = 1 - Math.exp(-this.cameraSmoothing * dt)
+			camera.position.lerp(desiredPosition, t)
+			lookTarget = this.cameraLookAhead
+				.clone()
+				.applyQuaternion(cameraOrientation)
+				.add(this.position)
+		}
 
 		const targetFov = this.baseCameraFov + speedRatio * 10
 		const nextFov = THREE.MathUtils.lerp(
@@ -464,10 +503,6 @@ export class Spaceship {
 			camera.updateProjectionMatrix()
 		}
 
-		const lookTarget = this.cameraLookAhead
-			.clone()
-			.applyQuaternion(this.shipGroup.quaternion)
-			.add(this.position)
 		camera.lookAt(lookTarget)
 	}
 
