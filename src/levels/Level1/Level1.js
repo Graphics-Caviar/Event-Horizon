@@ -218,7 +218,20 @@ export class Level1 extends Level {
 		this.radio?.beginLevel(1)
 
 		this._onKeyDown = (e) => {
-			if (e.code !== 'Escape' || this.ended) return
+			if (this.ended) return
+			if (
+				e.code === 'KeyV' &&
+				!e.repeat &&
+				!this.paused &&
+				!this.portalEntry
+			) {
+				e.preventDefault()
+				this.spaceship.setFirstPerson(
+					!this.spaceship.firstPerson
+				)
+				return
+			}
+			if (e.code !== 'Escape') return
 			e.preventDefault()
 			this.setPaused(!this.paused)
 		}
