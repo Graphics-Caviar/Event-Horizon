@@ -103,6 +103,17 @@ export class Rover {
 			})
 	}
 
+	/** World-space tyre bottoms, including suspension travel and chassis tilt. */
+	isTouchingLava(lava) {
+		if (!lava) return false
+		const point = new THREE.Vector3()
+		return this.wheels.some((wheel) => {
+			wheel.pivot.getWorldPosition(point)
+			point.y -= WHEEL_RADIUS
+			return lava.touches(point)
+		})
+	}
+
 	_initPhysics() {
 		this.world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 })
 		this.world.timestep = STEP

@@ -19,6 +19,8 @@ const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 60
 const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
+const LAVA_DAMAGE = 20
+const LAVA_HIT_INTERVAL = 0.8
 
 // Wormhole suction around the escape gate: inside this radius the gate
 // pulls the rover and the pilot toward the ring, gently at the rim and
@@ -450,6 +452,8 @@ export class Level2 extends Level {
 		this.roverHP = this.maxRoverHP
 		this.roverDamageCooldown = 0
 		this.damageCooldown = 0
+		this._lavaPlayerCooldown = 0
+		this._lavaRoverCooldown = 0
 		this._buildLevelHUD()
 		this._updateLevelHUD()
 		this._buildDamageFlash()
@@ -1985,6 +1989,58 @@ export class Level2 extends Level {
 		}
 	}
 
+	/** Contact damage is independent of alien attack invulnerability. */
+	_updateLavaDamage(delta) {
+		if (this.completed || this.transitionHeld || this.cinematic)
+			return false
+		const lava = this.planet.lava
+		if (!lava) return false // Level 3 shares this controller without lava.
+		this._lavaPlayerCooldown = Math.max(
+			0,
+			this._lavaPlayerCooldown - delta
+		)
+		this._lavaRoverCooldown = Math.max(
+			0,
+			this._lavaRoverCooldown - delta
+		)
+		let hurt = false
+		if (!this.boarded && this._lavaPlayerCooldown <= 0) {
+			this._feetScratch.copy(this.playerRoot.position)
+			this._feetScratch.y -= this.pilotWalk?.footOffset ?? 0
+			if (lava.touches(this._feetScratch)) {
+				this.playerHP = Math.max(
+					0,
+					this.playerHP - LAVA_DAMAGE
+				)
+				this._lavaPlayerCooldown = LAVA_HIT_INTERVAL
+				this._flashDamage()
+				hurt = true
+			}
+		}
+		// The hull takes the heat while driving; the seated pilot is safe.
+		if (
+			this.roverHP > 0 &&
+			this._lavaRoverCooldown <= 0 &&
+			this.rover.isTouchingLava(lava)
+		) {
+			this.roverHP = Math.max(0, this.roverHP - LAVA_DAMAGE)
+			this._lavaRoverCooldown = LAVA_HIT_INTERVAL
+			if (this.boarded) {
+				this._flashDamage()
+				this._requestShake(0.35)
+			}
+			hurt = true
+		}
+		if (hurt) {
+			this._updateLevelHUD()
+			if (this.playerHP <= 0 || this.roverHP <= 0) {
+				this._gameOver()
+				return true
+			}
+		}
+		return false
+	}
+
 	/** Hull damage from a bite or talon strike; true when it was fatal. */
 	_applyAlienHit(amount = 1) {
 		if (this.completed || this.transitionHeld) return false
@@ -2187,6 +2243,8 @@ export class Level2 extends Level {
 			0,
 			this.roverDamageCooldown - delta
 		)
+
+		if (this._updateLavaDamage(delta)) return
 
 		for (const alien of this.aliens) {
 			alien.update(delta, this.playerRoot.position)
