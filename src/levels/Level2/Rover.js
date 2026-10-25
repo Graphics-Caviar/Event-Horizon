@@ -261,6 +261,86 @@ export class Rover {
 			.add(this.group.position)
 	}
 
+	/** Recover a tipped chassis in place without changing health or heading. */
+	resetOrientation() {
+		if (!this.body || this.disposed) return false
+		const rotation = new THREE.Quaternion().copy(
+			this.body.rotation()
+		)
+		if (UP.clone().applyQuaternion(rotation).y > 0.5) return false
+		const position = this.group.position.clone()
+		const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(
+			rotation
+		)
+		const yaw =
+			Math.hypot(forward.x, forward.z) > 0.01
+				? Math.atan2(forward.x, forward.z)
+				: this.heading
+		const upright = new THREE.Quaternion().setFromAxisAngle(UP, yaw)
+		// The upright footprint must be clear of props and the on-foot pilot.
+		const obstacles = [
+			...this.planet.colliders,
+			...this.level.gameplayColliders,
+		]
+		if (!this.level.boarded && this.level.playerRoot) {
+			obstacles.push({
+				...this.level.playerRoot.position,
+				radius: 0.9,
+			})
+		}
+		if (
+			obstacles.some(
+				(o) =>
+					o !== this.collider &&
+					o.enabled !== false &&
+					Math.hypot(
+						position.x - o.x,
+						position.z - o.z
+					) <
+						COLLIDER_RADIUS + o.radius
+			)
+		)
+			return false
+		if (
+			!this.planet.isInsideBounds(
+				position.x,
+				position.z,
+				COLLIDER_RADIUS
+			)
+		)
+			return false
+		let highest = -Infinity
+		const sample = new THREE.Vector3()
+		for (const x of [-5, 0, 5])
+			for (const z of [-7, 0, 7]) {
+				sample.set(x, 0, z)
+					.applyQuaternion(upright)
+					.add(position)
+				highest = Math.max(
+					highest,
+					this.planet.heightAt(sample.x, sample.z)
+				)
+			}
+		// Recover only near the floor; this cannot cancel a long airborne fall.
+		if (this.body.translation().y > highest + 12) return false
+		this.body.setRotation(upright, true)
+		this.body.setTranslation(
+			{ x: position.x, y: highest + 4.5, z: position.z },
+			true
+		)
+		this.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+		this.body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+		this.body.resetForces(true)
+		this.body.resetTorques(true)
+		this.speed = this.steer = this.throttle = this.accumulator = 0
+		this._syncVisuals()
+		if (this.collider) {
+			this.collider.x = this.group.position.x
+			this.collider.z = this.group.position.z
+		}
+		return true
+	}
+
 	/** Chassis mass in kg (for scaling world-space impulses). */
 	get mass() {
 		return this.body?.mass() ?? 900
