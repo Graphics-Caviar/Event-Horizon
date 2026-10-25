@@ -2445,7 +2445,11 @@ export class Level2 extends Level {
 						)
 				: focus.clone().add(this._pilotCameraOffset())
 
-			camera.position.lerp(desired, 1 - Math.exp(-5 * delta))
+			const followSpeed = this.boarded ? 5 : 3
+			camera.position.lerp(
+				desired,
+				1 - Math.exp(-followSpeed * delta)
+			)
 
 			const targetHeight = this.boarded ? 3.5 : 1.8
 
