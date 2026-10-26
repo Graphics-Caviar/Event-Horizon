@@ -1,3 +1,5 @@
+import { StormNotice } from './StormNotice.js'
+import { CameraZoom } from './CameraZoom.js'
 import { FighterHub } from './FighterHub.js'
 import * as THREE from 'three'
 import { Level } from '../../core/Level.js'
@@ -19,6 +21,8 @@ const PLAYER_RADIUS = 0.9
 const MAX_WALK_SLOPE = 60
 const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
+const LAVA_DAMAGE = 20
+const LAVA_HIT_INTERVAL = 0.8
 
 // Wormhole suction around the escape gate: inside this radius the gate
 // pulls the rover and the pilot toward the ring, gently at the rim and
@@ -42,22 +46,14 @@ const WALK_SPEED = 4
 const RUN_SPEED = 7
 const MOVE_ACCEL_DAMP = 6.5 // approach rate while input is held
 const MOVE_BRAKE_DAMP = 9.5 // decay rate once input is released
-const TURN_DAMP = 11 // heading approach rate while moving
-const U_TURN_DAMP = 16 // ... and on reversals, so 180s stay playable
-const U_TURN_ANGLE = 2 // radians; beyond this a turn counts as a reversal
 
 const BASE_GRAVITY = 30 // gravity at multiplier 1 (units/s^2)
 const JUMP_HEIGHT = 1.6 // peak of a jump at normal gravity
 const MAX_JUMP_HEIGHT = 5 // low-gravity jumps are capped here, not 1 / g
 const MIN_GRAVITY_MULT = 0.1 // the pilot never gets zero/negative gravity
-const AIR_CONTROL = 0.35 // input authority while airborne
-const AIR_DRAG = 0.12 // horizontal decay while airborne without input
-const PIVOT_ANGLE = 0.5 // min facing error before turning in place
 const PORTAL_ARRIVE_RADIUS = 8 // XZ distance that counts as reaching the gate
 // On-foot footstep dust cadence, in metres of measured travel.
 const FOOTSTEP_STRIDE = 2.4
-// Scratch up-axis for the camera-relative input frame.
-const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 const vec3From = (value, fallback = new THREE.Vector3()) => {
 	if (value?.isVector3) return value.clone()
@@ -73,14 +69,6 @@ const vec3From = (value, fallback = new THREE.Vector3()) => {
 }
 
 const clamp01 = (value) => Math.max(0, Math.min(1, value))
-
-/** Signed shortest angular distance from the current heading to the target. */
-const shortestAngle = (target, current) => {
-	let diff = (target - current) % (Math.PI * 2)
-	if (diff > Math.PI) diff -= Math.PI * 2
-	if (diff < -Math.PI) diff += Math.PI * 2
-	return diff
-}
 
 /**
  * Level 2 gameplay hand-off.
@@ -308,10 +296,7 @@ export class Level2 extends Level {
 		this._verticalSpeed = 0
 		this._jumpWasDown = false
 		this._feetScratch = new THREE.Vector3()
-		// Reused per frame: the camera-relative input basis and the
-		// footstep-dust origin.
-		this._camForward = new THREE.Vector3(0, 0, -1)
-		this._camRight = new THREE.Vector3(1, 0, 0)
+		// Reused movement and footstep-dust scratch vectors.
 		this._inputScratch = new THREE.Vector3()
 		this._dustScratch = new THREE.Vector3()
 		this._footstepDistance = 0
@@ -406,13 +391,52 @@ export class Level2 extends Level {
 		this._impactShake = 0
 		this._suckPuff = 0
 		this._hitScratch = new THREE.Vector3()
+		this.cameraZoom = new CameraZoom()
 		this.keys = new Set()
 		this._onKeyDown = (e) => {
 			if (e.code === 'Escape') {
-				if (this.completed || this.transitionHeld)
+				if (
+					e.repeat ||
+					this.completed ||
+					this.transitionHeld
+				)
 					return
 				e.preventDefault()
 				this.setPaused(!this.paused)
+				return
+			}
+			if (
+				e.code === 'KeyR' &&
+				!e.repeat &&
+				!this.paused &&
+				!this.completed &&
+				!this.transitionHeld
+			) {
+				e.preventDefault()
+				const nearby =
+					this.playerRoot.position.distanceTo(
+						this.rover.group.position
+					) <= 16
+				if (this.boarded || nearby) {
+					this._showMovementFeedback(
+						this.rover.resetOrientation()
+							? 'ROVER UPRIGHT — READY TO DRIVE'
+							: 'RESET UNAVAILABLE — TIP ROVER NEAR CLEAR GROUND',
+						2
+					)
+				}
+				return
+			}
+			const zoom = CameraZoom.keyDirection(e)
+			if (
+				zoom &&
+				!this.paused &&
+				!this.transitionHeld &&
+				!this.completed &&
+				!this.firstPerson
+			) {
+				e.preventDefault()
+				this.cameraZoom.change(zoom, this.boarded)
 				return
 			}
 			if (!this.paused && !this.transitionHeld)
@@ -424,11 +448,31 @@ export class Level2 extends Level {
 		// E toggle's edge detection blocked forever).
 		this._onBlur = () => {
 			this.keys.clear()
-			this.setPaused(true)
 		}
 		this._onVisibility = () => {
-			if (document.hidden) this.setPaused(true)
+			if (document.hidden) this.keys.clear()
 		}
+		this._onWheel = (e) => {
+			if (
+				this.paused ||
+				this.completed ||
+				this.transitionHeld ||
+				this.firstPerson ||
+				e.ctrlKey ||
+				e.deltaY === 0
+			)
+				return
+			e.preventDefault()
+			this.cameraZoom.change(
+				Math.sign(e.deltaY),
+				this.boarded
+			)
+		}
+		this.sceneManager.renderer.domElement.addEventListener(
+			'wheel',
+			this._onWheel,
+			{ passive: false }
+		)
 		window.addEventListener('keydown', this._onKeyDown)
 		window.addEventListener('keyup', this._onKeyUp)
 		window.addEventListener('blur', this._onBlur)
@@ -444,12 +488,15 @@ export class Level2 extends Level {
 		this.firstPerson = false
 		this._vWasDown = false
 		this.hazards = new Hazards(this)
+		this.stormNotice = new StormNotice()
 		this.maxPlayerHP = combatConfig.playerHP ?? 100
 		this.playerHP = this.maxPlayerHP
 		this.maxRoverHP = combatConfig.roverHP ?? 200
 		this.roverHP = this.maxRoverHP
 		this.roverDamageCooldown = 0
 		this.damageCooldown = 0
+		this._lavaPlayerCooldown = 0
+		this._lavaRoverCooldown = 0
 		this._buildLevelHUD()
 		this._updateLevelHUD()
 		this._buildDamageFlash()
@@ -1092,7 +1139,9 @@ export class Level2 extends Level {
 				line-height:1.8;
 				color:rgba(223,252,255,0.75);
 			">
-				V — CHANGE VIEW
+				V — CHANGE VIEW<br>
+				WHEEL / &lt; / &gt; — ZOOM<br>
+				R — RIGHT FLIPPED ROVER<br>
 			</div>
 		`
 
@@ -1176,6 +1225,16 @@ export class Level2 extends Level {
 		this.feedbackTimer = Math.max(this.feedbackTimer, seconds)
 	}
 
+	_pilotCameraOffset() {
+		const yaw = this.playerRoot.rotation.y
+		const distance = this.cameraZoom.walk
+		return new THREE.Vector3(
+			-Math.sin(yaw) * distance,
+			2 + distance / 3,
+			-Math.cos(yaw) * distance
+		)
+	}
+
 	_setupCamera() {
 		const camera = this.sceneManager.camera
 		camera.fov = 68
@@ -1184,7 +1243,7 @@ export class Level2 extends Level {
 		camera.position.copy(
 			this.playerRoot.position
 				.clone()
-				.add(new THREE.Vector3(10, 8, 18))
+				.add(this._pilotCameraOffset())
 		)
 		this._lookAt = this.playerRoot.position
 			.clone()
@@ -1460,6 +1519,7 @@ export class Level2 extends Level {
 	 */
 	enterCinematic() {
 		this.cinematic = true
+		this.stormNotice.update([], this.playerRoot.position, false)
 		this.transitionHeld = true
 		// The completed encounter no longer rolls gameplay anomalies. Clear
 		// active gravity zones through their normal teardown so a random
@@ -1467,6 +1527,10 @@ export class Level2 extends Level {
 		this.hazards.enabled = false
 		this.hazards.dispose()
 		this._radioIntroIn = 0
+		this.sceneManager.renderer.domElement.removeEventListener(
+			'wheel',
+			this._onWheel
+		)
 		window.removeEventListener('keydown', this._onKeyDown)
 		window.removeEventListener('keyup', this._onKeyUp)
 		window.removeEventListener('blur', this._onBlur)
@@ -1627,25 +1691,25 @@ export class Level2 extends Level {
 		const inputZ =
 			(this.keys.has('KeyS') ? 1 : 0) -
 			(this.keys.has('KeyW') ? 1 : 0)
-		// Map WASD onto the camera's own frame so W always walks up the
-		// screen. The chase camera looks down a fixed diagonal, so world
-		// axes put "forward" ~30° off the view and the walk read as
-		// drifting sideways.
-		const input = this._inputScratch.set(0, 0, 0)
-		if (inputX !== 0 || inputZ !== 0) {
-			this.sceneManager.camera.getWorldDirection(
-				this._camForward
+		// Body-relative steering keeps movement stable while the chase camera
+		// pans behind the pilot. A/D turn; W/S move forward/backward.
+		if (!this._airborne) {
+			const turn = -inputX * 2.4
+			this.playerRoot.rotation.y += turn * delta
+			this._turnRate = THREE.MathUtils.damp(
+				this._turnRate,
+				turn,
+				10,
+				delta
 			)
-			this._camForward.y = 0
-			if (this._camForward.lengthSq() < 1e-6)
-				this._camForward.set(0, 0, -1)
-			else this._camForward.normalize()
-			this._camRight.crossVectors(this._camForward, WORLD_UP)
-			input.addScaledVector(this._camRight, inputX)
-			input.addScaledVector(this._camForward, -inputZ)
 		}
-		const hasInput = input.lengthSq() > 0
-		if (hasInput) input.normalize()
+		const yaw = this.playerRoot.rotation.y
+		const input = this._inputScratch.set(
+			-Math.sin(yaw) * inputZ,
+			0,
+			-Math.cos(yaw) * inputZ
+		)
+		const hasInput = inputZ !== 0
 
 		// Jump: a fresh Space press on the ground launches the pilot;
 		// gravity takes over until the feet touch terrain again.
@@ -1675,23 +1739,17 @@ export class Level2 extends Level {
 			slopePenalty *
 			this.hazards.speedFactorAt(this.playerRoot.position)
 
-		// Momentum: velocity chases the input-driven target speed, so
-		// starts, stops and direction flips read as a body with weight
-		// instead of a switch. Acceleration stays high enough to feel
-		// responsive on the shortest input taps. In the air the authority
-		// drops so momentum carries the jump, and releasing the keys
-		// mid-jump barely bleeds horizontal speed.
-		const authority = this._airborne
-			? hasInput
-				? MOVE_ACCEL_DAMP * AIR_CONTROL
-				: MOVE_BRAKE_DAMP * AIR_DRAG
-			: hasInput
+		// Only the grounded pilot can accelerate, brake or steer. A standing
+		// jump stays vertical; a moving jump carries its takeoff momentum.
+		if (!this._airborne) {
+			const authority = hasInput
 				? MOVE_ACCEL_DAMP
 				: MOVE_BRAKE_DAMP
-		this.velocity.lerp(
-			input.multiplyScalar(targetSpeed),
-			1 - Math.exp(-authority * delta)
-		)
+			this.velocity.lerp(
+				input.clone().multiplyScalar(targetSpeed),
+				1 - Math.exp(-authority * delta)
+			)
+		}
 
 		const speed = this.velocity.length()
 		if (speed > 0.02) {
@@ -1715,56 +1773,8 @@ export class Level2 extends Level {
 			? 0
 			: this._applySlopeSlide(delta)
 
-		// Rotate toward the actual travel direction (or downhill while
-		// sliding) through the body instead of snapping the yaw.
-		let targetYaw = null
-		if (this._slideSpeed > 0.4) {
-			targetYaw = Math.atan2(
-				this._slideDir.x,
-				this._slideDir.z
-			)
-		} else if (speed > 0.6) {
-			targetYaw = Math.atan2(this.velocity.x, this.velocity.z)
-		} else if (hasInput && !this._airborne) {
-			// Standing start: pivot in place toward the input heading.
-			const inputYaw = Math.atan2(input.x, input.z)
-			if (
-				Math.abs(
-					shortestAngle(
-						inputYaw,
-						this.playerRoot.rotation.y
-					)
-				) > PIVOT_ANGLE
-			) {
-				targetYaw = inputYaw
-			}
-		}
-		if (targetYaw !== null) {
-			const diff = shortestAngle(
-				targetYaw,
-				this.playerRoot.rotation.y
-			)
-			const turnResponse =
-				Math.abs(diff) > U_TURN_ANGLE
-					? U_TURN_DAMP
-					: TURN_DAMP
-			const step =
-				diff * (1 - Math.exp(-turnResponse * delta))
-			this.playerRoot.rotation.y += step
-			this._turnRate = THREE.MathUtils.damp(
-				this._turnRate,
-				step / Math.max(delta, 1e-4),
-				10,
-				delta
-			)
-		} else {
-			this._turnRate = THREE.MathUtils.damp(
-				this._turnRate,
-				0,
-				10,
-				delta
-			)
-		}
+		// Facing is controlled above; walking backwards must not flip the body.
+		if (this._airborne) this._turnRate = 0
 
 		// Measured, not requested: blocked movement produces honest
 		// numbers, and the gait leans off those.
@@ -1985,6 +1995,58 @@ export class Level2 extends Level {
 		}
 	}
 
+	/** Contact damage is independent of alien attack invulnerability. */
+	_updateLavaDamage(delta) {
+		if (this.completed || this.transitionHeld || this.cinematic)
+			return false
+		const lava = this.planet.lava
+		if (!lava) return false // Level 3 shares this controller without lava.
+		this._lavaPlayerCooldown = Math.max(
+			0,
+			this._lavaPlayerCooldown - delta
+		)
+		this._lavaRoverCooldown = Math.max(
+			0,
+			this._lavaRoverCooldown - delta
+		)
+		let hurt = false
+		if (!this.boarded && this._lavaPlayerCooldown <= 0) {
+			this._feetScratch.copy(this.playerRoot.position)
+			this._feetScratch.y -= this.pilotWalk?.footOffset ?? 0
+			if (lava.touches(this._feetScratch)) {
+				this.playerHP = Math.max(
+					0,
+					this.playerHP - LAVA_DAMAGE
+				)
+				this._lavaPlayerCooldown = LAVA_HIT_INTERVAL
+				this._flashDamage()
+				hurt = true
+			}
+		}
+		// The hull takes the heat while driving; the seated pilot is safe.
+		if (
+			this.roverHP > 0 &&
+			this._lavaRoverCooldown <= 0 &&
+			this.rover.isTouchingLava(lava)
+		) {
+			this.roverHP = Math.max(0, this.roverHP - LAVA_DAMAGE)
+			this._lavaRoverCooldown = LAVA_HIT_INTERVAL
+			if (this.boarded) {
+				this._flashDamage()
+				this._requestShake(0.35)
+			}
+			hurt = true
+		}
+		if (hurt) {
+			this._updateLevelHUD()
+			if (this.playerHP <= 0 || this.roverHP <= 0) {
+				this._gameOver()
+				return true
+			}
+		}
+		return false
+	}
+
 	/** Hull damage from a bite or talon strike; true when it was fatal. */
 	_applyAlienHit(amount = 1) {
 		if (this.completed || this.transitionHeld) return false
@@ -2159,6 +2221,15 @@ export class Level2 extends Level {
 		} else {
 			this._updatePlayerMovement(delta)
 		}
+		this.stormNotice.update(
+			this.hazards.active,
+			this.boarded
+				? this.rover.group.position
+				: this.playerRoot.position,
+			!this.cinematic &&
+				!this.completed &&
+				!this.transitionHeld
+		)
 		// Guidance, dust and ambient life keep running every frame: the
 		// rover guide retires once the rover has been boarded, and the
 		// portal guide takes over to lead the way to the escape gate.
@@ -2187,6 +2258,8 @@ export class Level2 extends Level {
 			0,
 			this.roverDamageCooldown - delta
 		)
+
+		if (this._updateLavaDamage(delta)) return
 
 		for (const alien of this.aliens) {
 			alien.update(delta, this.playerRoot.position)
@@ -2356,26 +2429,27 @@ export class Level2 extends Level {
 							this.rover.forwardVector(
 								new THREE.Vector3()
 							),
-							-26
+							-this.cameraZoom.rover
 						)
 						.add(
 							new THREE.Vector3(
 								0,
-								12,
+								3.5 +
+									this
+										.cameraZoom
+										.rover *
+										(8.5 /
+											26),
 								0
 							)
 						)
-				: focus
-						.clone()
-						.add(
-							new THREE.Vector3(
-								10,
-								8,
-								18
-							)
-						)
+				: focus.clone().add(this._pilotCameraOffset())
 
-			camera.position.lerp(desired, 1 - Math.exp(-5 * delta))
+			const followSpeed = this.boarded ? 5 : 3
+			camera.position.lerp(
+				desired,
+				1 - Math.exp(-followSpeed * delta)
+			)
 
 			const targetHeight = this.boarded ? 3.5 : 1.8
 
@@ -2514,6 +2588,10 @@ export class Level2 extends Level {
 	}
 
 	dispose() {
+		this.sceneManager.renderer.domElement.removeEventListener(
+			'wheel',
+			this._onWheel
+		)
 		window.removeEventListener('keydown', this._onKeyDown)
 		window.removeEventListener('keyup', this._onKeyUp)
 		window.removeEventListener('blur', this._onBlur)
@@ -2531,6 +2609,7 @@ export class Level2 extends Level {
 		this.audio?.stopAmbience()
 		this.radio?.stop()
 		this.gameplayColliders.length = 0
+		this.stormNotice?.dispose()
 		this.hazards?.dispose()
 		this.planet?.dispose()
 		this.levelHudEl?.remove()

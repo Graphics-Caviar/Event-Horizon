@@ -101,15 +101,6 @@ export class LavaStream {
 					a + 3
 				)
 			}
-			// Keep the current on-foot controller on solid banks.
-			if (i % 4 === 0 && channel.halfWidth > 1)
-				planet.colliders.push({
-					x: channel.x,
-					z,
-					radius: channel.halfWidth + 1.5,
-					type: 'lava',
-					enabled: true,
-				})
 		}
 		const geometry = level.own(new THREE.BufferGeometry())
 		geometry.setAttribute(
@@ -210,6 +201,41 @@ export class LavaStream {
 		)
 		planet.root.add(this.embers)
 		this.update(0)
+	}
+
+	/** Height inside the rendered strip, or null outside its actual banks/ends. */
+	surfaceHeightAt(x, z) {
+		const vertices = this.mesh.geometry.attributes.position
+		const segments = vertices.count / 2 - 1
+		const start = vertices.getZ(0)
+		const end = vertices.getZ(vertices.count - 1)
+		if (z < start || z > end) return null
+		const progress = ((z - start) / (end - start)) * segments
+		const row = Math.min(segments - 1, Math.floor(progress))
+		const t = progress - row
+		const a = row * 2
+		const left = THREE.MathUtils.lerp(
+			vertices.getX(a),
+			vertices.getX(a + 2),
+			t
+		)
+		const right = THREE.MathUtils.lerp(
+			vertices.getX(a + 1),
+			vertices.getX(a + 3),
+			t
+		)
+		if (x < left || x > right) return null
+		return THREE.MathUtils.lerp(
+			vertices.getY(a),
+			vertices.getY(a + 2),
+			t
+		)
+	}
+
+	/** Feet/tyres may enter the shallow molten layer, but air above it is safe. */
+	touches(point) {
+		const surfaceY = this.surfaceHeightAt(point.x, point.z)
+		return surfaceY !== null && point.y <= surfaceY + 0.05
 	}
 
 	update(delta) {

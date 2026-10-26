@@ -294,6 +294,33 @@ export class GravityStorm {
 		)
 	}
 
+	/** Warning/active notification only while the observer is inside the zone. */
+	notificationAt(position) {
+		if (
+			!this.contains(position) ||
+			!['forming', 'active'].includes(this.phase)
+		)
+			return null
+		const heavy = this.multiplier >= 1
+		const description = heavy
+			? `Heavy gravity (${this.multiplier}×): slower movement, lower jumps and stronger downhill pull.`
+			: this.multiplier > 0
+				? `Light gravity (${this.multiplier}×): faster movement, higher jumps and gentler downhill pull.`
+				: `${this.multiplier < 0 ? 'Reversed' : 'Zero'}-gravity anomaly: faster movement and high jumps. Safety gravity keeps you grounded.`
+		return {
+			name: this.name,
+			color: this.color.getHexString(),
+			description,
+			phase: this.phase,
+			remaining: Math.max(
+				0,
+				(this.phase === 'forming'
+					? FORM_TIME
+					: this.activeDuration) - this.elapsed
+			),
+		}
+	}
+
 	_enter(phase) {
 		this.phase = phase
 		this.elapsed = 0
