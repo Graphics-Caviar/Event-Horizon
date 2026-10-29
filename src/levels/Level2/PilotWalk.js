@@ -50,8 +50,8 @@ export function orientPilot(model, key) {
 	return root
 }
 
-// The supplied pilots are static meshes. Animate them on the GPU rather than
-// rewriting their million-vertex geometry every frame or changing cached assets.
+// Rigged pilots animate using their real GLB skeletons. The existing shader
+// gait remains available only when a legacy, unrigged model is loaded.
 export class PilotWalk {
 	constructor(level, model, character = 'zara') {
 		this.profile = PILOT_GAITS[character] || PILOT_GAITS.zara
@@ -237,12 +237,20 @@ export class PilotWalk {
 		})
 	}
 
-	update(delta, distance, boarded) {
+	// Optional locomotion data comes from Level 2. Level 3 and the cutscenes
+	// still call the original three-argument API, so keep it compatible.
+	update(delta, distance, boarded, motion = {}) {
 		if (this.rigAnimator?.isRigged) {
+			const airborne = !boarded && Boolean(
+				motion.airborne ?? (this.level?._airborne || this.level?.voidDimension)
+			)
 			this.rigAnimator.update(delta, {
 				distance,
 				boarded,
-				airborne: !boarded && Boolean(this.level?._airborne || this.level?.voidDimension),
+				airborne,
+				falling: airborne && (motion.falling || (motion.verticalSpeed ?? 0) < -0.2),
+				accel: motion.accel ?? 0,
+				turnRate: motion.turnRate ?? 0,
 			})
 			this.phase = this.rigAnimator.phase
 			this.amount = this.rigAnimator.blend

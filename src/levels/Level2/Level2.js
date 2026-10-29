@@ -18,6 +18,7 @@ import { Portal } from './Portal.js'
 import { WaypointGuide } from './WaypointGuide.js'
 import { advanceRouteWaypoint } from './RouteProgress.js'
 import { PilotWalk, orientPilot } from './PilotWalk.js'
+import { PilotRig, orientPilot } from './PilotRig.js'
 import { constrainTerrainCamera } from './TerrainCamera.js'
 
 const PLAYER_RADIUS = 0.9
@@ -118,7 +119,7 @@ function releaseButtonFocus() {
 
 // On-foot locomotion feel. The pilot carries momentum instead of snapping
 // to a fixed speed and turns through its body; the measured ground speed
-// and turn rate then drive the procedural gait in PilotWalk.
+// and turn rate then drive the procedural skeleton in PilotRig.
 const WALK_SPEED = 4
 const RUN_SPEED = 7
 const MOVE_ACCEL_DAMP = 6.5 // approach rate while input is held
@@ -131,6 +132,7 @@ const MIN_GRAVITY_MULT = 0.1 // the pilot never gets zero/negative gravity
 const PORTAL_ARRIVE_RADIUS = 8 // XZ distance that counts as reaching the gate
 // On-foot footstep dust cadence, in metres of measured travel.
 const FOOTSTEP_STRIDE = 2.4
+const FIRST_PERSON_WALK_BOB = 0.055
 
 const vec3From = (value, fallback = new THREE.Vector3()) => {
 	if (value?.isVector3) return value.clone()
@@ -428,6 +430,8 @@ export class Level2 extends Level {
 		this._inputScratch = new THREE.Vector3()
 		this._dustScratch = new THREE.Vector3()
 		this._footstepDistance = 0
+		this._walkCameraBobPhase = 0
+		this._walkCameraBob = 0
 		const pilot =
 			CHARACTERS[this.state.selectedCharacter] ||
 			CHARACTERS.zara
@@ -1084,7 +1088,7 @@ export class Level2 extends Level {
 		this.pilotWalk?.dispose()
 		this.pilotModel?.removeFromParent()
 		this.pilotModel = model
-		this.pilotWalk = new PilotWalk(this, model, character)
+		this.pilotWalk = new PilotRig(this, model, character)
 		this.playerRoot.add(model)
 		if (!this.boarded) this._syncPlayerToTerrain()
 	}
@@ -2064,6 +2068,27 @@ export class Level2 extends Level {
 			this.playerRoot.position.z - startZ
 		)
 		const groundSpeed = Math.max(speed, this._slideSpeed)
+		const bobSpeed = delta > 0 ? travelled / delta : 0
+		const firstPersonWalking =
+			this.firstPerson && !this.boarded && !this._airborne
+		if (firstPersonWalking && bobSpeed > 0.02) {
+			this._walkCameraBobPhase =
+				(this._walkCameraBobPhase +
+					(bobSpeed * delta * Math.PI * 2) /
+						FOOTSTEP_STRIDE) %
+				(Math.PI * 2)
+		}
+		const bobTarget = firstPersonWalking
+			? Math.sin(this._walkCameraBobPhase) *
+				FIRST_PERSON_WALK_BOB *
+				clamp01(bobSpeed / WALK_SPEED)
+			: 0
+		this._walkCameraBob = THREE.MathUtils.damp(
+			this._walkCameraBob,
+			bobTarget,
+			12,
+			delta
+		)
 		if (!this._airborne) {
 			this._footstepDistance += travelled
 		}
@@ -2080,9 +2105,15 @@ export class Level2 extends Level {
 			})
 		}
 
-		// Feed the measured travel distance to the shader gait so the
-		// stride rate tracks the actual ground speed.
-		this.pilotWalk?.update(delta, travelled, false)
+		// Feed the measured travel distance to the skeleton so the stride
+		// rate tracks the actual ground speed; the jump arc drives the
+		// airborne and landing poses, acceleration and turning the lean.
+		this.pilotWalk?.update(delta, travelled, false, {
+			airborne: this._airborne,
+			verticalSpeed: this._verticalSpeed,
+			accel: this._accel,
+			turnRate: this._turnRate,
+		})
 	}
 
 	_updateMovementFeedback(delta) {
@@ -2643,7 +2674,12 @@ export class Level2 extends Level {
 				// FIRST PERSON: ON FOOT
 				camera.position.set(
 					this.playerRoot.position.x,
-					this.playerRoot.position.y + 1.5,
+					this.playerRoot.position.y +
+						1.5 +
+						(this._airborne ||
+						this.completed
+							? 0
+							: this._walkCameraBob),
 					this.playerRoot.position.z
 				)
 
