@@ -63,8 +63,33 @@ brute.update(1 / 60)
 
 predator._enter('dive')
 const stalker = enemy('stalker')
-stalker._enter('prepare')
-assert.equal(stalker.state, 'idle', 'attack budget prevents concurrent windups')
+assert.equal(
+	stalker._enter('prepare'),
+	false,
+	'attack budget rejects concurrent windups'
+)
+assert.equal(stalker.state, 'idle')
+let attackCues = 0
+stalker._voidAudio = { play: () => attackCues++ }
+stalker.state = 'chase'
+stalker._groundCombat(1 / 60, new THREE.Vector3(0, 0, 1), 1)
+assert.equal(stalker.state, 'chase')
+assert.equal(attackCues, 0, 'rejected windup has no attack cue')
+assert.ok(stalker._cooldown > 0, 'rejected windup is briefly deferred')
+stalker.state = 'prepare'
+predator.state = 'orbit'
+predator._attackIndex = 0
+predator._cooldown = 0
+predator._voidAudio = { play: () => attackCues++ }
+predator._setGlow = () => {}
+predator._flyerCombat(1 / 60, new THREE.Vector3(0, 0, 1), 1)
+assert.equal(predator.state, 'orbit')
+assert.equal(attackCues, 0, 'rejected dive has no attack cue')
+assert.equal(
+	predator._attackIndex,
+	0,
+	'rejected attack does not advance the attack cycle'
+)
 assert.equal(VOID_STYLES.stalker.damage, 8)
 console.log(
 	'Combat: independent HP, configured attacks, invulnerability, lethal clamping, defeat and attack budget passed.'

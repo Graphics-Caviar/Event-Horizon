@@ -166,7 +166,7 @@ export class Level2ToLevel3Cutscene {
 					this._landing.z
 				) -
 				this.ship.hullBottom +
-				0.3
+				0.6
 			// The alien vessel is already parked when the rover arrives. The
 			// camera discovers it; no rescue ship flies into the scene.
 			this.ship.group.position.copy(this._landing)
@@ -205,7 +205,7 @@ export class Level2ToLevel3Cutscene {
 						this._landing.z
 					) -
 					this.ship.hullBottom +
-					0.3
+					0.6
 				this._landing.y = y
 				this.ship.group.position.copy(this._landing)
 			})
@@ -509,7 +509,7 @@ export class Level2ToLevel3Cutscene {
 					this._landing.z
 				) -
 				this.ship.hullBottom +
-				0.3
+				0.6
 			this.ship.group.position.copy(this._landing)
 			this.ship.group.visible = true
 			this._buildFighterHub()
