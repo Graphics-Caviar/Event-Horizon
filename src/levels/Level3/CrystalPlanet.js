@@ -97,6 +97,11 @@ export class CrystalPlanet extends AlienPlanet {
 						)
 				)
 			}
+		const routeDistance = this._drivingRouteDistance(x, z)
+		safe = Math.max(
+			safe,
+			1 - THREE.MathUtils.smoothstep(routeDistance, 12, 46)
+		)
 		return THREE.MathUtils.lerp(
 			height,
 			this.baseY +

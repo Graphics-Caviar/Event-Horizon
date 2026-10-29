@@ -19,12 +19,18 @@ export class Level3 extends Level2 {
 			...options,
 			planetClass: CrystalPlanet,
 			scriptSet: 3,
+			worldSize: options.worldSize ?? 1600,
 		})
 		this.level = this.state.currentLevel = 3
 		this.combatConfig = {
 			bladeDamage: 30,
-			encounterRange: 130,
-			maxAttackers: 3,
+			encounterRange: 150,
+			maxAttackers: 4,
+			maxActiveEnemies: 8,
+			maxMajorEnemies: 10,
+			spawnInterval: 0.55,
+			lavaDamagePerSecond: 8,
+			lavaDamageInterval: 1,
 			...options.combatConfig,
 		}
 		// Keep inherited controller references, but retire surface-only scenery.
@@ -61,7 +67,12 @@ export class Level3 extends Level2 {
 		this.voidAudio = new VoidAudio(this.audio)
 		this.monuments = new VoidMonuments(this)
 		this.matterDimension = new MatterDimension(this)
-		this.survival = new MatterSurvival(this, options.survivalConfig)
+		// Exactly thirty playable seconds, regardless of the route length.
+		this.survival = new MatterSurvival(this, {
+			countdown: 30,
+			collapseSeconds: 90,
+			...options.survivalConfig,
+		})
 		this.blade = new EnergyBlade(this)
 		this._voidKills = 0
 		this._bossDefeated = false
@@ -107,75 +118,178 @@ export class Level3 extends Level2 {
 	_spawnAliens() {}
 
 	_spawnVoidRoster() {
-		const sites = this.monuments.sites
-		// The colossus queues first: the heaviest GLB should reach the
-		// field earliest, and the arena is the fight that matters.
-		const defs = [
+		const route = this.matterDimension.encounterSites
+		const waves = [
 			{
-				style: 'colossus',
-				home: sites.arena
-					.clone()
-					.add(new THREE.Vector3(30, 0, 24)),
-			},
-			// Rift stalkers hunt the routes in fast, darting packs.
-			{
-				style: 'stalker',
-				home: this.landingSite
-					.clone()
-					.add(new THREE.Vector3(70, 0, -95)),
+				name: 'first-contact',
+				progress: 0.045,
+				styles: [
+					'predator',
+					'predator',
+					'brute',
+					'brute',
+				],
 			},
 			{
-				style: 'stalker',
-				home: sites.rift
-					.clone()
-					.add(new THREE.Vector3(34, 0, 22)),
+				name: 'broken-passage',
+				progress: 0.26,
+				styles: [
+					'predator',
+					'predator',
+					'predator',
+					'brute',
+					'brute',
+				],
 			},
 			{
-				style: 'stalker',
-				home: this.portalSite
-					.clone()
-					.add(new THREE.Vector3(60, 0, -95)),
+				name: 'volcanic-corridor',
+				progress: 0.48,
+				styles: [
+					'brute',
+					'brute',
+					'brute',
+					'predator',
+					'predator',
+					'predator',
+				],
 			},
 			{
-				style: 'stalker',
-				home: this.crashSite
-					.clone()
-					.add(new THREE.Vector3(85, 0, 25)),
+				name: 'dimensional-ruins',
+				progress: 0.69,
+				styles: [
+					'brute',
+					'brute',
+					'predator',
+					'predator',
+					'predator',
+					'entity',
+				],
 			},
-			// Sentinels anchor the ruins.
 			{
-				style: 'brute',
-				home: sites.reactor
-					.clone()
-					.add(new THREE.Vector3(-18, 0, 26)),
+				name: 'space-hub-defense',
+				progress: 0.88,
+				major: true,
+				styles: [
+					'brute',
+					'brute',
+					'predator',
+					'predator',
+					'stalker',
+					'entity',
+					'colossus',
+				],
 			},
-			{
-				style: 'sentinel',
-				home: sites.bridge
-					.clone()
-					.add(new THREE.Vector3(-24, 0, 18)),
-			},
-			// Void entities orbit the anomalies and rain energy bolts.
-			{ style: 'predator', home: sites.rift.clone() },
-			{ style: 'entity', home: sites.arena.clone() },
 		]
-		defs.forEach((def, index) => {
-			const spot = this._findAlienSpot(
-				def.home,
-				def.style === 'colossus' ? 6 : 3
-			)
-			if (spot) def.home = spot
-			const enemy =
-				def.style === 'colossus'
-					? new VoidColossus(this, {
-							home: def.home,
-						})
-					: new VoidEnemy(this, def.style, {
-							home: def.home,
-						})
-			this.aliens.push(enemy)
-			enemy._encounterPending = true
+		this.encounters = waves.map((wave, encounterIndex) => {
+			const site = route[encounterIndex]
+			const encounter = {
+				...wave,
+				site,
+				active: false,
+				completed: false,
+				enemies: [],
+			}
+			wave.styles.forEach((style, index) => {
+				const angle =
+					(index / wave.styles.length) *
+					Math.PI *
+					2
+				const radius = 18 + (index % 2) * 8
+				const home = site
+					.clone()
+					.add(
+						new THREE.Vector3(
+							Math.cos(angle) *
+								radius,
+							0,
+							Math.sin(angle) * radius
+						)
+					)
+				if (style !== 'predator' && style !== 'entity')
+					this.matterDimension.avoidLava(home, 5)
+				if (
+					style !== 'predator' &&
+					style !== 'entity'
+				) {
+					const spot = this._findAlienSpot(
+						home,
+						style === 'colossus' ? 6 : 3
+					)
+					if (spot) home.copy(spot)
+				}
+				const enemy =
+					style === 'colossus'
+						? new VoidColossus(this, {
+								home,
+							})
+						: new VoidEnemy(this, style, {
+								home,
+							})
+				enemy._encounterIndex = encounterIndex
+				enemy._encounterPending = true
+				this.aliens.push(enemy)
+				encounter.enemies.push(enemy)
+			})
+			return encounter
 		})
+		this._encounterDelay = 0
+		this._routeProgress = 0
+	}
+
+	_updateEncounters(delta) {
+		if (!this.encounters?.length) return
+		const player = this.playerRoot.position
+		this._routeProgress = Math.max(
+			this._routeProgress,
+			this.matterDimension.routeProgress(player)
+		)
+		this._encounterDelay = Math.max(0, this._encounterDelay - delta)
+		for (const encounter of this.encounters) {
+			if (
+				!encounter.active &&
+				this._routeProgress >= encounter.progress &&
+				Math.hypot(
+					player.x - encounter.site.x,
+					player.z - encounter.site.z
+				) > 52
+			)
+				encounter.active = true
+			if (!encounter.active) continue
+			if (
+				encounter.enemies.every(
+					(enemy) => enemy.smashed
+				) &&
+				encounter.enemies.every(
+					(enemy) => !enemy._encounterPending
+				)
+			)
+				encounter.completed = true
+			if (encounter.completed || this._encounterDelay > 0)
+				continue
+			const activeLimit = encounter.major
+				? this.combatConfig.maxMajorEnemies
+				: this.combatConfig.maxActiveEnemies
+			const nearbyLiving = this.aliens.filter(
+				(enemy) =>
+					enemy._loaded &&
+					!enemy.smashed &&
+					enemy.position.distanceTo(player) < 220
+			).length
+			if (nearbyLiving >= activeLimit) return
+			const next = encounter.enemies.find(
+				(enemy) => enemy._encounterPending
+			)
+			if (!next) continue
+			next._encounterPending = false
+			this._encounterDelay = this.combatConfig.spawnInterval
+			next.load().catch((error) =>
+				console.warn(
+					`[Level3] ${encounter.name} spawn failed`,
+					error
+				)
+			)
+			return
+		}
 	}
 
 	_lightEnvironment() {
@@ -313,7 +427,12 @@ export class Level3 extends Level2 {
 	_updatePlayerMovement(delta) {
 		if (this.transitionHeld || this.completed) return
 		const thrust = this.survival
-			? this.survival.burn(delta, this.keys.has('Space'))
+			? this.survival.burn(
+					delta,
+					this.keys.has('Space'),
+					this.keys.has('ShiftLeft') ||
+						this.keys.has('ShiftRight')
+				)
 			: this.keys.has('Space')
 		this.crouching =
 			this.keys.has('KeyC') && !this._airborne && !thrust
@@ -394,13 +513,18 @@ export class Level3 extends Level2 {
 		input.normalize().multiplyScalar(
 			this.keys.has('ShiftLeft') ||
 				this.keys.has('ShiftRight')
-				? 28
+				? 32
 				: 18
 		)
 		this.velocity.lerp(input, 1 - Math.exp(-5 * delta))
 		this._verticalSpeed = THREE.MathUtils.damp(
 			this._verticalSpeed,
-			thrust ? 15 : -12,
+			thrust
+				? this.keys.has('ShiftLeft') ||
+					this.keys.has('ShiftRight')
+					? 23
+					: 15
+				: -12,
 			4,
 			delta
 		)
@@ -564,55 +688,8 @@ export class Level3 extends Level2 {
 			this.voidDimension.update(delta)
 			return
 		}
-		if (!this.transitionHeld && !this.completed) {
-			let attacking = 0
-			for (const enemy of this.aliens) {
-				if (
-					[
-						'prepare',
-						'strike',
-						'charge',
-						'dive',
-					].includes(enemy.state)
-				)
-					attacking++
-			}
-			this._encounterDelay = Math.max(
-				0,
-				(this._encounterDelay ?? 0) - delta
-			)
-			for (const enemy of this.aliens) {
-				const distance = enemy.position.distanceTo(
-					this.playerRoot.position
-				)
-				if (
-					enemy._encounterPending &&
-					this._encounterDelay <= 0 &&
-					distance > 22 &&
-					distance <
-						this.combatConfig.encounterRange
-				) {
-					this._encounterDelay = 0.6
-					enemy._encounterPending = false
-					enemy.load().catch((error) =>
-						console.warn(
-							'[Level3] Encounter load failed',
-							error
-						)
-					)
-				}
-				if (
-					attacking >=
-						this.combatConfig
-							.maxAttackers &&
-					['chase', 'orbit'].includes(enemy.state)
-				)
-					enemy._cooldown = Math.max(
-						enemy._cooldown,
-						0.3
-					)
-			}
-		}
+		if (!this.transitionHeld && !this.completed)
+			this._updateEncounters(delta)
 		this.survival?.update(delta)
 		this.matterDimension?.update(
 			delta,
@@ -622,6 +699,7 @@ export class Level3 extends Level2 {
 		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
+		this.matterDimension?.updateLavaDamage(step)
 		if (this.voidDimension) return
 		this._updateMissionRadio()
 		this.stormLandscape.update(delta)
@@ -665,20 +743,11 @@ export class Level3 extends Level2 {
 				Math.sin(this.elapsedPlayTime * 45) * 0.15
 		}
 		if (!this.completed && !this.boarded) {
-			const objectiveKey = this.blade?.equipped
-				? 'level3-blade'
-				: 'level3'
-			if (this._level3ObjectiveKey !== objectiveKey) {
-				this._level3ObjectiveKey = objectiveKey
-				const bladeHint = this.blade?.equipped
-					? ' · F swing blade'
-					: ''
-				this.objectiveEl.innerHTML =
-					`<strong style="color:#9cf5ff;letter-spacing:1px">LEVEL 3 · THE VOID OF GODS</strong><br>` +
-					`<span style="display:inline-block;margin:5px 0;color:#f4f8ff;font-size:13px;letter-spacing:.6px">` +
-					`<span style="color:#ff5b63">AVOID RED BOMBS</span> &nbsp;›&nbsp; REACH THE WORMHOLE &nbsp;›&nbsp; DEFEAT THE VOID BOSS</span><br>` +
-					`<span style="font-size:11px;opacity:.8">WASD move · Shift sprint · Hold Space to fly (uses fuel) · Release to descend / C duck · Collect cyan nitrogen boosts${bladeHint}</span>`
-			}
+			const bladeHint = this.blade?.equipped
+				? ' · F swing blade'
+				: ''
+			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>Fight through five escalating encounters to reach the rift. Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
+			this._objectiveKey = ''
 		}
 	}
 

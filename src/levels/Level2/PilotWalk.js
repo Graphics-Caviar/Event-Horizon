@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { PilotRigAnimator } from '../../models/PilotRigAnimator.js'
 
 export const PILOT_GAITS = {
 	zara: {
@@ -40,13 +41,21 @@ export const PILOT_GAITS = {
 // Orient the static asset before fitting it; each source uses a different yaw.
 export function orientPilot(model, key) {
 	const root = new THREE.Group()
-	root.rotation.y = (PILOT_GAITS[key] || PILOT_GAITS.zara).yaw
+	// The three new pilot rigs share one forward axis; Kai's historical
+	// static mesh needed a yaw correction that the rigged export does not.
+	let hasSkin = false
+	model.traverse((node) => {
+		if (node.isSkinnedMesh) hasSkin = true
+	})
+	root.rotation.y = hasSkin
+		? 0
+		: (PILOT_GAITS[key] || PILOT_GAITS.zara).yaw
 	root.add(model)
 	return root
 }
 
-// The supplied pilots are static meshes. Animate them on the GPU rather than
-// rewriting their million-vertex geometry every frame or changing cached assets.
+// Rigged pilots animate using their real GLB skeletons. The existing shader
+// gait remains available only when a legacy, unrigged model is loaded.
 export class PilotWalk {
 	constructor(level, model, character = 'zara') {
 		this.profile = PILOT_GAITS[character] || PILOT_GAITS.zara
@@ -73,6 +82,13 @@ export class PilotWalk {
 		const bounds = new THREE.Box3().setFromObject(model)
 		this.footOffset = -bounds.min.y
 		this.height = bounds.getSize(new THREE.Vector3()).y
+		// Rigged pilots must use their bones: the old custom vertex shader
+		// would deform already-skinned vertices a second time.
+		this.rigAnimator = new PilotRigAnimator(model)
+		if (this.rigAnimator.isRigged) {
+			this.strideLength = this.height * 0.52
+			return
+		}
 		this.strideLength =
 			this.height * ((2 * profile.stride) / profile.stance)
 		model.traverse((mesh) => {
@@ -225,7 +241,33 @@ export class PilotWalk {
 		})
 	}
 
-	update(delta, distance, boarded) {
+	// Optional locomotion data comes from Level 2. Level 3 and the cutscenes
+	// still call the original three-argument API, so keep it compatible.
+	update(delta, distance, boarded, motion = {}) {
+		if (this.rigAnimator?.isRigged) {
+			const airborne =
+				!boarded &&
+				Boolean(
+					motion.airborne ??
+					(this.level?._airborne ||
+						this.level?.voidDimension)
+				)
+			this.rigAnimator.update(delta, {
+				distance,
+				boarded,
+				airborne,
+				falling:
+					airborne &&
+					(motion.falling ||
+						(motion.verticalSpeed ?? 0) <
+							-0.2),
+				accel: motion.accel ?? 0,
+				turnRate: motion.turnRate ?? 0,
+			})
+			this.phase = this.rigAnimator.phase
+			this.amount = this.rigAnimator.blend
+			return
+		}
 		const moving = !boarded && distance > 0.0001
 		this.amount = boarded
 			? 0
@@ -258,5 +300,9 @@ export class PilotWalk {
 				(distance / this.strideLength) * Math.PI * 2
 		this.uniforms.walkPhase.value = this.phase
 		this.uniforms.walkAmount.value = this.amount
+	}
+
+	dispose() {
+		this.rigAnimator?.dispose()
 	}
 }

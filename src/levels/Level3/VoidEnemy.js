@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { loadVoidModel } from './voidAssets.js'
+import { VoidRigAnimator } from './VoidRigAnimator.js'
 
 const CULL_DISTANCE = 260
 // Rover impact above this speed hurts the enemy instead of the crew
@@ -36,8 +37,8 @@ const glowTexture = () => {
 }
 
 /**
- * Combat personalities for the void warband. The GLBs have no rigs
- * (audited: 0 skins, 0 animation clips), so attacks are whole-body
+ * Combat personalities for the void warband. Rigged Void GLBs
+ * use procedural bone movement; nonrigged fallbacks retain body
  * choreography — the same phase timeline a boned arm swing would follow
  * (weight shift in `windup`, committed lunge in `active`, overshoot +
  * settle in `recover`) driven through lean, pitch, bank and stride rather
@@ -236,6 +237,7 @@ export class VoidEnemy {
 		this._stuckTimer = 0
 		this._stuckScratch = this.position.clone()
 		this._detour = null
+		this._moveTargetScratch = new THREE.Vector3()
 		this._patrolTarget = null
 		this._ramCooldown = 0
 		this._contactCooldown = 0
@@ -275,6 +277,7 @@ export class VoidEnemy {
 		})
 		this.group.add(model)
 		this._model = model
+		this.rigAnimator = new VoidRigAnimator(model, this.styleName)
 		this._buildGlow(box)
 		this._buildHpBar(box)
 		if (this.kind !== 'flyer') {
@@ -453,10 +456,11 @@ export class VoidEnemy {
 				count >=
 				(this.level.combatConfig?.maxAttackers ?? 3)
 			)
-				return
+				return false
 		}
 		this.state = state
 		this._phaseT = 0
+		return true
 	}
 
 	// ------------------------------------------------------------------
@@ -478,7 +482,13 @@ export class VoidEnemy {
 					distance <= this.style.attackRange &&
 					this._cooldown <= 0
 				) {
-					this._enter('prepare')
+					if (!this._enter('prepare')) {
+						this._cooldown = Math.max(
+							this._cooldown,
+							0.3
+						)
+						break
+					}
 					this._struckThisAttack = false
 					this._windupOverride = 0
 					this._onPrepareStart?.()
@@ -761,18 +771,30 @@ export class VoidEnemy {
 					this._cooldown <= 0 &&
 					!this.pendingStrike
 				) {
-					this._attackIndex += 1
+					const attackIndex =
+						(this._attackIndex ?? 0) + 1
 					const heavy =
-						this._attackIndex %
+						attackIndex %
 							this.style
 								.heavyEvery ===
 						0
 					const dive =
-						this._attackIndex %
+						attackIndex %
 							this.style.diveEvery ===
 						0
+					if (
+						!this._enter(
+							dive ? 'dive' : 'charge'
+						)
+					) {
+						this._cooldown = Math.max(
+							this._cooldown,
+							0.3
+						)
+						break
+					}
+					this._attackIndex = attackIndex
 					this._heavyNext = heavy && !dive
-					this._enter(dive ? 'dive' : 'charge')
 					this._struckThisAttack = false
 					this._voidAudio?.play(
 						'charge',
@@ -1099,8 +1121,14 @@ export class VoidEnemy {
 	}
 
 	_moveTowards(point, delta, speed) {
-		const dx = point.x - this.position.x
-		const dz = point.z - this.position.z
+		const target = this._moveTargetScratch.copy(point)
+		if (this.kind !== 'flyer')
+			this.level.matterDimension?.avoidLava(
+				target,
+				this.radius + 3
+			)
+		const dx = target.x - this.position.x
+		const dz = target.z - this.position.z
 		const distance = Math.hypot(dx, dz)
 		if (distance > 0.001) {
 			// Accelerate toward the desired pace; never snap.
@@ -1230,6 +1258,11 @@ export class VoidEnemy {
 			)
 		}
 		this.group.rotation.y = this._heading
+		this.rigAnimator?.update(delta, {
+			state: this.state,
+			speed,
+			airborne: this.kind === 'flyer',
+		})
 	}
 
 	_syncToTerrain(delta) {
@@ -1445,6 +1478,7 @@ export class VoidEnemy {
 	_updateDeath(delta) {
 		if (this._deathT < 0) return
 		this._deathT += delta
+		this.rigAnimator?.update(delta, { state: 'dead' })
 		// Tip over, then sink below the crust; the wreck stays until the
 		// level tears down (same contract as Alien).
 		const tip = Math.min(1, this._deathT / 0.9)
@@ -1474,6 +1508,7 @@ export class VoidEnemy {
 
 	dispose() {
 		this._disposed = true
+		this.rigAnimator?.dispose()
 		this._hpBar?.texture.dispose()
 		this._voidAudio?.stopLoop(this._loopId)
 		if (this._boltPool) {

@@ -270,7 +270,12 @@ export class StormLandscape {
 
 	_buildReflections() {
 		const renderer = this.level.sceneManager.renderer
-		if (!renderer) return
+		if (
+			!renderer ||
+			typeof renderer.compile !== 'function' ||
+			typeof renderer.setRenderTarget !== 'function'
+		)
+			return
 		const scene = this.level.sceneManager.scene
 		this.previousEnvironment = scene.environment
 		// Capture the storm sky once for the reflective crystal facets.

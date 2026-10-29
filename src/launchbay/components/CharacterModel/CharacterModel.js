@@ -27,6 +27,7 @@
 import * as THREE from 'three'
 import { loadGLTF } from '../../utils/assetLoader.js'
 import { damp } from '../../utils/animations.js'
+import { PilotRigAnimator } from '../../../models/PilotRigAnimator.js'
 
 const TARGET_HEIGHT = 1.75 // world units every pilot is normalized to
 
@@ -90,6 +91,7 @@ export default class CharacterModel {
 		this.mixer = null
 		this._clips = []
 		this._currentAction = null
+		this.rigAnimator = null
 		this._disposables = []
 
 		this.root = new THREE.Group()
@@ -133,10 +135,27 @@ export default class CharacterModel {
 
 	async _load() {
 		try {
-			const gltf = await loadGLTF(
-				this.character.model,
-				this._onProgress
-			)
+			// Launch bay and gameplay share the same preferred rigged/fallback paths.
+			const paths = Array.isArray(this.character.model)
+				? this.character.model
+				: [this.character.model]
+			let gltf, lastError
+			for (const path of paths) {
+				try {
+					gltf = await loadGLTF(
+						path,
+						this._onProgress
+					)
+					break
+				} catch (error) {
+					lastError = error
+				}
+			}
+			if (!gltf)
+				throw (
+					lastError ||
+					new Error('No pilot model found')
+				)
 			this._onModelLoaded(gltf)
 		} catch (err) {
 			console.warn(
@@ -153,6 +172,7 @@ export default class CharacterModel {
 		this._normalizeTransform(model)
 		this.root.add(model)
 		this.model = model
+		this.rigAnimator = new PilotRigAnimator(model)
 
 		if (gltf.animations && gltf.animations.length > 0) {
 			this.hasAnimations = true
@@ -274,6 +294,8 @@ export default class CharacterModel {
 			case 'ready':
 				if (this.mixer) {
 					this.mixer.update(dt)
+				} else if (this.rigAnimator?.isRigged) {
+					this.rigAnimator.update(dt)
 				} else {
 					this._applyProceduralIdle(
 						this.model,
@@ -302,6 +324,7 @@ export default class CharacterModel {
 
 	dispose() {
 		this.mixer?.stopAllAction()
+		this.rigAnimator?.dispose()
 		for (const item of this._disposables) item?.dispose?.()
 		this.root.clear()
 	}

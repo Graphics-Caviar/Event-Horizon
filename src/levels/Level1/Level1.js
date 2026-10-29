@@ -5,9 +5,11 @@ import { STATUS } from '../../core/GameState.js'
 import { SHIPS } from '../../systems/ShipManager.js'
 import { CHARACTERS } from '../../systems/CharacterManager.js'
 import { HUD } from '../../ui/HUD.js'
+import { CockpitHUD } from '../../ui/CockpitHUD.js'
 import { Skybox } from '../../skybox.js'
 import { AsteroidField } from './AsteroidField.js'
 import { BlackHole } from './BlackHole.js'
+import { CollisionWarning } from './CollisionWarning.js'
 import { Endpoint } from './Endpoint.js'
 import { Spaceship } from './Spaceship.js'
 
@@ -181,6 +183,12 @@ export class Level1 extends Level {
 			this.spaceship.position,
 			T.safeStartRadius
 		)
+		// Red boxes around the rocks the ship is about to fly into.
+		this.collisionWarning = new CollisionWarning(
+			this,
+			this.asteroidField,
+			this.spaceship
+		)
 
 		// Tagona's finish-line beacon (PR #15) placed it at z = 2500. It now
 		// sits exactly on the escape line, so the ring marks where safe space
@@ -208,6 +216,13 @@ export class Level1 extends Level {
 			pilotName: CHARACTERS[this.pilotKey]?.name,
 			shipName: ship.name,
 		})
+		this.cockpit = new CockpitHUD({
+			spaceship: this.spaceship,
+			asteroidField: this.asteroidField,
+			endpoint: this.endpoint,
+			blackHole: this.blackHole,
+			camera,
+		})
 		this._updateHud(T.startDistance)
 		this._updateObjective()
 
@@ -231,6 +246,7 @@ export class Level1 extends Level {
 				this.spaceship.setFirstPerson(
 					!this.spaceship.firstPerson
 				)
+				this._syncCockpit()
 				return
 			}
 			if (e.code !== 'Escape') return
@@ -311,7 +327,28 @@ export class Level1 extends Level {
 		this.audio?.setAmbiencePaused(paused)
 		this.radio?.setPaused(paused)
 		if (!paused) releaseButtonFocus()
+		this._syncCockpit()
 		this.onPauseChange(paused)
+	}
+
+	/**
+	 * The cockpit only frames the first-person view, and steps aside for
+	 * the pause and results screens. While it is up, the flat HUD drops
+	 * the stats the dashboard already shows, and the objective banner
+	 * (which would sit on the canopy bow) gives way to the dash's portal
+	 * readout and the heading tape's portal caret.
+	 */
+	_syncCockpit() {
+		const on =
+			this.spaceship.firstPerson &&
+			!this.paused &&
+			!this.ended
+		if (on) this.cockpit.show()
+		else this.cockpit.hide()
+		this.hud.setCockpitMode(on)
+		// visibility, not display: portal entry and _end own display.
+		if (this.objectiveEl)
+			this.objectiveEl.style.visibility = on ? 'hidden' : ''
 	}
 
 	update(delta) {
@@ -357,6 +394,8 @@ export class Level1 extends Level {
 			this.spaceship
 		)
 		if (canister) this._onCanister(canister)
+		// After the hit test, so a rock that just hit is not still boxed.
+		this.collisionWarning.update(dt)
 		// Blink while invulnerable so the grace period is readable.
 		this.spaceship.shipGroup.visible =
 			this.invulnerableFor === 0 ||
@@ -410,6 +449,7 @@ export class Level1 extends Level {
 		this.portalEntry = true
 		this.portalEntryTime = 0
 		this.objectiveEl.style.display = 'none'
+		this.collisionWarning.clear()
 		this.endpoint.beginEntry()
 		this.spaceship.clearInput()
 		this.invulnerableFor = Number.POSITIVE_INFINITY
@@ -578,7 +618,7 @@ export class Level1 extends Level {
 	}
 
 	_updateHud(distance) {
-		this.hud.update({
+		const state = {
 			integrity: this.state.integrity,
 			progress: this._progress(distance),
 			score: this.state.score + this.nitrogenScore,
@@ -587,7 +627,15 @@ export class Level1 extends Level {
 			speed: this.spaceship.velocity.length(),
 			nitrogen: this.nitrogen,
 			boostTime: this.spaceship.nitrogenTimer,
-		})
+			// Cockpit-only readouts; the flat HUD ignores them.
+			maxSpeed: this.spaceship.maxSpeed,
+			hazardDistance: distance,
+			portalDistance: this.spaceship.position.distanceTo(
+				this.endpoint.position
+			),
+		}
+		this.hud.update(state)
+		this.cockpit.update(state)
 	}
 
 	/** @param {'escaped'|'captured'|'destroyed'} outcome */
@@ -596,6 +644,8 @@ export class Level1 extends Level {
 		const T = LEVEL1_TUNING
 		this.ended = true
 		if (this.objectiveEl) this.objectiveEl.style.display = 'none'
+		this._syncCockpit()
+		this.collisionWarning.clear()
 		const won = outcome === 'escaped'
 		const time = this.elapsedPlayTime
 		const hull = Math.max(0, this.state.integrity)
@@ -692,6 +742,7 @@ export class Level1 extends Level {
 		this.audio?.stopAmbience()
 		this.radio?.stop()
 		this.hud?.hide()
+		this.cockpit?.dispose()
 		this.objectiveEl?.remove()
 		const camera = this.sceneManager.camera
 		if (camera && this._baseCameraFar !== undefined) {

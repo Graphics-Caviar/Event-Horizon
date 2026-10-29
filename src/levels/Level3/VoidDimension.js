@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { VoidSpaceBackdrop } from './VoidSpaceBackdrop.js'
-import { VoidBoss } from './VoidBoss.js'
+import { VoidDrifters } from './VoidDrifters.js'
 
 // Player gun settings inside the void dimension
 const GUN_DAMAGE = 35 // damage per bullet that hits the boss
@@ -79,7 +79,8 @@ export class VoidDimension {
 			)
 		)
 		this.spaceBackdrop = new VoidSpaceBackdrop(level, this.group)
-		this.shards = this.spaceBackdrop.shards
+		this.drifters = new VoidDrifters(level, this.group)
+		this.exit = this.rings.at(-1).position
 		level.playerRoot.position.set(0, 8, 15)
 		level.playerRoot.visible = true
 		// First-person mode hides the model itself, not just its gameplay root.
@@ -606,8 +607,7 @@ export class VoidDimension {
 			dt = Math.min(delta, 0.05)
 		this.time += dt
 		this.spaceBackdrop.update(this.time)
-		this._attachGunToPilot()
-		this._updateCamera()
+		this.drifters.update(dt)
 		l.playerRoot.visible = true
 		if (l.pilotModel) l.pilotModel.visible = true
 		this.pilotLight.position
@@ -652,84 +652,10 @@ export class VoidDimension {
 			}
 			l.thrusting = flying
 			l.pilotWalk?.update(dt, 0, true)
-
-			// ── Boss fight logic ─────────────────────────────────────────
-			if (!this._bossDefeated && !this._playerDefeated) {
-				const playerPos = l.playerRoot.position
-				this._aimGunAtView()
-
-				// Update boss AI + fireballs
-				this.boss.update(dt, playerPos)
-
-				// Fireball hit: deduct player HP
-				if (this.boss.pendingHit) {
-					this._playerHP = Math.max(
-						0,
-						this._playerHP - BOSS_DAMAGE
-					)
-					// Sync to level HP so the main HUD bar reacts
-					l.playerHP = Math.round(
-						(this._playerHP /
-							PLAYER_MAX_HP) *
-							(l.maxPlayerHP ?? 100)
-					)
-					// Flash the HUD
-					l.hud?.setWarning?.(true)
-					setTimeout(
-						() =>
-							l.hud?.setWarning?.(
-								false
-							),
-						600
-					)
-					if (this._playerHP <= 0) {
-						this._playerDefeated = true
-						this._showOutcome(false)
-					}
-				}
-
-				// Boss defeated
-				if (this.boss.won && !this._bossDefeated) {
-					this._bossDefeated = true
-					l._bossDefeated = true
-					this._showOutcome(true)
-					l._completeMission()
-					return
-				}
-
-				// Player gun: Left-click or E key fires
-				this._gunCooldown = Math.max(
-					0,
-					this._gunCooldown - dt
-				)
-				const shooting =
-					l.keys.has('KeyE') || l._mouseDown
-				if (shooting && this._gunCooldown <= 0) {
-					this._gunCooldown = GUN_COOLDOWN
-					this._tryShoot(playerPos.clone())
-				}
-				this._updateBullets(dt, playerPos)
-
-				// Update objective text
-				const bossHpPct = Math.round(
-					(this.boss.hp / this.boss.maxHp) * 100
-				)
-				const myHpPct = Math.round(
-					(this._playerHP / PLAYER_MAX_HP) * 100
-				)
-				l.objectiveEl.innerHTML =
-					`<strong>VOID BOSS FIGHT</strong><br>` +
-					`<span style="color:#ff4400">VOID DEVOURER ${bossHpPct}% HP</span>` +
-					` &nbsp;|&nbsp; ` +
-					`<span style="color:#44ff88">YOUR HP ${myHpPct}%</span><br>` +
-					`<span style="font-size:11px;opacity:.8">` +
-					`Dodge fireballs (C descend / Space rise). Right-drag to aim, then left-click or E to shoot!` +
-					`</span>`
-
-				this._updateBossHUD()
-			} else if (this._playerDefeated) {
-				// Player died — game over handled by _showOutcome
-			}
+			l.objectiveEl.innerHTML =
+				'<strong>VOID DIMENSION // BEYOND MATTER</strong><br>WASD drift · Space rise · C descend · Shift boost<br>Avoid the three guardians. Follow the cyan rings to the far gate.'
+			if (l.playerRoot.position.distanceTo(this.exit) < 12)
+				l._completeMission()
 		}
 
 		// ── Environment animations ────────────────────────────────────────
@@ -776,6 +702,7 @@ export class VoidDimension {
 	}
 
 	dispose() {
+		this.drifters.dispose()
 		this.spaceBackdrop.dispose()
 		this.boss?.dispose()
 		// Clean up bullets

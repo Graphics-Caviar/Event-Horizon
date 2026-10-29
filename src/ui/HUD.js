@@ -8,7 +8,7 @@
  */
 
 /** 63.4 -> "1:03" */
-function formatClock(seconds) {
+export function formatClock(seconds) {
 	const total = Math.max(0, Math.floor(seconds))
 	return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
@@ -42,14 +42,23 @@ export class HUD {
 				.toUpperCase()
 		}
 		this.setWarning(false)
-		this.root?.classList.remove('hidden', 'hud-hit')
+		this.root?.classList.remove('hidden', 'hud-hit', 'hud-cockpit')
 	}
 
 	hide() {
 		clearTimeout(this._hitTimer)
 		this.root?.classList.add('hidden')
-		this.root?.classList.remove('hud-hit')
+		this.root?.classList.remove('hud-hit', 'hud-cockpit')
 		this.setWarning(false)
+	}
+
+	/**
+	 * While the first-person cockpit (CockpitHUD) is up, its dashboard
+	 * carries the stats, so the corner panels and the controls hint step
+	 * aside. The warning line and the hit/boost flashes stay.
+	 */
+	setCockpitMode(on) {
+		this.root?.classList.toggle('hud-cockpit', Boolean(on))
 	}
 
 	/**
