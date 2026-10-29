@@ -65,13 +65,10 @@ export class Level3 extends Level2 {
 		this.voidAudio = new VoidAudio(this.audio)
 		this.monuments = new VoidMonuments(this)
 		this.matterDimension = new MatterDimension(this)
-		const routeScale = Math.max(
-			1,
-			this.portalSite.distanceTo(this.landingSite) / 467
-		)
+		// Exactly thirty playable seconds, regardless of the route length.
 		this.survival = new MatterSurvival(this, {
-			countdown: 30 * routeScale,
-			collapseSeconds: 90 * routeScale,
+			countdown: 30,
+			collapseSeconds: 90,
 			...options.survivalConfig,
 		})
 		this.blade = new EnergyBlade(this)
@@ -418,7 +415,12 @@ export class Level3 extends Level2 {
 	_updatePlayerMovement(delta) {
 		if (this.transitionHeld || this.completed) return
 		const thrust = this.survival
-			? this.survival.burn(delta, this.keys.has('Space'))
+			? this.survival.burn(
+					delta,
+					this.keys.has('Space'),
+					this.keys.has('ShiftLeft') ||
+						this.keys.has('ShiftRight')
+				)
 			: this.keys.has('Space')
 		this.crouching =
 			this.keys.has('KeyC') && !this._airborne && !thrust
@@ -499,13 +501,18 @@ export class Level3 extends Level2 {
 		input.normalize().multiplyScalar(
 			this.keys.has('ShiftLeft') ||
 				this.keys.has('ShiftRight')
-				? 28
+				? 32
 				: 18
 		)
 		this.velocity.lerp(input, 1 - Math.exp(-5 * delta))
 		this._verticalSpeed = THREE.MathUtils.damp(
 			this._verticalSpeed,
-			thrust ? 15 : -12,
+			thrust
+				? this.keys.has('ShiftLeft') ||
+					this.keys.has('ShiftRight')
+					? 23
+					: 15
+				: -12,
 			4,
 			delta
 		)
@@ -711,7 +718,7 @@ export class Level3 extends Level2 {
 			const bladeHint = this.blade?.equipped
 				? ' · F swing blade'
 				: ''
-			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly (uses fuel) · Release to descend / C duck · ${bladeHint}<br>Fight through five escalating encounters to reach the rift. Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
+			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>Fight through five escalating encounters to reach the rift. Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
 			this._objectiveKey = ''
 		}
 	}

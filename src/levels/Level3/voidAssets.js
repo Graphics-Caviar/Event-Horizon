@@ -33,19 +33,22 @@ export const VOID_ASSETS = {
 		simplify: 0.24,
 	},
 	voidSentinel: {
-		path: '/assets/models/void/void-sentinel.glb',
+		path: '/assets/models/void/void-sentinel-web-rigged.glb',
+		rigged: true,
 		role: 'enemy · heavy',
 		fit: 7.2,
 		simplify: 0.2,
 	},
 	voidEntity: {
-		path: '/assets/models/void/void-entity.glb',
+		path: '/assets/models/void/void-entity-web-rigged.glb',
+		rigged: true,
 		role: 'enemy · ranged flyer',
 		fit: 6.6,
 		simplify: 0.2,
 	},
 	voidColossus: {
-		path: '/assets/models/void/void-colossus.glb',
+		path: '/assets/models/void/void-colossus-web-rigged.glb',
+		rigged: true,
 		role: 'boss',
 		fit: 9.5,
 		simplify: 0.22,
@@ -119,7 +122,10 @@ export async function loadVoidModel(assetManager, key) {
 	try {
 		await assetManager.preloadModel(def.path)
 		if (!_prepped.has(key)) {
-			if (!assetUrl(def.path).endsWith('-web.glb')) {
+			if (
+				!def.rigged &&
+				!assetUrl(def.path).endsWith('-web.glb')
+			) {
 				const raw = assetManager.getRawModel(def.path)
 				if (raw) {
 					await decimateModel(

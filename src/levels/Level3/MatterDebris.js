@@ -265,7 +265,11 @@ export class MatterDebris {
 			this.time >= this.nextEvent &&
 			(this.config.targetPlayer || this.zones.length)
 		) {
-			this.nextEvent = this.time + this.config.interval
+			this.nextEvent =
+				this.time +
+				(this.level.survival?.remaining <= 0
+					? 3.8
+					: this.config.interval)
 			if (this.config.targetPlayer) {
 				const point =
 					this.level.playerRoot.position.clone()

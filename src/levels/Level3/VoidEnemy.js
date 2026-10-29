@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { loadVoidModel } from './voidAssets.js'
+import { VoidRigAnimator } from './VoidRigAnimator.js'
 
 const CULL_DISTANCE = 260
 // Rover impact above this speed hurts the enemy instead of the crew
@@ -36,8 +37,8 @@ const glowTexture = () => {
 }
 
 /**
- * Combat personalities for the void warband. The GLBs have no rigs
- * (audited: 0 skins, 0 animation clips), so attacks are whole-body
+ * Combat personalities for the void warband. Rigged Void GLBs
+ * use procedural bone movement; nonrigged fallbacks retain body
  * choreography — the same phase timeline a boned arm swing would follow
  * (weight shift in `windup`, committed lunge in `active`, overshoot +
  * settle in `recover`) driven through lean, pitch, bank and stride rather
@@ -276,6 +277,7 @@ export class VoidEnemy {
 		})
 		this.group.add(model)
 		this._model = model
+		this.rigAnimator = new VoidRigAnimator(model, this.styleName)
 		this._buildGlow(box)
 		this._buildHpBar(box)
 		if (this.kind !== 'flyer') {
@@ -1256,6 +1258,11 @@ export class VoidEnemy {
 			)
 		}
 		this.group.rotation.y = this._heading
+		this.rigAnimator?.update(delta, {
+			state: this.state,
+			speed,
+			airborne: this.kind === 'flyer',
+		})
 	}
 
 	_syncToTerrain(delta) {
@@ -1471,6 +1478,7 @@ export class VoidEnemy {
 	_updateDeath(delta) {
 		if (this._deathT < 0) return
 		this._deathT += delta
+		this.rigAnimator?.update(delta, { state: 'dead' })
 		// Tip over, then sink below the crust; the wreck stays until the
 		// level tears down (same contract as Alien).
 		const tip = Math.min(1, this._deathT / 0.9)
@@ -1500,6 +1508,7 @@ export class VoidEnemy {
 
 	dispose() {
 		this._disposed = true
+		this.rigAnimator?.dispose()
 		this._hpBar?.texture.dispose()
 		this._voidAudio?.stopLoop(this._loopId)
 		if (this._boltPool) {
