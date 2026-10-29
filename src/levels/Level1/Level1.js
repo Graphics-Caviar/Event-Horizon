@@ -8,6 +8,7 @@ import { HUD } from '../../ui/HUD.js'
 import { Skybox } from '../../skybox.js'
 import { AsteroidField } from './AsteroidField.js'
 import { BlackHole } from './BlackHole.js'
+import { CollisionWarning } from './CollisionWarning.js'
 import { Endpoint } from './Endpoint.js'
 import { Spaceship } from './Spaceship.js'
 
@@ -180,6 +181,12 @@ export class Level1 extends Level {
 		this.asteroidField.clearAround(
 			this.spaceship.position,
 			T.safeStartRadius
+		)
+		// Red boxes around the rocks the ship is about to fly into.
+		this.collisionWarning = new CollisionWarning(
+			this,
+			this.asteroidField,
+			this.spaceship
 		)
 
 		// Tagona's finish-line beacon (PR #15) placed it at z = 2500. It now
@@ -357,6 +364,8 @@ export class Level1 extends Level {
 			this.spaceship
 		)
 		if (canister) this._onCanister(canister)
+		// After the hit test, so a rock that just hit is not still boxed.
+		this.collisionWarning.update(dt)
 		// Blink while invulnerable so the grace period is readable.
 		this.spaceship.shipGroup.visible =
 			this.invulnerableFor === 0 ||
@@ -410,6 +419,7 @@ export class Level1 extends Level {
 		this.portalEntry = true
 		this.portalEntryTime = 0
 		this.objectiveEl.style.display = 'none'
+		this.collisionWarning.clear()
 		this.endpoint.beginEntry()
 		this.spaceship.clearInput()
 		this.invulnerableFor = Number.POSITIVE_INFINITY
@@ -596,6 +606,7 @@ export class Level1 extends Level {
 		const T = LEVEL1_TUNING
 		this.ended = true
 		if (this.objectiveEl) this.objectiveEl.style.display = 'none'
+		this.collisionWarning.clear()
 		const won = outcome === 'escaped'
 		const time = this.elapsedPlayTime
 		const hull = Math.max(0, this.state.integrity)
