@@ -1854,13 +1854,14 @@ export class Level2 extends Level {
 		if (firstPersonWalking && bobSpeed > 0.02) {
 			this._walkCameraBobPhase =
 				(this._walkCameraBobPhase +
-					(bobSpeed * delta * Math.PI * 2) / FOOTSTEP_STRIDE) %
+					(bobSpeed * delta * Math.PI * 2) /
+						FOOTSTEP_STRIDE) %
 				(Math.PI * 2)
 		}
 		const bobTarget = firstPersonWalking
 			? Math.sin(this._walkCameraBobPhase) *
-				  FIRST_PERSON_WALK_BOB *
-				  clamp01(bobSpeed / WALK_SPEED)
+				FIRST_PERSON_WALK_BOB *
+				clamp01(bobSpeed / WALK_SPEED)
 			: 0
 		this._walkCameraBob = THREE.MathUtils.damp(
 			this._walkCameraBob,
@@ -2415,7 +2416,8 @@ export class Level2 extends Level {
 					this.playerRoot.position.x,
 					this.playerRoot.position.y +
 						1.5 +
-						(this._airborne || this.completed
+						(this._airborne ||
+						this.completed
 							? 0
 							: this._walkCameraBob),
 					this.playerRoot.position.z
