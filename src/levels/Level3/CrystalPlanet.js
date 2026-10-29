@@ -168,8 +168,10 @@ export class CrystalPlanet extends AlienPlanet {
 			colors.setXYZ(i, color.r, color.g, color.b)
 		}
 		colors.needsUpdate = true
+		// Standard (not Physical) shading: the physical-only features were all
+		// disabled here, so the lighter shader is visually identical.
 		this.terrain.material = this.level.own(
-			new THREE.MeshPhysicalMaterial({
+			new THREE.MeshStandardMaterial({
 				color: 0xffffff,
 				vertexColors: true,
 				map: this.surfaceTexture,
@@ -177,8 +179,6 @@ export class CrystalPlanet extends AlienPlanet {
 				bumpScale: 0.8,
 				roughness: 1,
 				metalness: 0,
-				clearcoat: 0,
-				specularIntensity: 0,
 				envMapIntensity: 0,
 			})
 		)
@@ -229,6 +229,12 @@ export class CrystalPlanet extends AlienPlanet {
 	_buildOutcrops() {}
 	_buildGravel() {}
 	_buildLava() {
-		return { update() {} }
+		// Level 3 has no molten channel. Keep the shared LavaStream query
+		// surface so Level2's contact-damage controller can ask safely.
+		return {
+			update() {},
+			touches: () => false,
+			surfaceHeightAt: () => null,
+		}
 	}
 }

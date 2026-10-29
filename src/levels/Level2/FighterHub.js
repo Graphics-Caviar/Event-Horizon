@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 import { CinematicShip } from '../../cutscenes/CinematicShip.js'
 
+// The parked anomaly fighters are 18 m long; a circular footprint keeps the
+// pilot from walking through their hulls without boxing in the landing pads.
+const PARKED_FIGHTER_COLLIDER_RADIUS = 9
+
 /** Persistent surface landmark; the cinematic launches the fleet seen in gameplay. */
 export class FighterHub {
 	constructor(level) {
@@ -9,6 +13,9 @@ export class FighterHub {
 		this.group.name = 'alien-fighter-hub'
 		level.addObject(this.group)
 		this.ships = []
+		// Static hull colliders belonging to the parked ships, so the cinematic
+		// can release them when the fleet takes off.
+		this.colliders = []
 		const site = level.roverApproach.shipSite
 		const ground = (x, z) => level.planet.heightAt(x, z)
 		const metal = level.own(
@@ -180,12 +187,27 @@ export class FighterHub {
 		ship.group.quaternion.copy(this.level.portal.group.quaternion)
 		this.group.add(ship.group)
 		this.ships.push(ship)
+		this.colliders.push(
+			this.level._registerGameplayCollider(
+				x,
+				z,
+				PARKED_FIGHTER_COLLIDER_RADIUS,
+				'fighter',
+				ship.group
+			)
+		)
 		ship.ready.then(() => {
 			if (this.disposed) return
 			ship.group.position.y = floor - ship.hullBottom
 			ship.lockAppearance()
 		})
 		return ship
+	}
+	/** Release the parked hulls once the scripted takeoff owns the ships. */
+	setCollisionEnabled(enabled) {
+		for (const collider of this.colliders) {
+			collider.enabled = enabled
+		}
 	}
 	update(dt) {
 		this.crown.rotation.z += dt * 0.16

@@ -10,6 +10,18 @@
 					"order": "ASCENDING"
 				}
 			]
+		},
+		{
+			"collectionGroup": "scores",
+			"queryScope": "COLLECTION",
+			"fields": [
+				{ "fieldPath": "userId", "order": "ASCENDING" },
+				{ "fieldPath": "score", "order": "DESCENDING" },
+				{
+					"fieldPath": "timeElapsed",
+					"order": "ASCENDING"
+				}
+			]
 		}
 	],
 	"fieldOverrides": []

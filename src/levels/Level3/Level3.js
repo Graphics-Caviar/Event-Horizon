@@ -43,6 +43,8 @@ export class Level3 extends Level2 {
 				collider.enabled = false
 		}
 		this.hazards.enabled = false
+		// Level 3 owns the objective panel; stop Level2 rewriting it each frame.
+		this._customObjective = true
 		this.roverDisabled = true
 		this.rover.group.visible = false
 		if (this.rover.collider) this.rover.collider.enabled = false
@@ -302,8 +304,18 @@ export class Level3 extends Level2 {
 				object.position
 					.copy(object.target.position)
 					.add(new THREE.Vector3(-180, 155, -112))
+				// The void wastes most of the 400 m shadow frustum on empty
+				// ground; 1024² with PCF is plenty and much cheaper to rasterize.
+				object.shadow.mapSize.set(1024, 1024)
 			}
 		}
+		const renderer = this.sceneManager.renderer
+		if (renderer) {
+			renderer.shadowMap.type = THREE.PCFShadowMap
+			renderer.shadowMap.autoUpdate = false
+			renderer.shadowMap.needsUpdate = true
+		}
+		this._shadowTick = 0
 	}
 
 	_buildJetpack() {
@@ -610,10 +622,14 @@ export class Level3 extends Level2 {
 				this.levelHudEl.appendChild(this.survivalHudEl)
 			}
 			const fuel = Math.ceil(this.survival.fuel)
-			const percent =
-				(100 * this.survival.fuel) /
-				this.survival.config.maxFuel
-			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
+			const percent = Math.round(
+				(100 * fuel) / this.survival.config.maxFuel
+			)
+			const survivalHud = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
+			if (this._survivalHudHtml !== survivalHud) {
+				this._survivalHudHtml = survivalHud
+				this.survivalHudEl.innerHTML = survivalHud
+			}
 		}
 		const target = this.aliens
 			.filter(
@@ -633,9 +649,13 @@ export class Level3 extends Level2 {
 						this.playerRoot.position
 					)
 			)[0]
-		this.enemyStatusEl.textContent = target
+		const enemyStatus = target
 			? `${target.styleName.toUpperCase()}  ${target.hp} / ${target.maxHp} HP`
 			: ''
+		if (this._enemyStatusText !== enemyStatus) {
+			this._enemyStatusText = enemyStatus
+			this.enemyStatusEl.textContent = enemyStatus
+		}
 	}
 
 	_checkPortalArrival() {
@@ -656,6 +676,14 @@ export class Level3 extends Level2 {
 
 	update(delta) {
 		if (this.paused) return
+		// Refresh the shadow map on alternate frames: half the shadow-pass
+		// cost, with no perceptible lag at 30–60 fps.
+		const renderer = this.sceneManager.renderer
+		if (renderer) {
+			this._shadowTick = (this._shadowTick + 1) & 1
+			if (this._shadowTick === 0)
+				renderer.shadowMap.needsUpdate = true
+		}
 		if (this.voidDimension) {
 			this.voidDimension.update(delta)
 			return
@@ -851,6 +879,8 @@ export class Level3 extends Level2 {
 		this.stormLandscape?.dispose()
 		if (import.meta.env.DEV && window.__level3 === this)
 			delete window.__level3
+		const renderer = this.sceneManager.renderer
+		if (renderer) renderer.shadowMap.autoUpdate = true
 		super.dispose()
 	}
 }

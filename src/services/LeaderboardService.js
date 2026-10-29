@@ -23,6 +23,7 @@ import {
 	getDocs,
 	query,
 	orderBy,
+	where,
 	limit as limitTo,
 	serverTimestamp,
 } from 'firebase/firestore'
@@ -148,6 +149,39 @@ export class LeaderboardService {
 				)
 			}
 			return []
+		}
+	}
+
+	/** Best run for the signed-in player, even when it falls outside top-N. */
+	async getPersonalBest(levelId, userId) {
+		if (
+			!isFirebaseReady() ||
+			!LEVEL_IDS.includes(levelId) ||
+			!userId
+		)
+			return null
+
+		try {
+			const snapshot = await withTimeout(
+				getDocs(
+					query(
+						this._scoresRef(levelId),
+						where('userId', '==', userId),
+						orderBy('score', 'desc'),
+						orderBy('timeElapsed', 'asc'),
+						limitTo(1)
+					)
+				),
+				undefined,
+				`read ${levelId} personal best`
+			)
+			return snapshot.docs[0]?.data() ?? null
+		} catch (error) {
+			console.warn(
+				`[Leaderboard] Personal best read for ${levelId} failed:`,
+				error?.message
+			)
+			return null
 		}
 	}
 

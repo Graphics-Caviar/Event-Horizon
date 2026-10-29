@@ -957,6 +957,30 @@ button:hover {
 	letter-spacing: 1px;
 }
 
+.help-objectives {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.help-level {
+	padding: 12px 14px;
+	background: rgba(77, 227, 255, 0.05);
+	border: 1px solid rgba(77, 227, 255, 0.18);
+	border-radius: 6px;
+}
+.help-level h4 {
+	margin: 0 0 6px;
+	font-size: 12px;
+	letter-spacing: 1px;
+	color: var(--cyan);
+}
+.help-level p {
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 1.6;
+	color: rgba(220, 232, 245, 0.82);
+}
+
 .btn-secondary {
 	background: transparent;
 	border-color: rgba(120, 160, 220, 0.4);
@@ -1936,6 +1960,26 @@ button:hover {
 .lb-rows {
 	max-height: 46vh;
 	overflow-y: auto;
+}
+
+.lb-personal {
+	margin: 14px 0;
+	padding: 10px 12px 4px;
+	border: 1px solid rgba(77, 227, 255, 0.22);
+	background: rgba(77, 227, 255, 0.035);
+}
+
+.lb-personal-label {
+	margin-bottom: 4px;
+	color: var(--cyan);
+	font-size: 9px;
+	letter-spacing: 1.8px;
+}
+
+.lb-personal-row {
+	padding-right: 0;
+	padding-left: 0;
+	border-bottom: 0;
 }
 
 .lb-rank {
