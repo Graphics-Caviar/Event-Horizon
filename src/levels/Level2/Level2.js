@@ -1887,10 +1887,12 @@ export class Level2 extends Level {
 
 		// Feed the measured travel distance to the skeleton so the stride
 		// rate tracks the actual ground speed; the jump arc drives the
-		// airborne and landing poses.
+		// airborne and landing poses, acceleration and turning the lean.
 		this.pilotWalk?.update(delta, travelled, false, {
 			airborne: this._airborne,
 			verticalSpeed: this._verticalSpeed,
+			accel: this._accel,
+			turnRate: this._turnRate,
 		})
 	}
 

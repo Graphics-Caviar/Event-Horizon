@@ -1,21 +1,25 @@
 import * as THREE from 'three'
 
-const { clamp, lerp, damp, smoothstep } = THREE.MathUtils
+const { clamp, lerp, damp, smoothstep, smootherstep } = THREE.MathUtils
 const TAU = Math.PI * 2
+const fract = (x) => x - Math.floor(x)
 
 // Per-pilot calibration in height-normalised model space: feet at y = 0,
-// crown at y = 1, +z forward, +x the pilot's left. Joint heights and gait
-// numbers were tuned against the supplied meshes. `legZ` and `centerX`
-// move every pivot onto the pilot's actual centreline.
+// crown at y = 1, +z forward, +x the pilot's left. Joint heights were tuned
+// against the supplied meshes; `legZ` and `centerX` move every pivot onto
+// the pilot's actual centreline. `stride`/`sprint` are half the planted
+// foot's travel per step while walking/running. `posture` straightens a
+// modelled back-arched stance once the pilot moves.
 export const PILOT_RIGS = {
 	zara: {
 		yaw: 0,
-		stride: 0.14,
-		sprint: 0.19,
+		stride: 0.18,
+		sprint: 0.24,
 		stance: 0.6,
-		lift: 0.018,
-		arm: 0.2,
-		sway: 0.006,
+		lift: 0.03,
+		arm: 0.3,
+		sway: 0.008,
+		posture: 0.14,
 		hip: 0.46,
 		knee: 0.24,
 		ankle: 0.04,
@@ -25,12 +29,13 @@ export const PILOT_RIGS = {
 	},
 	kai: {
 		yaw: 1.05,
-		stride: 0.12,
-		sprint: 0.17,
-		stance: 0.64,
-		lift: 0.022,
-		arm: 0.14,
-		sway: 0.004,
+		stride: 0.16,
+		sprint: 0.22,
+		stance: 0.62,
+		lift: 0.032,
+		arm: 0.24,
+		sway: 0.006,
+		posture: -0.06,
 		hip: 0.47,
 		knee: 0.25,
 		ankle: 0.07,
@@ -40,12 +45,13 @@ export const PILOT_RIGS = {
 	},
 	nyx: {
 		yaw: 0,
-		stride: 0.13,
-		sprint: 0.18,
+		stride: 0.17,
+		sprint: 0.22,
 		stance: 0.6,
-		lift: 0.016,
-		arm: 0.12,
-		sway: 0.003,
+		lift: 0.028,
+		arm: 0.24,
+		sway: 0.006,
+		posture: 0.04,
 		hip: 0.47,
 		knee: 0.25,
 		ankle: 0.045,
@@ -65,8 +71,17 @@ const LEG_X = 0.07
 // box-built fallback pilot): armpit height and the slanted inner edge.
 const DEFAULT_ARM = { pit: 0.66, ys: [0.44, 0.66], xs: [0.145, 0.09] }
 // Running replaces the walk's double support with a short flight phase.
-const RUN_STANCE = 0.42
-const RUN_LIFT = 0.1
+const RUN_STANCE = 0.38
+// Peak ankle height of the running heel kick.
+const RUN_LIFT = 0.13
+// Half the distance between the feet while walking and running; feet land
+// close to the midline instead of in the model's wide standing pose.
+const TRACK_WALK = 0.055
+const TRACK_RUN = 0.04
+// Ball of the foot ahead of, and heel behind, the ankle: the pivots for
+// toe-off and heel strike.
+const TOE = 0.06
+const HEEL = 0.025
 
 // Bone order is the skin index order.
 const BONE_NAMES = [
@@ -88,6 +103,7 @@ const BONE_NAMES = [
 	'forearm_R',
 ]
 const B = Object.fromEntries(BONE_NAMES.map((name, i) => [name, i]))
+const SIDES = ['L', 'R']
 
 // Orient the static asset before fitting it; each source uses a different yaw.
 export function orientPilot(model, key) {
@@ -136,8 +152,63 @@ export function measurePilotArms(points) {
 			ys.push(Y0 + (b + 0.5) * BAND)
 			xs.push(X0 + ((start + c) / 2) * BIN)
 		}
-		if (ys.length < 2) return DEFAULT_ARM
-		return { pit: Math.min(ys[ys.length - 1], 0.72), ys, xs }
+		const arm = ys.length < 2 ? DEFAULT_ARM : { ys, xs }
+		const top = arm.ys.length - 1
+		return {
+			...arm,
+			pit: Math.min(arm.ys[top], 0.72),
+			// How far the hanging arm angles away from the body.
+			slant: clamp(
+				Math.atan2(
+					arm.xs[0] - arm.xs[top],
+					arm.ys[top] - arm.ys[0]
+				),
+				0,
+				0.35
+			),
+		}
+	})
+}
+
+// Most pilots stand with their feet apart, some with one leg splayed. Find
+// each leg's upper thigh and ankle so the skeleton follows the actual limb
+// and the gait can bring the feet back under the body.
+export function measurePilotLegs(points, profile) {
+	const median = (values) => {
+		values.sort((a, b) => a - b)
+		return values[values.length >> 1]
+	}
+	const band = (lo, hi, sign) => {
+		const xs = []
+		const zs = []
+		for (let i = 0; i < points.length; i += 3) {
+			const y = points[i + 1]
+			const outward = points[i] * sign
+			if (
+				y < lo ||
+				y >= hi ||
+				outward < 0.015 ||
+				outward > 0.22
+			)
+				continue
+			xs.push(points[i])
+			zs.push(points[i + 2])
+		}
+		return xs.length > 40 ? { x: median(xs), z: median(zs) } : null
+	}
+	return [1, -1].map((sign) => {
+		const thigh = band(profile.hip - 0.12, profile.hip - 0.08, sign)
+		const ankle = band(
+			profile.ankle - 0.02,
+			profile.ankle + 0.02,
+			sign
+		)
+		return {
+			hipX: thigh?.x ?? sign * LEG_X,
+			hipZ: thigh?.z ?? 0,
+			footX: ankle?.x ?? sign * LEG_X,
+			footZ: ankle?.z ?? 0,
+		}
 	})
 }
 
@@ -243,60 +314,85 @@ export function pilotVertexWeights(x, y, z, profile, arms) {
 	return out
 }
 
-// Gait state for one leg at a point in the cycle.
-function legCycle(cycle, stance, stride) {
-	const swing = clamp((cycle - stance) / (1 - stance), 0, 1)
-	const ease = swing * swing * swing * (swing * (swing * 6 - 15) + 10)
-	const planted = cycle < stance
-	const z = planted
-		? lerp(stride, -stride, cycle / stance)
-		: lerp(-stride, stride, ease)
+// Ankle offset when the foot pitches about the ball (heel up, pitch > 0)
+// or the heel (toes up, pitch < 0), so the contact point stays put.
+function footPivot(pitch, ankle) {
+	if (pitch >= 0)
+		return {
+			y:
+				ankle * (Math.cos(pitch) - 1) +
+				TOE * Math.sin(pitch),
+			z:
+				ankle * Math.sin(pitch) +
+				TOE * (1 - Math.cos(pitch)),
+		}
 	return {
-		swing,
-		z,
-		planted: planted ? Math.abs(z) : 0,
-		clearance: Math.sin(swing * Math.PI) ** 2,
+		y: ankle * (Math.cos(pitch) - 1) - HEEL * Math.sin(pitch),
+		z: ankle * Math.sin(pitch) + HEEL * (Math.cos(pitch) - 1),
 	}
 }
 
-// Two-bone IK in the sagittal plane. Rotations follow three's +x convention:
-// a negative hip angle swings the foot forward; the knee bends positive.
-function solveLeg(profile, pelvis, targetY, targetZ) {
-	const upper = profile.hip - profile.knee
-	const lower = profile.knee - profile.ankle
-	const vertical = profile.hip + pelvis - targetY
-	const reach = clamp(
-		Math.hypot(vertical, targetZ),
-		0.025,
-		upper + lower - 1e-4
-	)
-	const hip =
-		Math.atan2(-targetZ, vertical) -
-		Math.acos(
-			clamp(
-				(upper * upper +
-					reach * reach -
-					lower * lower) /
-					(2 * upper * reach),
-				-1,
-				1
-			)
-		)
-	const knee = Math.acos(
-		clamp(
-			(reach * reach - upper * upper - lower * lower) /
-				(2 * upper * lower),
-			-1,
-			1
-		)
-	)
-	return { hip, knee }
+// Where one foot is at a point in the cycle, relative to the body: its
+// ankle offset (y, z) and pitch. The planted foot tracks the ground from
+// heel strike to toe-off; the swing foot clears the ground and reaches
+// forward. Running lands on the forefoot, kicks the heel up behind and
+// then drives the knee through.
+function footPlan(cycle, stance, stride, lift, run, ankle) {
+	const ahead = stride * (1 - 0.15 * run)
+	const behind = stride * (1 + 0.15 * run)
+	const strike = -0.22 * (1 - 0.8 * run)
+	const pushOff = lerp(0.5, 0.8, run)
+	if (cycle < stance) {
+		const u = cycle / stance
+		const pitch =
+			strike * (1 - smoothstep(u, 0, 0.2)) +
+			pushOff * smoothstep(u, lerp(0.62, 0.45, run), 1)
+		const pivot = footPivot(pitch, ankle)
+		return {
+			contact: true,
+			u,
+			z: lerp(ahead, -behind, u) + pivot.z,
+			y: pivot.y,
+			pitch,
+		}
+	}
+	const s = (cycle - stance) / (1 - stance)
+	// Carry the toe-off and heel-strike poses across the swing.
+	const leave = 1 - smootherstep(s, 0, 0.35)
+	const arrive = smoothstep(s, 0.75, 1)
+	const off = footPivot(pushOff, ankle)
+	const on = footPivot(strike, ankle)
+	const walkZ = lerp(-behind, ahead, smootherstep(s, 0, 1))
+	const walkY = lift * Math.sin(Math.PI * s) ** 2
+	const runZ = lerp(-behind, ahead, smootherstep(s, 0.12, 1))
+	const runY = RUN_LIFT * Math.sin(Math.PI * s ** 0.6) ** 1.5
+	return {
+		contact: false,
+		u: 0,
+		z: lerp(walkZ, runZ, run) + off.z * leave + on.z * arrive,
+		y: lerp(walkY, runY, run) + off.y * leave + on.y * arrive,
+		pitch:
+			pushOff * leave +
+			strike * arrive -
+			lerp(0.15, 0.05, run) * Math.sin(Math.PI * s),
+	}
 }
+
+const _target = new THREE.Vector3()
+const _pole = new THREE.Vector3()
+const _hinge = new THREE.Vector3()
+const _dir = new THREE.Vector3()
+const _side = new THREE.Vector3()
+const _basis = new THREE.Matrix4()
+const _hipsInverse = new THREE.Quaternion()
+const _aim = new THREE.Quaternion()
+const _foot = new THREE.Quaternion()
+const _euler = new THREE.Euler()
 
 // Replaces each pilot mesh with a skinned copy driven by a generated skeleton,
 // then poses that skeleton procedurally for walking, running and jumping.
 // Keeps the old PilotWalk surface (footOffset, height, phase, update) so the
-// levels and cutscenes need no changes beyond passing the jump state.
+// levels and cutscenes need no changes beyond passing the motion state.
 export class PilotRig {
 	constructor(level, model, character = 'zara', options = {}) {
 		this.profile = PILOT_RIGS[character] || PILOT_RIGS.zara
@@ -310,6 +406,10 @@ export class PilotRig {
 		this.run = 0
 		this.air = 0
 		this.landing = 0
+		this.speed = 0
+		this.lean = 0
+		this.bank = 0
+		this.time = 0
 		this.stride = this.profile.stride
 		this.stance = this.profile.stance
 		this._wasAirborne = false
@@ -340,8 +440,10 @@ export class PilotRig {
 			offset += points.length
 		}
 		this.arms = measurePilotArms(all)
+		this.legs = measurePilotLegs(all, this.profile)
 		this._buildSkeleton(model, origin)
 		this._skinMeshes(level, meshes)
+		this._pose(0)
 	}
 
 	// Every mesh vertex in normalised space. matrixWorld still equals the
@@ -386,6 +488,19 @@ export class PilotRig {
 		const elbowX = this.arms.map(
 			(arm) => armEdge(arm, ELBOW) + 0.03
 		)
+		// Each leg is a straight hip-ankle line through the measured limb.
+		const legPoints = this.legs.map((leg) => {
+			const t = (p.hip - p.knee) / (p.hip - p.ankle)
+			return {
+				hip: [leg.hipX, p.hip, leg.hipZ],
+				knee: [
+					lerp(leg.hipX, leg.footX, t),
+					p.knee,
+					lerp(leg.hipZ, leg.footZ, t),
+				],
+				ankle: [leg.footX, p.ankle, leg.footZ],
+			}
+		})
 		const bones = BONE_NAMES.map((name) => {
 			const bone = new THREE.Bone()
 			bone.name = `pilot_${name}`
@@ -399,12 +514,12 @@ export class PilotRig {
 			chest: [0, CHEST, 0],
 			head: [0, NECK, 0],
 			cloak: [0, SPINE, -0.06],
-			thigh_L: [LEG_X, p.hip, 0],
-			shin_L: [LEG_X, p.knee, 0],
-			foot_L: [LEG_X, p.ankle, 0],
-			thigh_R: [-LEG_X, p.hip, 0],
-			shin_R: [-LEG_X, p.knee, 0],
-			foot_R: [-LEG_X, p.ankle, 0],
+			thigh_L: legPoints[0].hip,
+			shin_L: legPoints[0].knee,
+			foot_L: legPoints[0].ankle,
+			thigh_R: legPoints[1].hip,
+			shin_R: legPoints[1].knee,
+			foot_R: legPoints[1].ankle,
 			upperArm_L: [shoulder[0].x, shoulder[0].y, 0],
 			forearm_L: [elbowX[0], ELBOW, 0],
 			upperArm_R: [-shoulder[1].x, shoulder[1].y, 0],
@@ -468,6 +583,31 @@ export class PilotRig {
 				bones[B[name]].position.clone(),
 			])
 		)
+		// Rest frame of each leg for the IK: direction down the leg and the
+		// knee hinge (the model's x axis, square to the leg).
+		this.legs.forEach((leg, i) => {
+			const side = SIDES[i]
+			const knee = this.rest[`shin_${side}`]
+			const ankle = this.rest[`foot_${side}`]
+			leg.upper = knee.length()
+			leg.lower = ankle.length()
+			leg.length = (leg.upper + leg.lower) / h
+			leg.down = knee.clone().normalize()
+			leg.hinge = new THREE.Vector3(1, 0, 0)
+				.addScaledVector(leg.down, -leg.down.x)
+				.normalize()
+			leg.restBasis =
+				new THREE.Quaternion().setFromRotationMatrix(
+					_basis.makeBasis(
+						leg.hinge,
+						leg.down,
+						_side.crossVectors(
+							leg.hinge,
+							leg.down
+						)
+					)
+				)
+		})
 		this.skeleton = new THREE.Skeleton(bones)
 	}
 
@@ -577,17 +717,21 @@ export class PilotRig {
 			)
 	}
 
-	// `motion.airborne` and `motion.verticalSpeed` drive the jump pose;
-	// callers without a jump simply leave them out.
+	// `motion` carries what the level knows about the body's movement:
+	// `airborne`/`verticalSpeed` for jumps, `accel` (ground speed change,
+	// units/s²) to lean into speeding up, and `turnRate` (rad/s, positive
+	// turning left) to bank into turns. All are optional.
 	update(delta, distance, boarded, motion = {}) {
 		const p = this.profile
 		const airborne = !boarded && !!motion.airborne
 		const moving = !boarded && !airborne && distance > 0.0001
 		const speed = delta > 0 ? distance / delta : 0
+		this.time += delta
 
 		this.amount = boarded
 			? 0
-			: damp(this.amount, moving ? 1 : 0, 16, delta)
+			: damp(this.amount, moving ? 1 : 0, 12, delta)
+		this.speed = damp(this.speed, moving ? speed : 0, 10, delta)
 		if (!airborne)
 			this.run = damp(
 				this.run,
@@ -598,12 +742,35 @@ export class PilotRig {
 							this.runTo
 						)
 					: 0,
-				6,
+				5,
 				delta
 			)
 		this.air = boarded
 			? 0
 			: damp(this.air, airborne ? 1 : 0, 14, delta)
+		const grounded = !boarded && !airborne
+		this.lean = damp(
+			this.lean,
+			grounded
+				? clamp((motion.accel ?? 0) * 0.006, -0.1, 0.16)
+				: 0,
+			6,
+			delta
+		)
+		this.bank = damp(
+			this.bank,
+			grounded
+				? clamp(
+						-(motion.turnRate ?? 0) *
+							this.speed *
+							0.012,
+						-0.14,
+						0.14
+					)
+				: 0,
+			6,
+			delta
+		)
 		// Touchdown: absorb the impact with a crouch sized by fall speed.
 		if (this._wasAirborne && !airborne && !boarded)
 			this.landing = Math.max(
@@ -614,7 +781,7 @@ export class PilotRig {
 		this._wasAirborne = airborne
 		this._lastVerticalSpeed = motion.verticalSpeed ?? 0
 
-		// Extend the stride and shorten ground contact when sprinting, then
+		// Lengthen the stride and shorten ground contact when sprinting, then
 		// advance the phase by measured travel so planted feet never skate.
 		this.stride = damp(
 			this.stride,
@@ -638,115 +805,267 @@ export class PilotRig {
 		const amount = this.amount
 		const run = this.run
 		const air = this.air
-		const stride = this.stride
+		const landing = this.landing
+		const gait = amount * (1 - air)
 		const stance = this.stance
-		const lift = lerp(p.lift, RUN_LIFT, run)
 		const cycle = this.phase / TAU
-		const legLength = p.hip - p.ankle
-
-		// Both legs share one pelvis height, dropping just enough to keep the
-		// farther planted foot reachable during double support.
-		const legs = [
-			legCycle(((cycle % 1) + 1) % 1, stance, stride),
-			legCycle((((cycle + 0.5) % 1) + 1) % 1, stance, stride),
-		]
-		const support = Math.max(legs[0].planted, legs[1].planted)
-		const pelvis =
-			Math.sqrt(legLength * legLength - support * support) -
-			legLength
-		// Landing crouch: bend both knees under a lowered pelvis.
-		const crouchDrop = this.landing * 0.085
-		const crouch = solveLeg(p, -crouchDrop, p.ankle, 0)
-		const crouchHip = crouchDrop > 0 ? crouch.hip : 0
-		const crouchKnee = crouchDrop > 0 ? crouch.knee : 0
-
-		// Airborne: tuck on the way up, reach for the ground on the way down.
 		const fall = smoothstep(-verticalSpeed, -2, 6)
-		const airLegs = [
-			{
-				hip: lerp(-0.8, -0.3, fall),
-				knee: lerp(1.25, 0.35, fall),
-			},
-			{
-				hip: lerp(-0.35, -0.15, fall),
-				knee: lerp(0.8, 0.25, fall),
-			},
-		]
 
-		const sides = ['L', 'R']
-		legs.forEach((leg, i) => {
-			const side = sides[i]
-			const solved = solveLeg(
-				p,
-				pelvis,
-				p.ankle + leg.clearance * lift,
-				leg.z
-			)
-			let hip = solved.hip * amount + crouchHip
-			let knee = solved.knee * amount + crouchKnee
-			const roll =
-				0.14 *
-				leg.clearance *
-				Math.cos(leg.swing * Math.PI) *
-				amount
-			let foot = -hip - knee + roll
-			hip = lerp(hip, airLegs[i].hip, air)
-			knee = lerp(knee, airLegs[i].knee, air)
-			foot = lerp(foot, -hip - knee + 0.35 * (1 - fall), air)
-			bones[`thigh_${side}`].rotation.x = hip
-			bones[`shin_${side}`].rotation.x = knee
-			bones[`foot_${side}`].rotation.x = foot
+		// Foot targets relative to the body, blended from the standing pose
+		// into the gait and the airborne tuck.
+		const track = lerp(TRACK_WALK, TRACK_RUN, run)
+		const plans = [fract(cycle), fract(cycle + 0.5)].map((c) =>
+			footPlan(c, stance, this.stride, p.lift, run, p.ankle)
+		)
+		const feet = plans.map((plan, i) => {
+			const leg = this.legs[i]
+			const sign = i === 0 ? 1 : -1
+			// Rising: one knee tucks higher; falling: both reach down.
+			const airY = lerp(i === 0 ? 0.2 : 0.13, 0.04, fall)
+			const airZ = lerp(i === 0 ? 0.06 : -0.05, 0.03, fall)
+			return {
+				x: lerp(
+					lerp(leg.footX, sign * track, amount),
+					sign * 0.06,
+					air
+				),
+				y: p.ankle + lerp(plan.y * amount, airY, air),
+				z: lerp(
+					lerp(leg.footZ, plan.z, amount),
+					airZ,
+					air
+				),
+				pitch: lerp(
+					plan.pitch * amount,
+					lerp(0.45, 0.05, fall),
+					air
+				),
+			}
 		})
 
-		// Weight shift over the supporting hip; the thighs lean back so the
-		// planted feet stay put.
-		const sway = Math.sin(this.phase) * p.sway * amount * (1 - air)
-		const hipsY = (pelvis * amount - crouchDrop) * (1 - air)
+		// Pelvis height: walking keeps it as high as the planted feet allow
+		// (lowest in double support) with slightly soft knees; running sinks
+		// through each contact and floats in the flight phase.
+		const half = fract(cycle * 2) * 0.5
+		const runPelvis =
+			half < stance
+				? -0.015 -
+					0.022 *
+						Math.sin(
+							(Math.PI * half) /
+								stance
+						)
+				: -0.015 +
+					0.012 *
+						Math.sin(
+							(Math.PI *
+								(half -
+									stance)) /
+								Math.max(
+									0.5 -
+										stance,
+									1e-3
+								)
+						)
+		let reachable = Infinity
+		plans.forEach((plan, i) => {
+			if (!plan.contact) return
+			const leg = this.legs[i]
+			const foot = feet[i]
+			const lateral = foot.x - leg.hipX
+			const forward = foot.z - leg.hipZ
+			const room = Math.sqrt(
+				Math.max(
+					0,
+					leg.length * leg.length -
+						lateral * lateral -
+						forward * forward
+				)
+			)
+			reachable = Math.min(reachable, foot.y + room - p.hip)
+		})
+		const pelvis =
+			Math.min(lerp(-0.012, runPelvis, run), reachable) *
+				gait -
+			landing * 0.085
+
+		// Pelvis: list over the stance leg, rotate with the forward leg,
+		// tilt forward into a run and bank into turns.
+		const list = Math.sin(TAU * (cycle - stance / 2 + 0.25))
+		const swing = Math.cos(TAU * cycle)
+		const pelvisYaw = -swing * lerp(0.07, 0.09, run) * gait
+		const pelvisList = list * lerp(0.045, 0.02, run) * gait
+		const pelvisPitch =
+			0.13 * run * gait +
+			0.4 * this.lean +
+			0.08 * air +
+			0.15 * landing
 		bones.hips.position.set(
-			rest.hips.x + sway * h,
-			rest.hips.y + hipsY * h,
+			rest.hips.x +
+				(list * p.sway * (1 - run) * gait -
+					this.bank * 0.4) *
+					h,
+			rest.hips.y + pelvis * h,
 			rest.hips.z
 		)
-		const swayLean = -sway / legLength
-		bones.thigh_L.rotation.z = swayLean
-		bones.thigh_R.rotation.z = swayLean
+		bones.hips.rotation.set(
+			pelvisPitch,
+			pelvisYaw,
+			pelvisList + this.bank
+		)
 
-		// Torso: counter-twist against the hips, lean into a run, fold
-		// slightly forward when crouching or tucked.
-		const twist = Math.cos(this.phase) * 0.025 * amount * (1 - air)
-		const lean =
-			0.16 * run * amount + 0.25 * this.landing + 0.1 * air
-		bones.spine.rotation.set(lean * 0.6, -twist, 0)
-		bones.chest.rotation.set(lean * 0.4, -twist * 0.6, 0)
-		bones.head.rotation.set(-lean * 0.7, twist * 1.2, 0)
+		// Legs: two-bone IK from each hip to its foot target, knees aimed
+		// along the direction of travel.
+		_hipsInverse.copy(bones.hips.quaternion).invert()
+		feet.forEach((foot, i) => {
+			this._solveLeg(
+				i,
+				_target
+					.set(foot.x * h, foot.y * h, foot.z * h)
+					.sub(bones.hips.position)
+					.applyQuaternion(_hipsInverse),
+				foot.pitch
+			)
+		})
+
+		// Torso: shoulders counter-rotate against the pelvis, lean into a
+		// run and acceleration, and stay level over the pelvis list. The
+		// head keeps looking ahead.
+		const shoulderTurn = swing * lerp(0.06, 0.14, run) * gait
+		const twist = shoulderTurn - pelvisYaw
+		const spinePitch =
+			0.6 * p.posture * amount +
+			0.16 * run * gait +
+			0.35 * this.lean +
+			0.25 * landing +
+			0.06 * air
+		const chestPitch =
+			0.4 * p.posture * amount +
+			0.1 * run * gait +
+			0.25 * this.lean +
+			Math.sin(this.time * 1.7) * 0.012 * (1 - gait)
+		bones.spine.rotation.set(
+			spinePitch,
+			twist * 0.5,
+			-pelvisList * 0.6
+		)
+		bones.chest.rotation.set(
+			chestPitch,
+			twist * 0.5,
+			-pelvisList * 0.3
+		)
+		bones.head.rotation.set(
+			-(pelvisPitch + spinePitch + chestPitch) * 0.55,
+			-shoulderTurn * 0.9,
+			-this.bank * 0.5
+		)
 		bones.cloak.rotation.x =
-			(Math.sin(this.phase * 2) * 0.03 + 0.12 * run) *
-				amount +
+			(Math.sin(this.phase * 2) * 0.03 + 0.18 * run) * gait +
 			0.25 * air * (1 - fall)
 
-		// Arms swing against the same-side leg; running bends the elbows
-		// and doubles the swing. In the air they rise forward, then spread.
-		const armScale = p.arm * lerp(1, 2.6, run) * amount
-		legs.forEach((leg, i) => {
-			const side = sides[i]
+		// Arms: relax the modelled A-pose (closer in, slightly forward, soft
+		// elbows), swing against the same-side leg while walking and pump
+		// with bent elbows while running. In the air they rise forward,
+		// then spread for the landing.
+		const armSwing = Math.cos(TAU * (cycle - 0.04))
+		this.arms.forEach((arm, i) => {
+			const side = SIDES[i]
 			const sign = i === 0 ? 1 : -1
-			const swing = (leg.z / stride) * armScale
-			let shoulder = swing - 0.06 * run * amount
-			let elbow = -(
-				lerp(0.12, 1.45, run) * amount +
-				Math.max(0, -swing) * 0.5
+			const back = i === 0 ? armSwing : -armSwing
+			const ahead = Math.max(0, -back)
+			let shoulder = lerp(
+				back * p.arm,
+				-0.12 + back * 0.65,
+				run
 			)
-			let spread = 0.03 * run * amount * sign
+			let elbow = lerp(
+				-0.3 * ahead,
+				-1.15 - 0.4 * ahead + 0.2 * Math.max(0, back),
+				run
+			)
+			shoulder = -0.06 + shoulder * gait
+			elbow = -0.28 + elbow * gait
+			let spread =
+				-sign * (arm.slant * 0.45 + 0.08 * run * gait)
+			let inward =
+				-sign * (arm.slant * 0.35 + 0.15 * run * gait)
 			shoulder = lerp(shoulder, lerp(-0.9, -0.25, fall), air)
 			elbow = lerp(elbow, lerp(-0.6, -0.3, fall), air)
-			spread = lerp(spread, lerp(0.15, 0.6, fall) * sign, air)
-			const landingSpread = 0.25 * this.landing * sign
+			spread = lerp(spread, sign * lerp(0.15, 0.6, fall), air)
+			inward *= 1 - air
 			bones[`upperArm_${side}`].rotation.set(
-				shoulder - 0.2 * this.landing,
+				shoulder - 0.2 * landing,
 				0,
-				spread + landingSpread
+				spread + 0.25 * landing * sign
 			)
-			bones[`forearm_${side}`].rotation.x = elbow
+			bones[`forearm_${side}`].rotation.set(elbow, 0, inward)
 		})
+	}
+
+	// Aim the thigh and bend the knee so the ankle lands on `target` (in
+	// the hips frame); then set the foot to `pitch` against the ground.
+	_solveLeg(i, target, pitch) {
+		const leg = this.legs[i]
+		const side = SIDES[i]
+		const thigh = this.bones[`thigh_${side}`]
+		const shin = this.bones[`shin_${side}`]
+		const foot = this.bones[`foot_${side}`]
+		const { upper, lower } = leg
+		_dir.copy(target).sub(thigh.position)
+		const distance = Math.max(_dir.length(), 1e-6)
+		_dir.divideScalar(distance)
+		const reach = clamp(
+			distance,
+			Math.abs(upper - lower) + 1e-4,
+			upper + lower - 1e-4
+		)
+		const knee = Math.acos(
+			clamp(
+				(reach * reach -
+					upper * upper -
+					lower * lower) /
+					(2 * upper * lower),
+				-1,
+				1
+			)
+		)
+		const swing = Math.acos(
+			clamp(
+				(upper * upper +
+					reach * reach -
+					lower * lower) /
+					(2 * upper * reach),
+				-1,
+				1
+			)
+		)
+		// The knee bends in the plane of the leg and the travel direction.
+		_pole.set(0, 0, 1).applyQuaternion(_hipsInverse)
+		_hinge.crossVectors(_dir, _pole)
+		if (_hinge.lengthSq() < 1e-8) _hinge.set(-1, 0, 0)
+		_hinge.normalize()
+		_dir.applyAxisAngle(_hinge, swing)
+		_hinge.negate()
+			.addScaledVector(_dir, -_hinge.dot(_dir))
+			.normalize()
+		_aim.setFromRotationMatrix(
+			_basis.makeBasis(
+				_hinge,
+				_dir,
+				_side.crossVectors(_hinge, _dir)
+			)
+		)
+		thigh.quaternion
+			.copy(_aim)
+			.multiply(_foot.copy(leg.restBasis).invert())
+		shin.quaternion.setFromAxisAngle(leg.hinge, knee)
+		// Foot: level with the ground plus pitch, whatever the leg does.
+		_foot.copy(thigh.quaternion)
+			.multiply(shin.quaternion)
+			.premultiply(this.bones.hips.quaternion)
+			.invert()
+		foot.quaternion
+			.setFromEuler(_euler.set(pitch, 0, 0))
+			.premultiply(_foot)
 	}
 }
