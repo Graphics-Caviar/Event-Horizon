@@ -1,5 +1,8 @@
 import * as THREE from 'three'
+import { ASTEROID_MODELS } from '../Level1/asteroidAssets.js'
 import { loadVoidModel } from './voidAssets.js'
+
+export const VOID_ASTEROID_COUNT = 10
 
 const planetFragment = `
 varying vec3 surface, worldNormal;
@@ -33,6 +36,20 @@ export class VoidSpaceBackdrop {
 		this.group = new THREE.Group()
 		this.group.name = 'void-outer-space'
 		parent.add(this.group)
+		this.shards = []
+		this.asteroids = []
+		this.asteroidParts = []
+		this.asteroidMeshes = []
+		this._lastUpdateTime = 0
+		this._asteroidBase = new THREE.Matrix4()
+		this._asteroidPartMatrix = new THREE.Matrix4()
+		this._asteroidPosition = new THREE.Vector3()
+		this._asteroidQuaternion = new THREE.Quaternion()
+		this._asteroidScale = new THREE.Vector3()
+		this.fallbackRocks = new THREE.Group()
+		this.fallbackRocks.name = 'void-asteroid-fallback'
+		this.group.add(this.fallbackRocks)
+		this._buildFallbackAsteroids()
 		const own = (r) => {
 			this.resources.push(r)
 			return r
@@ -41,29 +58,29 @@ export class VoidSpaceBackdrop {
 		this.planets = []
 		const definitions = [
 			{
-				position: [-1800, 850, -3000],
-				radius: 210,
+				position: [-650, 245, -960],
+				radius: 138,
 				low: 0x103968,
 				high: 0x5f9176,
 				gas: 0,
 			},
 			{
-				position: [1800, 950, -3400],
-				radius: 250,
+				position: [610, 320, -1140],
+				radius: 178,
 				low: 0x72513f,
 				high: 0xdbc49b,
 				gas: 1,
 			},
 			{
-				position: [1450, -800, -2700],
-				radius: 130,
+				position: [760, -360, -740],
+				radius: 105,
 				low: 0x643525,
 				high: 0xb86d48,
 				gas: 0,
 			},
 			{
-				position: [-1700, -900, -3600],
-				radius: 150,
+				position: [-680, -390, -1040],
+				radius: 126,
 				low: 0x254b69,
 				high: 0x9fc9d9,
 				gas: 0.75,
@@ -106,38 +123,84 @@ export class VoidSpaceBackdrop {
 			this.group.add(planet)
 			this.planets.push(planet)
 		}
-		const ringGeometry = own(
-			new THREE.RingGeometry(330, 470, 128, 8)
-		)
-		const colors = []
-		const pos = ringGeometry.attributes.position
-		for (let i = 0; i < pos.count; i++) {
-			const radius = Math.hypot(pos.getX(i), pos.getY(i))
-			const brightness =
-				0.38 +
-				0.32 * (0.5 + 0.5 * Math.sin(radius * 0.35))
-			colors.push(
-				brightness,
-				brightness * 0.82,
-				brightness * 0.62
-			)
+		// Broad, translucent gas clouds add depth and color to the starfield.
+		const nebulaSize = 256
+		const nebulaClouds = [
+			{ x: 0.29, y: 0.39, r: 0.26, color: [95, 45, 190] },
+			{ x: 0.59, y: 0.36, r: 0.32, color: [28, 92, 190] },
+			{ x: 0.47, y: 0.65, r: 0.29, color: [190, 45, 120] },
+			{ x: 0.74, y: 0.66, r: 0.23, color: [55, 150, 190] },
+		]
+		const nebulaPixels = new Uint8Array(nebulaSize * nebulaSize * 4)
+		for (let y = 0; y < nebulaSize; y++) {
+			for (let x = 0; x < nebulaSize; x++) {
+				let amount = 0
+				const color = [0, 0, 0]
+				for (const cloud of nebulaClouds) {
+					const dx = x / nebulaSize - cloud.x
+					const dy = y / nebulaSize - cloud.y
+					const weight = Math.exp(
+						-(
+							(dx * dx + dy * dy) /
+							(cloud.r *
+								cloud.r *
+								0.3)
+						)
+					)
+					amount += weight
+					for (
+						let channel = 0;
+						channel < 3;
+						channel++
+					)
+						color[channel] +=
+							cloud.color[channel] *
+							weight
+				}
+				const index = (y * nebulaSize + x) * 4
+				for (let channel = 0; channel < 3; channel++)
+					nebulaPixels[index + channel] = amount
+						? Math.round(
+								color[channel] /
+									amount
+							)
+						: 0
+				nebulaPixels[index + 3] = Math.min(
+					100,
+					amount * 46
+				)
+			}
 		}
-		ringGeometry.setAttribute(
-			'color',
-			new THREE.Float32BufferAttribute(colors, 3)
-		)
-		const rings = new THREE.Mesh(
-			ringGeometry,
-			own(
-				new THREE.MeshBasicMaterial({
-					vertexColors: true,
-					side: THREE.DoubleSide,
-				})
+		const nebulaTexture = own(
+			new THREE.DataTexture(
+				nebulaPixels,
+				nebulaSize,
+				nebulaSize,
+				THREE.RGBAFormat
 			)
 		)
-		rings.position.copy(this.planets[1].position)
-		rings.rotation.set(1.12, 0.24, 0.32)
-		this.group.add(rings)
+		nebulaTexture.needsUpdate = true
+		nebulaTexture.colorSpace = THREE.SRGBColorSpace
+		const nebulaMaterial = own(
+			new THREE.SpriteMaterial({
+				map: nebulaTexture,
+				transparent: true,
+				opacity: 0.78,
+				depthWrite: false,
+				blending: THREE.AdditiveBlending,
+				toneMapped: false,
+			})
+		)
+		for (const [i, position] of [
+			[-260, 110, -1480],
+			[390, -100, -1680],
+		].entries()) {
+			const nebula = new THREE.Sprite(nebulaMaterial)
+			nebula.name = `space-nebula-${i + 1}`
+			nebula.position.set(...position)
+			nebula.scale.set(760, 480, 1)
+			this.group.add(nebula)
+		}
 		// A recognisable foil bus, twin solar arrays, antenna and navigation light.
 		this.satellite = new THREE.Group()
 		this.satellite.name = 'orbiting-satellite'
@@ -201,9 +264,145 @@ export class VoidSpaceBackdrop {
 		this.satellite.add(antenna)
 		this.group.add(this.satellite)
 		this.update(0)
+		this.asteroidReady = this._loadLevelOneAsteroids()
 		this.shipReady = level.assetManager
 			? this._loadShip()
 			: Promise.resolve()
+	}
+	_buildFallbackAsteroids() {
+		const geometry = new THREE.IcosahedronGeometry(1, 0)
+		const material = new THREE.MeshStandardMaterial({
+			color: 0x403c48,
+			flatShading: true,
+			metalness: 0.42,
+			roughness: 0.72,
+			emissive: 0x160e2d,
+		})
+		this.resources.push(geometry, material)
+		for (let i = 0; i < VOID_ASTEROID_COUNT; i++) {
+			const a = i * 2.39996
+			const radius = 55 + (i % 9) * 16
+			const mesh = new THREE.Mesh(geometry, material)
+			mesh.position.set(
+				Math.cos(a) * radius,
+				Math.sin(a) * radius,
+				100 -
+					(i /
+						Math.max(
+							1,
+							VOID_ASTEROID_COUNT - 1
+						)) *
+						658
+			)
+			mesh.scale.set(6 + (i % 13), 12 + (i % 23), 5 + (i % 7))
+			mesh.rotation.set(i, i * 0.7, i * 0.3)
+			this.fallbackRocks.add(mesh)
+			this.shards.push(mesh)
+		}
+	}
+	async _loadLevelOneAsteroids() {
+		if (!this.level.assetManager) return false
+		try {
+			const model =
+				await this.level.assetManager.loadModel(
+					ASTEROID_MODELS
+				)
+			if (this.disposed || !model) return false
+			model.updateMatrixWorld(true)
+			const bounds = new THREE.Box3().setFromObject(model)
+			const center = bounds.getCenter(new THREE.Vector3())
+			const radius = bounds.getBoundingSphere(
+				new THREE.Sphere()
+			).radius
+			const scale = 14 / Math.max(radius, 0.001)
+			const normalize = new THREE.Matrix4()
+				.makeScale(scale, scale, scale)
+				.multiply(
+					new THREE.Matrix4().makeTranslation(
+						-center.x,
+						-center.y,
+						-center.z
+					)
+				)
+			model.traverse((node) => {
+				if (!node.isMesh) return
+				this.asteroidParts.push({
+					geometry: node.geometry,
+					material: node.material,
+					transform: normalize
+						.clone()
+						.multiply(node.matrixWorld),
+				})
+			})
+			if (!this.asteroidParts.length) return false
+			for (let i = 0; i < VOID_ASTEROID_COUNT; i++) {
+				const a = i * 2.39996
+				const radius = 55 + (i % 9) * 16
+				this.asteroids.push({
+					position: new THREE.Vector3(
+						Math.cos(a) * radius,
+						Math.sin(a) * radius,
+						100 -
+							(i /
+								Math.max(
+									1,
+									VOID_ASTEROID_COUNT -
+										1
+								)) *
+								658
+					),
+					rotation: new THREE.Euler(
+						i,
+						i * 0.7,
+						i * 0.3
+					),
+					spin: 0.035 + (i % 7) * 0.009,
+					scale: 1.25 + (i % 7) * 0.2,
+				})
+			}
+			const base = new THREE.Matrix4()
+			const partMatrix = new THREE.Matrix4()
+			const position = new THREE.Vector3()
+			const quaternion = new THREE.Quaternion()
+			const size = new THREE.Vector3()
+			for (const part of this.asteroidParts) {
+				const instanced = new THREE.InstancedMesh(
+					part.geometry,
+					part.material,
+					this.asteroids.length
+				)
+				instanced.name = 'level1-asteroid-instances'
+				instanced.frustumCulled = false
+				instanced.castShadow = true
+				instanced.receiveShadow = true
+				for (
+					let i = 0;
+					i < this.asteroids.length;
+					i++
+				) {
+					const rock = this.asteroids[i]
+					position.copy(rock.position)
+					quaternion.setFromEuler(rock.rotation)
+					size.setScalar(rock.scale)
+					base.compose(position, quaternion, size)
+					partMatrix
+						.copy(base)
+						.multiply(part.transform)
+					instanced.setMatrixAt(i, partMatrix)
+				}
+				instanced.instanceMatrix.needsUpdate = true
+				this.group.add(instanced)
+				this.asteroidMeshes.push(instanced)
+			}
+			this.fallbackRocks.visible = false
+			return true
+		} catch (error) {
+			console.warn(
+				'[Level3] Level 1 asteroid model unavailable in void:',
+				error?.message
+			)
+			return false
+		}
 	}
 	async _loadShip() {
 		const ship = await loadVoidModel(
@@ -235,14 +434,56 @@ export class VoidSpaceBackdrop {
 		// Source buffers belong to AssetManager and must survive a level restart.
 	}
 	update(time) {
+		const delta = Math.max(0, time - this._lastUpdateTime)
+		this._lastUpdateTime = time
+		if (this.asteroidMeshes.length) {
+			for (let i = 0; i < this.asteroids.length; i++) {
+				const rock = this.asteroids[i]
+				rock.rotation.x += rock.spin * delta * 0.6
+				rock.rotation.z += rock.spin * delta * 0.35
+				this._asteroidPosition.copy(rock.position)
+				this._asteroidQuaternion.setFromEuler(
+					rock.rotation
+				)
+				this._asteroidScale.setScalar(rock.scale)
+				this._asteroidBase.compose(
+					this._asteroidPosition,
+					this._asteroidQuaternion,
+					this._asteroidScale
+				)
+				for (
+					let p = 0;
+					p < this.asteroidParts.length;
+					p++
+				) {
+					this._asteroidPartMatrix
+						.copy(this._asteroidBase)
+						.multiply(
+							this.asteroidParts[p]
+								.transform
+						)
+					this.asteroidMeshes[p].setMatrixAt(
+						i,
+						this._asteroidPartMatrix
+					)
+				}
+			}
+			for (const mesh of this.asteroidMeshes)
+				mesh.instanceMatrix.needsUpdate = true
+		} else {
+			for (const shard of this.shards) {
+				shard.rotation.x += delta * 0.06
+				shard.rotation.z += delta * 0.035
+			}
+		}
 		const angle = time * 0.045
 		this.satellite.position
 			.copy(this.planets[2].position)
 			.add(
 				new THREE.Vector3(
-					Math.cos(angle) * 310,
-					Math.sin(angle) * 110,
-					Math.sin(angle) * 310
+					Math.cos(angle) * 145,
+					Math.sin(angle) * 55,
+					Math.sin(angle) * 145
 				)
 			)
 		this.satellite.rotation.set(0.2, -angle, -0.2)

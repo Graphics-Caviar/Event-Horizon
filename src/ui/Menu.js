@@ -170,6 +170,10 @@ export class Menu {
 			'click',
 			() => this._openCreditsModal()
 		)
+		document.getElementById('btn-help').addEventListener(
+			'click',
+			() => this._openHelpModal()
+		)
 		document.getElementById('btn-exit').addEventListener(
 			'click',
 			() => this._openExitModal()
@@ -395,6 +399,27 @@ export class Menu {
           <li><a href="https://fonts.google.com/" target="_blank" rel="noopener noreferrer">Google Fonts</a> — Orbitron, Rajdhani, and Share Tech Mono typefaces used by the launch-bay interface.</li>
         </ul>
       </div>`)
+	}
+
+	_openHelpModal() {
+		this._openModal(`
+      <h3>HELP · MISSION OBJECTIVES</h3>
+      <p class="modal-desc">Your goal in each level, in plain terms. Open INTEL on a level card for controls and extra hints.</p>
+      <div class="credits-text help-objectives" tabindex="0" aria-label="Objectives for each level">
+        <div class="help-level">
+          <h4>LEVEL 1 · THE SINGULARITY RUN</h4>
+          <p><span class="role">Goal:</span> Fly your ship away from the black hole and reach the glowing escape ring. Dodge asteroids and collect blue fuel canisters so you can boost.</p>
+        </div>
+        <div class="help-level">
+          <h4>LEVEL 2 · ALIEN PLANET EXODUS</h4>
+          <p><span class="role">Goal:</span> You crash on an alien planet. Walk to the rover, press E to board it, then drive to the wormhole gate. Stay out of lava and keep moving so the aliens do not catch you.</p>
+        </div>
+        <div class="help-level">
+          <h4>LEVEL 3 · THE VOID OF GODS</h4>
+          <p><span class="role">Goal:</span> Enter the void and reach the final escape portal. Survive the storm, fight or fly past the enemies, and do not let the colossus stop you.</p>
+        </div>
+      </div>
+    `)
 	}
 
 	_openExitModal() {

@@ -13,6 +13,10 @@ function fixture() {
 		playerRoot: new THREE.Group(),
 		planet: { heightAt: () => 0, terrain: { material } },
 		addObject() {},
+		_gameOver() {
+			this.completed = true
+			this.gameOverCount = (this.gameOverCount ?? 0) + 1
+		},
 		_showMovementFeedback() {},
 		_requestShake(value) {
 			this.shake = Math.max(this.shake ?? 0, value)
@@ -24,6 +28,59 @@ function fixture() {
 for (const fps of [30, 60, 120]) {
 	const level = fixture(),
 		s = level.survival
+	const bombs = s.pickups.filter((pickup) => pickup.type === 'bomb')
+	assert.ok(bombs.length > 0, 'some nitrogen stations become bombs')
+	for (const bomb of bombs) {
+		const expectedPosition = s.start
+			.clone()
+			.lerp(s.end, bomb.index / (s.pickups.length - 1))
+		expectedPosition.y =
+			level.planet.heightAt(
+				expectedPosition.x,
+				expectedPosition.z
+			) + 0.4
+		assert.ok(
+			bomb.can.children[0].material.color.r >
+				bomb.can.children[0].material.color.g,
+			'bombs use a red core'
+		)
+		assert.equal(
+			bomb.point.distanceTo(expectedPosition),
+			0,
+			'bombs keep their pickup route positions'
+		)
+	}
+	const lethalLevel = fixture()
+	const lethalBomb = lethalLevel.survival.pickups.find(
+		(pickup) => pickup.type === 'bomb'
+	)
+	lethalLevel.playerRoot.position.copy(lethalBomb.can.position)
+	lethalLevel.survival.update(1 / fps)
+	assert.equal(
+		lethalLevel.playerHP,
+		0,
+		'bomb contact is instantly lethal'
+	)
+	assert.equal(lethalLevel.completed, true, 'bomb contact ends the run')
+	assert.equal(lethalLevel.gameOverCount, 1, 'bomb death triggers once')
+	assert.equal(
+		lethalLevel.survival.bombBlast.group.visible,
+		true,
+		'bomb contact starts a visible explosion'
+	)
+	const blastScale = lethalLevel.survival.bombBlast.flash.scale.x
+	lethalLevel.survival.update(0.2)
+	assert.ok(
+		lethalLevel.survival.bombBlast.flash.scale.x > blastScale,
+		'explosion expands after game over begins'
+	)
+	for (let i = 0; i < 20; i++) lethalLevel.survival.update(0.05)
+	assert.equal(
+		lethalLevel.survival.bombBlast.group.visible,
+		false,
+		'explosion cleans up after its short blast'
+	)
+	lethalLevel.survival.dispose()
 	level.transitionHeld = true
 	for (let i = 0; i < fps * 40; i++) s.update(1 / fps)
 	assert.equal(s.time, 0, 'arrival never spends countdown')
@@ -98,7 +155,7 @@ for (const fps of [30, 60, 120]) {
 	)
 	assert.equal(shader.uniforms.collapseEdge, s.uniform)
 
-	const pad = s.pickups[1]
+	const pad = s.pickups.find((pickup) => pickup.type === 'nitrogen')
 	assert.equal(
 		s.supportHeightAt(pad.point.x, pad.point.z, pad.point.y),
 		pad.point.y

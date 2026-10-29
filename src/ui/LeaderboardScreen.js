@@ -41,6 +41,7 @@ export class LeaderboardScreen {
 
 		this.screen = document.getElementById('screen-leaderboard')
 		this.tabsEl = document.getElementById('lb-tabs')
+		this.personalEl = document.getElementById('lb-personal')
 		this.rowsEl = document.getElementById('lb-rows')
 		this.messageEl = document.getElementById('lb-message')
 		this.refreshEl = document.getElementById('lb-refresh')
@@ -89,6 +90,7 @@ export class LeaderboardScreen {
 		const requestId = ++this._requestId
 		this._setMessage('Loading…')
 		this.rowsEl.innerHTML = ''
+		this.personalEl?.classList.add('hidden')
 
 		const backend = this.backend
 		if (!backend) {
@@ -109,11 +111,20 @@ export class LeaderboardScreen {
 		}
 
 		let rows = []
+		let personalBest = null
 		try {
-			rows = await backend.leaderboard.getTopScores(
-				this.activeBoard,
-				ROW_LIMIT
-			)
+			;[rows, personalBest] = await Promise.all([
+				backend.leaderboard.getTopScores(
+					this.activeBoard,
+					ROW_LIMIT
+				),
+				status.signedIn && status.uid
+					? (backend.leaderboard.getPersonalBest?.(
+							this.activeBoard,
+							status.uid
+						) ?? Promise.resolve(null))
+					: Promise.resolve(null),
+			])
 		} catch (error) {
 			if (requestId !== this._requestId) return
 			this._setMessage(
@@ -142,10 +153,33 @@ export class LeaderboardScreen {
 		}
 
 		this._setMessage('')
-		this._renderRows(rows, status.uid)
+		this._renderRows(rows, status.uid, personalBest)
 	}
 
-	_renderRows(rows, currentUid) {
+	_renderRows(rows, currentUid, personalBest = null) {
+		const personalBestOutsideTop =
+			currentUid &&
+			personalBest &&
+			!rows.some(
+				(row) => row.scoreId === personalBest.scoreId
+			)
+		if (this.personalEl) {
+			this.personalEl.innerHTML = personalBestOutsideTop
+				? `<div class="lb-personal-label">YOUR BEST RUN · OUTSIDE THE TOP ${ROW_LIMIT}</div>
+					<div class="lb-row lb-row-self lb-personal-row">
+						<span class="lb-rank">PB</span>
+						<span class="lb-pilot">${escapeHtml(personalBest.displayName || 'Pilot')}</span>
+						<span class="lb-score">${Number(personalBest.score || 0).toLocaleString()}</span>
+						<span class="lb-time">${formatTime(personalBest.timeElapsed)}</span>
+						<span class="lb-nitro">${Number(personalBest.nitrogenCollected || 0)}</span>
+					</div>`
+				: ''
+			this.personalEl.classList.toggle(
+				'hidden',
+				!personalBestOutsideTop
+			)
+		}
+
 		this.rowsEl.innerHTML = rows
 			.map((row) => {
 				const rank = row.rank || 0

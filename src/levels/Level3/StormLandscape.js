@@ -13,7 +13,7 @@ float noise3(vec3 p) {
 }
 float fbm(vec3 p) {
  float sum=0.0, amplitude=0.55;
- for(int i=0;i<5;i++) { sum+=noise3(p)*amplitude; p=p*2.03+vec3(5.7,1.2,3.4); amplitude*=0.48; }
+ for(int i=0;i<3;i++) { sum+=noise3(p)*amplitude; p=p*2.03+vec3(5.7,1.2,3.4); amplitude*=0.48; }
  return sum;
 }
 void main() {
@@ -85,7 +85,9 @@ export class StormLandscape {
 			this.level.own(new THREE.SphereGeometry(2200, 32, 20)),
 			this.cloudMaterial
 		)
-		this.sky.renderOrder = -2
+		// Draw after the opaque world so the terrain's depth buffer rejects most
+		// of this full-screen shader before it shades a fragment.
+		this.sky.renderOrder = 1
 		this.sky.frustumCulled = false
 		this.root.add(this.sky)
 	}
@@ -141,18 +143,16 @@ export class StormLandscape {
 	}
 
 	_buildCrystalsAndTrees() {
+		// Standard shading keeps the emissive facets but avoids the per-frame
+		// transmission pass, which re-renders the whole scene into a target.
 		const crystal = this.level.own(
-			new THREE.MeshPhysicalMaterial({
+			new THREE.MeshStandardMaterial({
 				color: 0xa85ee9,
 				emissive: 0x8b21e8,
 				emissiveIntensity: 1.8,
-				metalness: 0.1,
+				metalness: 0.15,
 				roughness: 0.12,
-				transmission: 0.28,
-				thickness: 1.2,
-				ior: 1.5,
-				clearcoat: 1,
-				clearcoatRoughness: 0.06,
+				envMapIntensity: 1.4,
 				flatShading: true,
 			})
 		)
@@ -254,13 +254,17 @@ export class StormLandscape {
 		this.crystalSites = this.root.children
 			.filter((node) => node.name === 'amethyst-cluster')
 			.map((node) => node.position.clone())
-		// A fixed pool lights the closest clusters without adding a light per crystal.
-		this.crystalLights = Array.from({ length: 6 }, () => {
-			const light = new THREE.PointLight(0xb957ff, 90, 28, 2)
-			light.visible = false
+		// A fixed pool lights the closest clusters without adding a light per
+		// crystal. Keep every light permanently visible: toggling visibility
+		// changes the light count, which forces three.js to recompile every lit
+		// material mid-level. Intensity fades instead.
+		this.crystalLights = Array.from({ length: 3 }, () => {
+			const light = new THREE.PointLight(0xb957ff, 0, 28, 2)
+			light.visible = true
 			this.root.add(light)
 			return light
 		})
+		this.nearestCrystalSites = [null, null, null]
 		this.lightTimer = 0
 	}
 
@@ -311,27 +315,38 @@ export class StormLandscape {
 		if (this.lightTimer <= 0) {
 			this.lightTimer = 0.2
 			const focus = this.level.playerRoot.position
-			const sites = [...this.crystalSites].sort(
-				(a, b) =>
-					a.distanceToSquared(focus) -
-					b.distanceToSquared(focus)
-			)
+			const nearest = this.nearestCrystalSites
+			nearest[0] = nearest[1] = nearest[2] = null
+			for (const site of this.crystalSites) {
+				const d2 = site.distanceToSquared(focus)
+				if (d2 > 180 * 180) continue
+				for (let i = 0; i < 3; i++) {
+					if (!nearest[i] || d2 < nearest[i].d2) {
+						for (let j = 2; j > i; j--)
+							nearest[j] =
+								nearest[j - 1]
+						nearest[i] = { site, d2 }
+						break
+					}
+				}
+			}
 			this.crystalLights.forEach((light, i) => {
-				light.visible = Boolean(
-					sites[i] &&
-					sites[i].distanceToSquared(focus) <
-						180 * 180
+				const pick = nearest[i]
+				if (!pick) {
+					light.intensity = 0
+					return
+				}
+				const falloff = THREE.MathUtils.clamp(
+					(180 - Math.sqrt(pick.d2)) / 60,
+					0,
+					1
 				)
-				if (sites[i])
-					light.position
-						.copy(sites[i])
-						.add(
-							new THREE.Vector3(
-								0,
-								2.5,
-								0
-							)
-						)
+				light.intensity = 90 * falloff
+				light.position.set(
+					pick.site.x,
+					pick.site.y + 2.5,
+					pick.site.z
+				)
 			})
 		}
 		this.mist.forEach((sprite, i) => {
