@@ -107,11 +107,28 @@ export class Rover {
 	isTouchingLava(lava) {
 		if (!lava) return false
 		const point = new THREE.Vector3()
-		return this.wheels.some((wheel) => {
+		const overlaps = (x, z, wheelBottom) => {
+			const ground = this.planet.heightAt(x, z)
+			// Don't burn a rover that has jumped high above the molten terrain.
+			if (wheelBottom > ground + 3) return false
+			return typeof lava.isLavaAt === 'function'
+				? lava.isLavaAt(x, z, 1.7)
+				: lava.touches({ x, y: ground + 0.35, z })
+		}
+		// Try actual suspension-wheel positions first. A tire's visual pivot
+		// can be above the sampled surface, so use planar zone contact as well.
+		for (const wheel of this.wheels) {
 			wheel.pivot.getWorldPosition(point)
-			point.y -= WHEEL_RADIUS
-			return lava.touches(point)
-		})
+			if (overlaps(point.x, point.z, point.y - WHEEL_RADIUS)) return true
+		}
+		// Wheel pivots are not always synchronised with the physics collider on
+		// the frame we cross a hazard. Also test the chassis footprint/centre.
+		this.group.getWorldPosition(point)
+		const ground = this.planet.heightAt(point.x, point.z)
+		if (point.y > ground + 8) return false
+		return typeof lava.isLavaAt === 'function'
+			? lava.isLavaAt(point.x, point.z, 3.5)
+			: lava.touches({ x: point.x, y: ground + 0.35, z: point.z })
 	}
 
 	_initPhysics() {

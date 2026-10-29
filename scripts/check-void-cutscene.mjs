@@ -199,6 +199,13 @@ function fixture({
 	})
 	const requests = []
 	const pending = []
+	const renderer = {
+		domElement: document.createElement('canvas'),
+		capabilities: { getMaxAnisotropy: () => 1 },
+		shadowMap: { enabled: false, type: null },
+		toneMapping: THREE.NoToneMapping,
+		toneMappingExposure: 1,
+	}
 	const assets = {
 		createStarfield: () => new THREE.Group(),
 		getCachedModel: () => null,
@@ -222,7 +229,13 @@ function fixture({
 		audio: sound.audio,
 		radio,
 		assetManager: assets,
-		sceneManager: { scene, camera, addLights() {}, render() {} },
+		sceneManager: {
+			scene,
+			camera,
+			renderer,
+			addLights() {},
+			render() {},
+		},
 		currentLevel: null,
 		_activeLevelNumber: 2,
 		backend: null,
@@ -290,6 +303,9 @@ async function start(options = {}) {
 		source.roverApproach?.trigger || source.portal.group.position
 	source.playerRoot.position.copy(trigger)
 	source._syncPlayerToTerrain()
+	if (source.roverApproach)
+		source._approachWaypoint =
+			source.roverApproach.points.length - 1
 	if (options.boarded !== false) {
 		const p = trigger
 		const y = source.planet.heightAt(p.x, p.z)
@@ -365,9 +381,74 @@ async function roverApproach() {
 					level.roverApproach.trigger.z
 			) < 0.01
 	)
+	const previousRoute = [
+		[95, -55],
+		[300, 150],
+		[235, 340],
+		[75, 440],
+		[130, 350],
+	]
+	let previousLength = 0
+	for (let i = 1; i < previousRoute.length; i++)
+		previousLength += Math.hypot(
+			previousRoute[i][0] - previousRoute[i - 1][0],
+			previousRoute[i][1] - previousRoute[i - 1][1]
+		)
 	check(
-		'Level 2 exposes a continuous rover route without scaling the world',
-		route?.points.length >= 5 && level.planet.size === 1100
+		'four Level 2 lava regions provide seven distinct pools',
+		level.lavaHazards?.areas.length === 4 &&
+			level.lavaHazards.zones.length === 7
+	)
+	const lavaZone = level.lavaHazards.zones[0]
+	const lavaPoint = new THREE.Vector3(
+		lavaZone.x,
+		level.planet.heightAt(lavaZone.x, lavaZone.z),
+		lavaZone.z
+	)
+	let damageFlashes = 0
+	const lavaProbe = Object.assign(Object.create(Level2.prototype), {
+		completed: false,
+		transitionHeld: false,
+		cinematic: false,
+		lavaHazards: level.lavaHazards,
+		combatConfig: {
+			lavaDamagePerSecond: 25,
+			lavaDamageInterval: 0.8,
+		},
+		_lavaPlayerCooldown: 0,
+		_lavaRoverCooldown: 0,
+		playerRoot: { position: lavaPoint.clone() },
+		pilotWalk: null,
+		_feetScratch: new THREE.Vector3(),
+		playerHP: 100,
+		roverHP: 100,
+		boarded: false,
+		rover: { isTouchingLava: () => false },
+		_flashDamage() {
+			damageFlashes++
+		},
+		_updateLevelHUD() {},
+		_gameOver() {},
+	})
+	lavaProbe._updateLavaDamage(1 / 60)
+	lavaProbe._updateLavaDamage(1 / 60)
+	check(
+		'lava contact damages the pilot at a configurable interval',
+		lavaZone && lavaProbe.playerHP === 80 && damageFlashes === 1
+	)
+	lavaProbe.boarded = true
+	lavaProbe.playerHP = 100
+	lavaProbe._lavaRoverCooldown = 0
+	lavaProbe.rover.isTouchingLava = (lava) => lava.touches(lavaPoint)
+	lavaProbe._updateLavaDamage(1 / 60)
+	check(
+		'rover tyre contact shares controlled lava damage and feedback',
+		lavaProbe.roverHP === 80 && damageFlashes === 2
+	)
+	check(
+		'five configurable encounter zones plan 36 total aliens',
+		level.encounterStats?.planned === 36 &&
+			level.encounters.length === 5
 	)
 	if (!route) {
 		f.dispose()
@@ -431,6 +512,68 @@ async function roverApproach() {
 		`length=${length.toFixed(1)}`
 	)
 	check(
+		'Level 2 route is 2–2.5 times longer on expanded traversable terrain',
+		route.points.length >= 8 &&
+			level.planet.size === 2400 &&
+			length / previousLength >= 2 &&
+			length / previousLength <= 2.5,
+		`ratio=${(length / previousLength).toFixed(2)}`
+	)
+	for (let i = 0; i < 4; i++) level._updateEncounters(0.6)
+	check(
+		'outskirts encounter actually spawns its four configured aliens',
+		level.encounters[0].started &&
+			level.encounters[0].spawned === 4 &&
+			level.aliens.length === 4
+	)
+	level._approachWaypoint = 3
+	for (let i = 0; i < 8; i++) level._updateEncounters(0.6)
+	check(
+		'later route progress queues a second attack without exceeding eight',
+		level.encounters[1].started &&
+			level.aliens.filter((alien) => !alien.smashed)
+				.length === 8 &&
+			level.encounterStats.maxSimultaneous <= 8
+	)
+	await new Promise((resolve) => setTimeout(resolve, 1300))
+	for (const alien of level.aliens) level._trackEncounterAlien(alien)
+	const loadedAliens = level.aliens.filter((alien) => alien._loaded)
+	const fightCenter = route.points[3]
+	level.playerRoot.position.copy(fightCenter)
+	loadedAliens.forEach((alien, index) => {
+		const angle = (index / loadedAliens.length) * Math.PI * 2
+		alien.position.set(
+			fightCenter.x + Math.cos(angle) * 14,
+			level.planet.heightAt(
+				fightCenter.x + Math.cos(angle) * 14,
+				fightCenter.z + Math.sin(angle) * 14
+			) + (alien.kind === 'flyer' ? 22 : 0),
+			fightCenter.z + Math.sin(angle) * 14
+		)
+		alien.update(1 / 60, level.playerRoot.position)
+	})
+	check(
+		'eight loaded aliens can enter combat simultaneously using existing GLBs',
+		loadedAliens.length === 8 &&
+			loadedAliens.every((alien) => alien.combatMode)
+	)
+	check(
+		'flyers and brutes retain distinct HP and attack tuning',
+		loadedAliens.some(
+			(alien) =>
+				alien.kind === 'flyer' &&
+				alien.hp === 60 &&
+				alien.attackDamage * 20 === 10
+		) &&
+			loadedAliens.some(
+				(alien) =>
+					alien.type.name === 'launcher' &&
+					alien.hp === 180 &&
+					alien.attackDamage * 20 === 20 &&
+					alien.heavyAttackDamage * 20 === 30
+			)
+	)
+	check(
 		'driving corridor has finite continuous ground and gentle slopes',
 		groundFinite && maxSlope < 12,
 		`peak slope=${maxSlope.toFixed(2)} degrees`
@@ -470,6 +613,14 @@ async function roverApproach() {
 		'driving outside the designated approach does not trigger early',
 		!level.completed
 	)
+	level.rover.group.position.copy(route.trigger)
+	level._approachWaypoint = 1
+	level._checkPortalArrival()
+	check(
+		'driving straight to the hub cannot bypass preceding route waypoints',
+		!level.completed
+	)
+	level._approachWaypoint = route.points.length - 1
 	level.rover.group.position.copy(route.trigger)
 	level._checkPortalArrival()
 	const timer = level._endTimer
@@ -1000,8 +1151,27 @@ async function fullPath(fps, recordings = false, boarded = true) {
 			game._activeLevelNumber === 3
 	)
 	check(
-		'existing nine-enemy roster preserved',
-		level3?.aliens?.length === 9
+		'five progressive encounters configure 28 unique enemies',
+		level3?.aliens?.length === 28
+	)
+	check(
+		'encounter sizes match the intended ramp',
+		level3?.encounters
+			?.map((encounter) => encounter.enemies.length)
+			.join(',') === '4,5,6,6,7'
+	)
+	check(
+		'long route is around 2.1 times its previous length',
+		level3?.matterDimension?.routeLength > 934 &&
+			level3?.matterDimension?.routeLength < 1168
+	)
+	check(
+		'eight visible lava pools flank the traversal corridor',
+		level3?.matterDimension?.lavaZones?.length === 8
+	)
+	check(
+		'Level 3 does not render the Level 2 lava stream',
+		!level3?.planet?.lava?.mesh
 	)
 	check('Level 3 starts with 100 HP', level3?.playerHP === 100)
 	check('Level 3 removes the surface wreck', !level3?.wreckRoot.parent)

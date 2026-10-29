@@ -18,7 +18,7 @@ export const CHARACTERS = [
 		role: 'THE ACE PILOT',
 
 		// Path is relative to /public, resolved at runtime by CharacterModel.
-		model: '/assets/models/pilots/zara-voss.glb',
+		model: ['/assets/models/pilots/zara-voss-rigged.glb', '/assets/models/pilots/zara-voss.glb'],
 
 		// Drives CSS custom properties (--theme-color) and shader/light tinting.
 		themeColor: '#00bfff',
@@ -69,7 +69,7 @@ export const CHARACTERS = [
 		name: 'KAI RYDER',
 		role: 'THE SCAVENGER',
 
-		model: '/assets/models/pilots/kai-ryder.glb',
+		model: ['/assets/models/pilots/kai-ryder-rigged.glb', '/assets/models/pilots/kai-ryder.glb'],
 
 		themeColor: '#3ddc84',
 		themeColorDim: '#123b26',
@@ -121,7 +121,7 @@ export const CHARACTERS = [
 		name: 'NYX',
 		role: 'THE VOID WALKER',
 
-		model: '/assets/models/pilots/nyx.glb',
+		model: ['/assets/models/pilots/nyx-rigged.glb', '/assets/models/pilots/nyx.glb'],
 
 		themeColor: '#9b5cff',
 		themeColorDim: '#2c1a4d',

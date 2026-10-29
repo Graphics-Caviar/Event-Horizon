@@ -1,43 +1,42 @@
 import * as THREE from 'three'
+import { AlienAnimationController } from './AlienAnimationController.js'
 
 export const ALIEN_MODELS = {
-	predator: '/assets/models/aliens/alien-predator.glb',
-	flying: '/assets/models/aliens/alien-flying-predator.glb',
-	brute: '/assets/models/aliens/armored-alien-brute.glb',
+	predator: '/assets/models/aliens/alien-predator-rigged.glb',
+	flying: '/assets/models/aliens/alien-flying-predator-rigged.glb',
+	brute: '/assets/models/aliens/armored-alien-brute-rigged.glb',
 }
 
 export const ALIENS = {
 	0: {
 		name: 'runner',
-		model: [
-			'/assets/models/aliens/alien-predator.glb',
-			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/alien-predator.glb',
-		],
+		model: ['/assets/models/aliens/alien-predator-rigged.glb'],
 		stats: {
-			speed: 6,
-			hp: 5,
+			speed: 12,
+			hp: 80,
+			attackDamage: 10,
+			ramDamage: 15,
 		},
 	},
 	1: {
 		name: 'launcher',
-		model: [
-			'/assets/models/aliens/armored-alien-brute.glb',
-			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/armored-alien-brute.glb',
-		],
+		model: ['/assets/models/aliens/armored-alien-brute-rigged.glb'],
 		stats: {
-			speed: 5,
-			hp: 5,
+			speed: 9,
+			hp: 250,
+			attackDamage: 30,
+			heavyAttackDamage: 30,
+			ramDamage: 30,
 		},
 	},
 	2: {
 		name: 'flyer',
-		model: [
-			'/assets/models/aliens/alien-flying-predator.glb',
-			'https://raw.githubusercontent.com/Graphics-Caviar/Event-Horizon/main/public/assets/models/aliens/alien-flying-predator.glb',
-		],
+		model: ['/assets/models/aliens/alien-flying-predator-rigged.glb'],
 		stats: {
-			speed: 25,
-			hp: 5,
+			speed: 33,
+			hp: 120,
+			attackDamage: 20,
+			ramDamage: 15,
 		},
 	},
 }
@@ -45,15 +44,19 @@ export const ALIENS = {
 // Aliens farther than this from the player are hidden: only the nearby
 // crowd costs draw calls, which keeps a large roster affordable.
 const CULL_DISTANCE = 240
-const COMBAT_ENTER_DISTANCE = 35
-const COMBAT_EXIT_DISTANCE = 50
+// Chase the pilot on foot or in the rover, without dropping pursuit after
+// the first corner. The far-off actors are still culled/recycled by Level2.
+const COMBAT_ENTER_DISTANCE = 110
+const COMBAT_EXIT_DISTANCE = 240
+const ROVER_COMBAT_ENTER_DISTANCE = 165
+const ROVER_COMBAT_EXIT_DISTANCE = 270
 // A rover impact above this speed hurts the alien instead of the crew.
 const RAM_SPEED_MIN = 6
-// A predator or brute goes down after two solid rams (stats.hp / damage).
+// Per-type ram damage is configured in ALIENS; this is the fallback.
 const RAM_DAMAGE = 3
 // Flying strike: the low talon pass clips anything inside this envelope.
 const STRIKE_RADIUS = 3.8
-// Whole-body wing-beat rhythm; the GLBs have no rigs, so the rock sells it.
+// Ambient body motion supplements actual wing bones on rigged flying models.
 const WING_BEAT_HZ = 2.1
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -64,21 +67,9 @@ const shortestAngle = (target, current) => {
 	return diff
 }
 
-/**
- * Level 2 alien life.
- *
- * All three alien GLBs are static single meshes (verified: no skins, no
- * animation clips), so every motion is procedural. Ambience: ground aliens
- * wander between walkable points around a home spot, lurch-bob as they
- * walk, bank into turns and align to the terrain; the flying predator
- * cruises a landmark orbit with a hover bob and banked turns.
- *
- * Combat: ground predators chase, coil back, then pounce with a locked
- * heading and body pitch; brutes do the same slower and heavier, slamming
- * dust on every charge. Flyers circle out at wing-beat altitude and swoop
- * in a low talon pass that rakes whoever is underneath. Every alien has
- * HP: ramming one with the rover at speed pops a damage bar above it and,
- * after a couple of solid hits, flattens it into a smashed wreck.
+/** Level 2 creatures. AI and hit detection remain in this class; imported
+ * bone rigs are animated independently by AlienAnimationController.
+ * Missing rigged assets are reported instead of silently loading older web variants.
  */
 export class Alien {
 	constructor(level, config = {}) {
@@ -96,6 +87,7 @@ export class Alien {
 		this.orbitRadius = config.orbitRadius || 50
 		this.orbitSpeed = config.orbitSpeed || 0.12
 		this.phase = Math.random() * Math.PI * 2
+		this.flankAngle = config.flankAngle ?? this.phase
 
 		this.group = new THREE.Group()
 		this.group.name = 'level2-alien'
@@ -103,6 +95,9 @@ export class Alien {
 		level.addObject(this.group)
 
 		this.model = null
+		this.animation = null
+		this._damageWindow = false
+		this._attackConnected = false
 		// _fit scales the loaded GLB to gameplay size; every later
 		// scale.set must build on this factor, never assume 1.
 		this._fitScale = 1
@@ -141,8 +136,19 @@ export class Alien {
 					: ALIENS[0]
 
 		// Combat state (driven by _updateGroundCombat / _updateFlyerCombat).
-		this.hp = this.type.stats.hp
-		this.maxHp = this.type.stats.hp
+		this.hp = config.hp ?? this.type.stats.hp
+		this.maxHp = this.hp
+		this.attackDamage =
+			config.attackDamage ?? this.type.stats.attackDamage ?? 1
+		this.heavyAttackDamage =
+			config.heavyAttackDamage ??
+			this.type.stats.heavyAttackDamage ??
+			this.attackDamage
+		this.currentAttackDamage = this.attackDamage
+		this.ramDamage =
+			config.ramDamage ??
+			this.type.stats.ramDamage ??
+			RAM_DAMAGE
 		this.smashed = false
 		// Set during a flyer's talon pass; Level2 consumes it for damage.
 		this.pendingStrike = false
@@ -161,12 +167,12 @@ export class Alien {
 		this._swoopApex = new THREE.Vector3()
 		this._swoopExit = new THREE.Vector3()
 		this._swoopT = 0
-		this._swoopDuration = 1.7
+		this._swoopDuration = 1.35
 		this._swoopHit = false
 		this._footPuff = 0
 		// Flyers cruise on wing power above the terrain, not on the pilot's head.
 		this._cruiseAlt = 13 + Math.random() * 5
-		this.diveTimer = 3 + Math.random() * 3
+		this.diveTimer = 1.8 + Math.random() * 1.8
 
 		this.collisionCooldown = 0
 		this.stopTimer = 0
@@ -181,9 +187,7 @@ export class Alien {
 
 	async load() {
 		try {
-			const model = await this.level.assetManager.loadModel(
-				this.path
-			)
+			const model = await this.level.assetManager.loadModel(this.path)
 			if (!this.group.parent) return // level torn down mid-load
 			this.level._fit(model, this.fit)
 			this._fitScale = model.scale.x
@@ -204,6 +208,7 @@ export class Alien {
 			})
 			this.group.add(model)
 			this.model = model
+			this.animation = new AlienAnimationController(model, this.type.name)
 			if (this.kind === 'ground') {
 				this.collider =
 					this.level._registerGameplayCollider(
@@ -230,15 +235,26 @@ export class Alien {
 		// A smashed wreck only plays out its flatten (or crash) animation.
 		if (this.smashed) {
 			this._updateSmashed(delta)
+			this._updateAnimation(delta)
 			this._updateHpBar(delta)
 			return
 		}
 
+		// Target the moving rover itself while the pilot is seated.
+		this.target = this.level.boarded
+			? this.level.rover.group
+			: this.level.playerRoot
+		const enterDistance = this.level.boarded
+			? ROVER_COMBAT_ENTER_DISTANCE
+			: COMBAT_ENTER_DISTANCE
+		const exitDistance = this.level.boarded
+			? ROVER_COMBAT_EXIT_DISTANCE
+			: COMBAT_EXIT_DISTANCE
 		const dx = playerPos.x - this.position.x
 		const dz = playerPos.z - this.position.z
 		const distance = Math.hypot(dx, dz)
 
-		if (!this.combatMode && distance < COMBAT_ENTER_DISTANCE) {
+		if (!this.combatMode && distance < enterDistance) {
 			this.combatMode = true
 			if (this.collider) {
 				this.collider.enabled = false
@@ -252,13 +268,13 @@ export class Alien {
 					this.position.z - playerPos.z,
 					this.position.x - playerPos.x
 				)
-				this.diveTimer = 1.5 + Math.random() * 2.5
+				this.diveTimer = 0.6 + Math.random() * 1.1
 			} else {
 				this._combatState = 'chase'
 			}
 		}
 
-		if (this.combatMode && distance > COMBAT_EXIT_DISTANCE) {
+		if (this.combatMode && distance > exitDistance) {
 			this.combatMode = false
 			if (this.collider) {
 				this.collider.enabled = true
@@ -293,6 +309,7 @@ export class Alien {
 			} else {
 				this._updateGroundCombat(delta)
 			}
+			this._updateAnimation(delta)
 			return
 		}
 
@@ -303,6 +320,32 @@ export class Alien {
 		} else {
 			this._updateGround(delta, playerPos)
 		}
+		this._updateAnimation(delta)
+	}
+
+	_updateAnimation(delta) {
+		if (!this.animation) return
+		const state = this._combatState
+		const groundAttack = this.combatMode && this.kind !== 'flyer' &&
+			(state === 'windup' || state === 'lunge')
+		const swoop = this.combatMode && this.kind === 'flyer' && state === 'swoop'
+		const duration = state === 'windup'
+			? (this.type.name === 'launcher' ? 0.62 : 0.32)
+			: state === 'lunge'
+				? (this.type.name === 'launcher' ? 0.5 : 0.34) : 1
+		const attackProgress = swoop
+			? Math.min(1, this._swoopT / this._swoopDuration)
+			: Math.min(1, Math.max(0, 1 - this._stateTimer / duration))
+		this.animation.update(delta, {
+			speed: this.kind === 'flyer' ? 0 : this._walkSpeed,
+			baseSpeed: this.speed,
+			attackPhase: groundAttack ? state : swoop ? 'swoop'
+				: this.kind === 'flyer' && state === 'climb' ? 'climb' : '',
+			attackProgress,
+			hit: this.stopTimer > 0 || this._hitWobble > 0.4,
+			dead: this.smashed,
+			bank: this._bank,
+		})
 	}
 
 	_updateGround(delta, playerPos) {
@@ -389,11 +432,15 @@ export class Alien {
 			// Refuse steps that climb faster than a heavy alien can walk;
 			// that keeps them out of the sharpest ridgelines.
 			const currentH = planet.heightAt(pos.x, pos.z)
+			const safeFromLava = this._stepAroundLava(
+				this._candidate,
+				this._target
+			)
 			const nextH = planet.heightAt(
 				this._candidate.x,
 				this._candidate.z
 			)
-			if (nextH - currentH < step * 0.55) {
+			if (safeFromLava && nextH - currentH < step * 0.55) {
 				pos.x = this._candidate.x
 				pos.z = this._candidate.z
 			} else {
@@ -413,7 +460,7 @@ export class Alien {
 			this.model.position.y =
 				this._baseY +
 				Math.abs(Math.sin(this._bob * 2.4)) *
-					0.16 *
+					(this.animation?.isRigged ? 0.035 : 0.16) *
 					bobAmount
 			this.model.rotation.z = this._bank
 		}
@@ -426,7 +473,7 @@ export class Alien {
 
 	_updateFlyer(delta) {
 		const planet = this.level.planet
-		this.orbitAngle += this.orbitSpeed * delta
+		this.orbitAngle += this.orbitSpeed * delta * 1.6
 		const x =
 			this.home.x +
 			Math.cos(this.orbitAngle) * this.orbitRadius
@@ -490,9 +537,51 @@ export class Alien {
 			if (!planet.isInsideBounds(x, z, 12)) continue
 			if (planet.slopeDegreesAt(x, z) > 20) continue
 			if (!planet._isSpawnClear(x, z, this.radius)) continue
+			if (this._isLavaBlocked(x, z)) continue
 			return new THREE.Vector3(x, 0, z)
 		}
 		return null
+	}
+
+	_isLavaBlocked(x, z, margin = this.radius + 1) {
+		return Boolean(this.level.lavaHazards?.isLavaAt?.(x, z, margin))
+	}
+
+	_stepAroundLava(candidate, toward = this._target) {
+		if (!this._isLavaBlocked(candidate.x, candidate.z)) return true
+		const sideX = Math.cos(this.heading)
+		const sideZ = -Math.sin(this.heading)
+		const offset = Math.max(4, this.radius * 2.4)
+		const options = [1, -1]
+			.map((sign) => {
+				const point = candidate.clone()
+				point.x += sideX * offset * sign
+				point.z += sideZ * offset * sign
+				this.level.planet.clampToBounds(
+					point,
+					this.radius + 2
+				)
+				return point
+			})
+			.filter(
+				(point) =>
+					!this._isLavaBlocked(
+						point.x,
+						point.z
+					) &&
+					this.level.planet.slopeDegreesAt(
+						point.x,
+						point.z
+					) <= 32
+			)
+		if (!options.length) return false
+		options.sort(
+			(a, b) =>
+				a.distanceToSquared(toward) -
+				b.distanceToSquared(toward)
+		)
+		candidate.copy(options[0])
+		return true
 	}
 
 	/**
@@ -505,8 +594,13 @@ export class Alien {
 		const pos = this.position
 		const target = this.target.position
 		const brute = this.type.name === 'launcher'
-		const dx = target.x - pos.x
-		const dz = target.z - pos.z
+		const flankRadius = brute ? 4.5 : 3.5
+		const targetX =
+			target.x + Math.cos(this.flankAngle) * flankRadius
+		const targetZ =
+			target.z + Math.sin(this.flankAngle) * flankRadius
+		const dx = targetX - pos.x
+		const dz = targetZ - pos.z
 		const dist = Math.hypot(dx, dz)
 		const desiredYaw = Math.atan2(dx, dz)
 		const strikeRange = brute ? 8 : 4.8
@@ -529,7 +623,10 @@ export class Alien {
 			case 'chase': {
 				speedTarget =
 					this.type.stats.speed *
-					(brute ? 1.05 : 1.55)
+					(brute ? 1.05 : 1.55) *
+					// A moving rover is faster than an on-foot pilot.
+					// Let pursuing creatures keep pressure without teleporting.
+					(this.level.boarded ? (brute ? 1.35 : 1.45) : 1)
 				if (dist < strikeRange) {
 					this._combatState = 'windup'
 					this._stateTimer = brute ? 0.62 : 0.32
@@ -543,6 +640,7 @@ export class Alien {
 				turnDamp = this.turnDamp * 3
 				if (this._stateTimer <= 0) {
 					this._combatState = 'lunge'
+					this._attackConnected = false
 					this._lungeSpeed =
 						this.type.stats.speed *
 						(brute ? 2.1 : 3.1)
@@ -608,6 +706,16 @@ export class Alien {
 				}
 			}
 		}
+		// Allow a single contact hit near the middle of an intentional strike.
+		const attackDuration = brute ? 0.5 : 0.34
+		const strikeProgress = 1 - this._stateTimer / attackDuration
+		this._damageWindow = this._combatState === 'lunge' &&
+			strikeProgress >= 0.3 && strikeProgress <= 0.82 &&
+			this.stopTimer <= 0
+		this.currentAttackDamage =
+			brute && this._combatState === 'lunge'
+				? this.heavyAttackDamage
+				: this.attackDamage
 
 		// Ease speed and heading through the body, just faster than ambient.
 		this._walkSpeed = THREE.MathUtils.damp(
@@ -655,6 +763,10 @@ export class Alien {
 			// Refuse steps that climb faster than the animal can drive in;
 			// knockback slides along whatever ground it meets.
 			const currentH = planet.heightAt(pos.x, pos.z)
+			const safeFromLava = this._stepAroundLava(
+				this._candidate,
+				this.target.position
+			)
 			const nextH = planet.heightAt(
 				this._candidate.x,
 				this._candidate.z
@@ -662,7 +774,7 @@ export class Alien {
 			const climb =
 				Math.max(step, this._knock.length() * delta) *
 				0.9
-			if (nextH - currentH < climb) {
+			if (safeFromLava && nextH - currentH < climb) {
 				pos.x = this._candidate.x
 				pos.z = this._candidate.z
 			}
@@ -711,8 +823,8 @@ export class Alien {
 			this._bob += delta * (2.2 + bobAmount * 3.4)
 			this.model.position.y =
 				this._baseY +
-				Math.abs(Math.sin(this._bob)) * 0.22 * bobAmount
-			this.model.rotation.x = this._pitch
+				Math.abs(Math.sin(this._bob)) * (this.animation?.isRigged ? 0.045 : 0.22) * bobAmount
+			this.model.rotation.x = this._pitch * (this.animation?.isRigged ? 0.35 : 1)
 			this.model.rotation.z = this._bank
 			const shudder =
 				Math.sin(this._hitWobble * 28) *
@@ -749,7 +861,7 @@ export class Alien {
 		let bankTarget = 0
 
 		if (this._combatState === 'circle') {
-			this.orbitAngle += this.orbitSpeed * delta
+			this.orbitAngle += this.orbitSpeed * delta * 1.6
 			const radius = 15
 			const x = target.x + Math.cos(this.orbitAngle) * radius
 			const z = target.z + Math.sin(this.orbitAngle) * radius
@@ -778,6 +890,18 @@ export class Alien {
 			)
 			if (this.diveTimer <= 0) this._startSwoop(target)
 		} else if (this._combatState === 'swoop') {
+			// Follow the target's new location during the early approach.
+			if (this._swoopT < this._swoopDuration * 0.5) {
+				this._swoopApex.x = THREE.MathUtils.damp(
+					this._swoopApex.x, target.x, 4, delta
+				)
+				this._swoopApex.z = THREE.MathUtils.damp(
+					this._swoopApex.z, target.z, 4, delta
+				)
+				this._swoopApex.y = this.planet.heightAt(
+					this._swoopApex.x, this._swoopApex.z
+				) + 2.1
+			}
 			this._swoopT += delta
 			const t = Math.min(
 				1,
@@ -857,7 +981,7 @@ export class Alien {
 			)
 			if (this._stateTimer <= 0) {
 				this._combatState = 'circle'
-				this.diveTimer = 4 + Math.random() * 4
+				this.diveTimer = 1.7 + Math.random() * 1.8
 			}
 		}
 
@@ -898,7 +1022,7 @@ export class Alien {
 		if (this.model) {
 			this.model.position.y =
 				this._baseY +
-				Math.sin(this._wingPhase) * beatAmp
+				Math.sin(this._wingPhase) * (this.animation?.isRigged ? beatAmp * 0.2 : beatAmp)
 			this.model.rotation.x =
 				this._pitch +
 				Math.sin(this._wingPhase + 1.1) *
@@ -911,6 +1035,7 @@ export class Alien {
 
 	_startSwoop(target) {
 		this._combatState = 'swoop'
+		this._attackConnected = false
 		this._swoopT = 0
 		this._swoopHit = false
 		this._swoopFrom.copy(this.position)
@@ -1033,6 +1158,7 @@ export class Alien {
 			this._smash()
 		} else {
 			this._hitWobble = 1
+			this.stopTimer = Math.max(this.stopTimer, 0.35)
 		}
 	}
 
@@ -1043,6 +1169,7 @@ export class Alien {
 		this._knock.set(0, 0, 0)
 		this._walkSpeed = 0
 		this.pendingStrike = false
+		this._damageWindow = false
 		if (this.collider) this.collider.enabled = false
 		if (this.kind !== 'flyer') {
 			// Flattened where it stands; the wreck stays on the field.
@@ -1073,7 +1200,7 @@ export class Alien {
 			// Tumble out of the sky, then flatten where we land.
 			this._flyFall = Math.min(1, this._flyFall + delta * 0.9)
 			this.position.y -= (14 + 26 * this._flyFall) * delta
-			this.group.rotation.z += delta * 7
+			this.group.rotation.z += delta * (this.animation?.isRigged ? 1.5 : 7)
 			const ground =
 				this.planet.heightAt(
 					this.position.x,
@@ -1107,6 +1234,12 @@ export class Alien {
 
 		// Squash: a quick pop up, then flatten into a pancake that stays.
 		if (this._smashT >= 0 && this._smashT < 1) {
+			if (this.animation?.isRigged) {
+				this._smashT = Math.min(1, this._smashT + delta / 0.8)
+				if (this.model) this.model.rotation.z = THREE.MathUtils.damp(
+					this.model.rotation.z, this.type.name === 'launcher' ? -0.35 : 0.45, 4, delta)
+				return
+			}
 			this._smashT = Math.min(1, this._smashT + delta / 0.34)
 			const t = this._smashT
 			const pop =
@@ -1161,19 +1294,27 @@ export class Alien {
 				// Knocked up out of the flight path a little.
 				this.position.y += 1.2
 			}
-			this.damage(RAM_DAMAGE)
+			this.damage(this.ramDamage)
 			return 'ram'
 		}
 
 		if (this.collisionCooldown > 0 || this.kind === 'flyer') {
 			return null
 		}
-		// Bumping a standing predator just earns a snap.
+		// Only a committed attack can deal contact damage (not every frame).
+		if (!this._damageWindow || this._attackConnected) return null
+		this._attackConnected = true
 		this.stopTimer = 1.1
 		this.collisionCooldown = 2.4
 		this._combatState = 'recover'
 		this._stateTimer = 1.1
 		return 'bite'
+	}
+
+	/** Free mixer/bone references when the encounter despawns or Level 2 exits. */
+	dispose() {
+		this.animation?.dispose()
+		this.animation = null
 	}
 
 	checkPlayerCollision(player, playerRadius = 0.9) {
@@ -1187,8 +1328,10 @@ export class Alien {
 		const hit =
 			Math.hypot(dx, dz) <= enemyRadius + playerRadius &&
 			Math.abs(dy) <= enemyRadius + playerRadius &&
-			this.collisionCooldown <= 0
+			this.collisionCooldown <= 0 &&
+			this._damageWindow && !this._attackConnected
 		if (hit) {
+			this._attackConnected = true
 			// Landed the bite: brief recoil before circling back in.
 			this.stopTimer = 1.1
 			this.collisionCooldown = 2.4

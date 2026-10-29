@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { PilotRigAnimator } from '../../models/PilotRigAnimator.js'
 
 export const PILOT_GAITS = {
 	zara: {
@@ -40,7 +41,11 @@ export const PILOT_GAITS = {
 // Orient the static asset before fitting it; each source uses a different yaw.
 export function orientPilot(model, key) {
 	const root = new THREE.Group()
-	root.rotation.y = (PILOT_GAITS[key] || PILOT_GAITS.zara).yaw
+	// The three new pilot rigs share one forward axis; Kai's historical
+	// static mesh needed a yaw correction that the rigged export does not.
+	let hasSkin = false
+	model.traverse((node) => { if (node.isSkinnedMesh) hasSkin = true })
+	root.rotation.y = hasSkin ? 0 : (PILOT_GAITS[key] || PILOT_GAITS.zara).yaw
 	root.add(model)
 	return root
 }
@@ -73,6 +78,13 @@ export class PilotWalk {
 		const bounds = new THREE.Box3().setFromObject(model)
 		this.footOffset = -bounds.min.y
 		this.height = bounds.getSize(new THREE.Vector3()).y
+		// Rigged pilots must use their bones: the old custom vertex shader
+		// would deform already-skinned vertices a second time.
+		this.rigAnimator = new PilotRigAnimator(model)
+		if (this.rigAnimator.isRigged) {
+			this.strideLength = this.height * 0.52
+			return
+		}
 		this.strideLength =
 			this.height * ((2 * profile.stride) / profile.stance)
 		model.traverse((mesh) => {
@@ -226,6 +238,16 @@ export class PilotWalk {
 	}
 
 	update(delta, distance, boarded) {
+		if (this.rigAnimator?.isRigged) {
+			this.rigAnimator.update(delta, {
+				distance,
+				boarded,
+				airborne: !boarded && Boolean(this.level?._airborne || this.level?.voidDimension),
+			})
+			this.phase = this.rigAnimator.phase
+			this.amount = this.rigAnimator.blend
+			return
+		}
 		const moving = !boarded && distance > 0.0001
 		this.amount = boarded
 			? 0
@@ -258,5 +280,9 @@ export class PilotWalk {
 				(distance / this.strideLength) * Math.PI * 2
 		this.uniforms.walkPhase.value = this.phase
 		this.uniforms.walkAmount.value = this.amount
+	}
+
+	dispose() {
+		this.rigAnimator?.dispose()
 	}
 }

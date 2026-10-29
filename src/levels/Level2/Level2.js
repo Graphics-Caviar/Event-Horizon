@@ -12,8 +12,11 @@ import { Rover, MAX_FORWARD_SPEED } from './Rover.js'
 import { Hazards } from './Hazards.js'
 import { DustParticles } from './DustParticles.js'
 import { Alien, ALIEN_MODELS } from './Alien.js'
+import { RoverExplosion } from './RoverExplosion.js'
+import { Level2LavaHazards } from './Level2LavaHazards.js'
 import { Portal } from './Portal.js'
 import { WaypointGuide } from './WaypointGuide.js'
+import { advanceRouteWaypoint } from './RouteProgress.js'
 import { PilotWalk, orientPilot } from './PilotWalk.js'
 import { constrainTerrainCamera } from './TerrainCamera.js'
 
@@ -23,6 +26,80 @@ const SLIDE_START_SLOPE = 17.5
 const MAX_MOVEMENT_SUBSTEP = 0.8
 const LAVA_DAMAGE = 20
 const LAVA_HIT_INTERVAL = 0.8
+export const LEVEL2_ROUTE_OFFSETS = Object.freeze(
+	[
+		[300, 150],
+		[220, 340],
+		[420, 490],
+		[650, 420],
+		[880, 560],
+		[830, 800],
+		[1010, 900],
+		[960, 1100],
+	].map((point) => Object.freeze(point))
+)
+
+export const LEVEL2_ENCOUNTER_LAYOUT = Object.freeze(
+	[
+		{
+			id: 'landing-ambush',
+			label: 'ALIEN LANDING AMBUSH',
+			waypoint: 0,
+			nearLanding: true,
+			composition: { runner: 4, brute: 2, flyer: 2 },
+		},
+		{
+			id: 'alien-outskirts',
+			label: 'ALIEN OUTSKIRTS',
+			waypoint: 1,
+			composition: { runner: 3, brute: 1, flyer: 2 },
+		},
+		{
+			id: 'lava-crossing',
+			label: 'LAVA CROSSING',
+			waypoint: 3,
+			composition: { runner: 3, brute: 2, flyer: 1 },
+		},
+		{
+			id: 'volcanic-valley',
+			label: 'VOLCANIC VALLEY',
+			waypoint: 4,
+			composition: { runner: 3, brute: 2, flyer: 2 },
+		},
+		{
+			id: 'rocky-alien-territory',
+			label: 'ROCKY ALIEN TERRITORY',
+			waypoint: 6,
+			composition: { runner: 3, brute: 2, flyer: 2 },
+		},
+		{
+			id: 'space-hub-defense',
+			label: 'SPACE HUB DEFENSE',
+			waypoint: 7,
+			major: true,
+			composition: { runner: 4, brute: 3, flyer: 2 },
+			reinforcements: { runner: 2, brute: 1, flyer: 2 },
+			reinforcementDefeats: 2,
+		},
+	].map((encounter) =>
+		Object.freeze({
+			...encounter,
+			composition: Object.freeze(encounter.composition),
+			reinforcements: encounter.reinforcements
+				? Object.freeze(encounter.reinforcements)
+				: null,
+		})
+	)
+)
+
+const LEVEL2_COMBAT_DEFAULTS = Object.freeze({
+	// Original rigged GLBs are heavyweight; keep simultaneous renders bounded.
+	maxActiveEnemies: 8,
+	maxMajorEnemies: 10,
+	spawnInterval: 0.48,
+	lavaDamagePerSecond: 25,
+	lavaDamageInterval: 0.8,
+})
 
 // Wormhole suction around the escape gate: inside this radius the gate
 // pulls the rover and the pilot toward the ring, gently at the rim and
@@ -96,6 +173,7 @@ export class Level2 extends Level {
 			planetClass = AlienPlanet,
 			scriptSet = 2,
 			combatConfig = {},
+			worldSize = scriptSet === 2 ? 2400 : 1100,
 			onPrepared = null,
 			onPauseChange = null,
 		} = {}
@@ -112,6 +190,10 @@ export class Level2 extends Level {
 		// scriptSet 3, then swaps the individual cue ids it needs.
 		this.radio = game.radio || null
 		this._radioScriptSet = scriptSet
+		this.combatConfig = {
+			...LEVEL2_COMBAT_DEFAULTS,
+			...combatConfig,
+		}
 		this._radioIntroIn = 1.2
 		this._radioIntroScript =
 			scriptSet === 3 ? 'l3.opening' : 'l2.opening'
@@ -135,48 +217,82 @@ export class Level2 extends Level {
 		this.roverSite = this.landingSite
 			.clone()
 			.add(new THREE.Vector3(95, 0, -55))
-		// Level 2's escape route bends around the end of the existing lava
-		// channel. Its wider basin remains the original size, with a continuous
-		// driveable shelf instead of scaled terrain or repeated chunks. Level 3
-		// inherits this constructor and keeps its original objective positions.
+		// Level 2 winds through the basin before reaching the fighter hub.
+		// Level 3 keeps its independent Matter Dimension objective.
 		this.portalSite = this.landingSite
 			.clone()
 			.add(
 				new THREE.Vector3(
 					...(scriptSet === 2
-						? [-150, 0, 460]
-						: [-340, 0, 320])
+						? [700, 0, 1300]
+						: [-720, 0, 680])
 				)
 			)
+		const matterRoute =
+			scriptSet === 3
+				? (() => {
+						const start = this.landingSite
+						const direction =
+							this.portalSite
+								.clone()
+								.sub(start)
+								.setY(0)
+								.normalize()
+						const side = new THREE.Vector3(
+							-direction.z,
+							0,
+							direction.x
+						)
+						return [
+							0, 0.18, 0.38, 0.58,
+							0.8, 1,
+						].map((progress, index) =>
+							start
+								.clone()
+								.lerp(
+									this
+										.portalSite,
+									progress
+								)
+								.addScaledVector(
+									side,
+									[
+										0,
+										36,
+										-38,
+										40,
+										-24,
+										0,
+									][index]
+								)
+						)
+					})()
+				: []
 		this.roverApproach =
 			scriptSet === 2
 				? {
 						points: [
 							this.roverSite.clone(),
-							...[
-								[300, 150],
-								[235, 340],
-								[75, 440],
-								[130, 350],
-							].map(([x, z]) =>
-								this.landingSite
-									.clone()
-									.add(
-										new THREE.Vector3(
-											x,
-											0,
-											z
+							...LEVEL2_ROUTE_OFFSETS.map(
+								([x, z]) =>
+									this.landingSite
+										.clone()
+										.add(
+											new THREE.Vector3(
+												x,
+												0,
+												z
+											)
 										)
-									)
 							),
 						],
 						trigger: this.landingSite
 							.clone()
 							.add(
 								new THREE.Vector3(
-									130,
+									960,
 									0,
-									350
+									1100
 								)
 							),
 						radius: 24,
@@ -184,9 +300,9 @@ export class Level2 extends Level {
 							.clone()
 							.add(
 								new THREE.Vector3(
-									190,
+									1000,
 									0,
-									375
+									1135
 								)
 							),
 						portalSite: this.portalSite,
@@ -207,6 +323,15 @@ export class Level2 extends Level {
 					this.portalSite,
 				])
 				.getCenter(center)
+		} else if (matterRoute.length) {
+			new THREE.Box3()
+				.setFromPoints([
+					this.landingSite,
+					this.crashSite,
+					...matterRoute,
+					this.portalSite,
+				])
+				.getCenter(center)
 		}
 		center.y = this.baseY
 
@@ -214,13 +339,14 @@ export class Level2 extends Level {
 		this.planet = new planetClass(this, {
 			center,
 			baseY: this.baseY,
-			size: 1100,
+			size: worldSize,
+			terrainSegments: scriptSet === 2 ? 640 : undefined,
 			drivingRoute: this.roverApproach
 				? [
 						...this.roverApproach.points,
 						this.portalSite,
 					]
-				: [],
+				: matterRoute,
 			clearZones: [
 				{
 					x: this.landingSite.x,
@@ -274,6 +400,8 @@ export class Level2 extends Level {
 			])
 				point.y = this.planet.heightAt(point.x, point.z)
 		}
+		this.lavaHazards =
+			scriptSet === 2 ? new Level2LavaHazards(this) : null
 
 		this.playerRoot = new THREE.Group()
 		this.playerRoot.name = 'level2-pilot'
@@ -376,6 +504,7 @@ export class Level2 extends Level {
 
 		this.boarded = false
 		this.roverDisabled = false
+		this._roverExplosion = null
 		this._hasBoarded = false
 		this.completed = false
 		this.paused = false
@@ -497,6 +626,7 @@ export class Level2 extends Level {
 		this.damageCooldown = 0
 		this._lavaPlayerCooldown = 0
 		this._lavaRoverCooldown = 0
+		this._lavaRoverWarned = false
 		this._buildLevelHUD()
 		this._updateLevelHUD()
 		this._buildDamageFlash()
@@ -552,30 +682,25 @@ export class Level2 extends Level {
 		return origin.clone()
 	}
 
-	/** Keep the familiar guide on the safe bends, with the gate on the horizon. */
+	/** Track the rover against the actual road segments, not just waypoint radii. */
 	_getApproachTarget() {
 		const route = this.roverApproach?.points
 		if (!route) return this.portal.group.position
 		const position = this.boarded
 			? this.rover.group.position
 			: this.playerRoot.position
-		while (this._approachWaypoint < route.length - 1) {
-			const waypoint = route[this._approachWaypoint]
-			if (
-				Math.hypot(
-					position.x - waypoint.x,
-					position.z - waypoint.z
-				) > 30
-			)
-				break
-			this._approachWaypoint++
-		}
+		this._approachWaypoint = advanceRouteWaypoint(
+			route,
+			position,
+			this._approachWaypoint
+		)
 		return route[this._approachWaypoint]
 	}
 
 	_alienSpotValid(x, z, radius) {
 		if (!this.planet.isInsideBounds(x, z, 12)) return false
 		if (this.planet.slopeDegreesAt(x, z) > 20) return false
+		if (this.lavaHazards?.isLavaAt?.(x, z, radius + 1)) return false
 		// _isSpawnClear already fences off the lava channel and the
 		// landing/crash/rover clear zones.
 		return this.planet._isSpawnClear(x, z, radius)
@@ -628,192 +753,285 @@ export class Level2 extends Level {
 		this.onPauseChange(paused)
 	}
 
-	/**
-	 * Ambient alien life. Loads are staggered so the three ~37 MB GLBs do
-	 * not all parse in the same frame; each alien pops in when ready.
-	 * The planet is meant to feel inhabited, so the roster is a crowd —
-	 * distance culling in Alien.update keeps only the nearby bodies on
-	 * the render list.
-	 */
+	/** Configure the Level 2 roster; actors are created as route zones activate. */
 	_spawnAliens() {
-		const midRover = this.landingSite
-			.clone()
-			.lerp(this.roverSite, 0.45)
-		const midCrash = this.landingSite
-			.clone()
-			.lerp(this.crashSite, 0.6)
-		const midPortal = this.landingSite
-			.clone()
-			.lerp(this.portalSite, 0.5)
-		const midRoverPortal = this.roverSite
-			.clone()
-			.lerp(this.portalSite, 0.5)
-		const defs = [
-			// Predator packs patrol the routes between the landmarks.
-			{
-				path: ALIEN_MODELS.predator,
-				kind: 'ground',
-				home: midRover
-					.clone()
-					.add(new THREE.Vector3(-30, 0, -34)),
-				fit: 5.4,
-				speed: 4.4,
-				radius: 2,
-			},
-			{
-				path: ALIEN_MODELS.predator,
-				kind: 'ground',
-				home: this.crashSite
-					.clone()
-					.add(new THREE.Vector3(-58, 0, -30)),
-				fit: 5.4,
-				speed: 3.8,
-				radius: 2,
-			},
-			{
-				path: ALIEN_MODELS.predator,
-				kind: 'ground',
-				home: this.roverSite
-					.clone()
-					.add(new THREE.Vector3(-26, 0, 46)),
-				fit: 5.2,
-				speed: 4.1,
-				radius: 2,
-			},
-			{
-				path: ALIEN_MODELS.predator,
-				kind: 'ground',
-				home: this.portalSite
-					.clone()
-					.add(new THREE.Vector3(-44, 0, -26)),
-				fit: 5.6,
-				speed: 4.6,
-				radius: 2,
-			},
-			{
-				path: ALIEN_MODELS.predator,
-				kind: 'ground',
-				home: this.landingSite
-					.clone()
-					.add(new THREE.Vector3(52, 0, -78)),
-				fit: 5.3,
-				speed: 3.6,
-				radius: 2,
-			},
-			{
-				path: ALIEN_MODELS.predator,
-				kind: 'ground',
-				home: midCrash
-					.clone()
-					.add(new THREE.Vector3(40, 0, 30)),
-				fit: 5.5,
-				speed: 4.2,
-				radius: 2,
-			},
-			{
-				path: ALIEN_MODELS.predator,
-				kind: 'ground',
-				home: midPortal
-					.clone()
-					.add(new THREE.Vector3(36, 0, -18)),
-				fit: 5.4,
-				speed: 3.9,
-				radius: 2,
-			},
-			// Armored brutes guard the objectives.
-			{
-				path: ALIEN_MODELS.brute,
-				kind: 'ground',
-				home: this.portalSite
-					.clone()
-					.add(new THREE.Vector3(30, 0, 40)),
-				fit: 6.6,
-				speed: 3.1,
-				radius: 2.7,
-			},
-			{
-				path: ALIEN_MODELS.brute,
-				kind: 'ground',
-				home: this.crashSite
-					.clone()
-					.add(new THREE.Vector3(54, 0, 44)),
-				fit: 6.4,
-				speed: 2.9,
-				radius: 2.7,
-			},
-			{
-				path: ALIEN_MODELS.brute,
-				kind: 'ground',
-				home: midRoverPortal
-					.clone()
-					.add(new THREE.Vector3(-20, 0, 24)),
-				fit: 6.8,
-				speed: 3.2,
-				radius: 2.7,
-			},
-			// Flying predators circle different landmarks at different
-			// heights so the sky never feels scripted.
-			{
-				path: ALIEN_MODELS.flying,
-				kind: 'flyer',
-				home: this.crashSite.clone(),
-				fit: 7.5,
-				altitude: 34,
-				orbitRadius: 52,
-				orbitSpeed: 0.16,
-			},
-			{
-				path: ALIEN_MODELS.flying,
-				kind: 'flyer',
-				home: this.landingSite.clone(),
-				fit: 6.5,
-				altitude: 44,
-				orbitRadius: 74,
-				orbitSpeed: -0.1,
-			},
-			{
-				path: ALIEN_MODELS.flying,
-				kind: 'flyer',
-				home: this.portalSite.clone(),
-				fit: 7,
-				altitude: 40,
-				orbitRadius: 60,
-				orbitSpeed: 0.13,
-			},
-			{
-				path: ALIEN_MODELS.flying,
-				kind: 'flyer',
-				home: midPortal.clone(),
-				fit: 6.8,
-				altitude: 52,
-				orbitRadius: 84,
-				orbitSpeed: -0.08,
-			},
-		]
+		if (this._radioScriptSet !== 2) return
+		this.encounters = LEVEL2_ENCOUNTER_LAYOUT.map((config) => ({
+			...config,
+			started: false,
+			completed: false,
+			reinforcementsQueued: false,
+			total: 0,
+			spawned: 0,
+			defeated: 0,
+			retired: 0,
+			skipped: 0,
+			aliens: [],
+		}))
+		this._pendingAlienSpawns = []
+		this._encounterSpawnTimer = 0
+		this.encounterStats = {
+			planned: LEVEL2_ENCOUNTER_LAYOUT.reduce(
+				(total, encounter) =>
+					total +
+					Object.values(
+						encounter.composition
+					).reduce(
+						(sum, count) => sum + count,
+						0
+					) +
+					Object.values(
+						encounter.reinforcements || {}
+					).reduce(
+						(sum, count) => sum + count,
+						0
+					),
+				0
+			),
+			spawned: 0,
+			loaded: 0,
+			defeated: 0,
+			maxSimultaneous: 0,
+		}
+	}
 
-		defs.forEach((def, index) => {
-			if (def.kind === 'ground') {
-				const spot = this._findAlienSpot(
-					def.home,
-					def.radius
-				)
-				if (!spot) {
-					console.warn(
-						'[Level2] No clear spot for an alien; skipped.'
+	_queueEncounterWave(encounter, composition, reinforcement = false) {
+		const routePoint = encounter.nearLanding
+			? this.landingSite : this.roverApproach.points[encounter.waypoint]
+		let spawnOrdinal = 0
+		for (const [type, count] of Object.entries(composition)) {
+			for (let index = 0; index < count; index++) {
+				// Distribute all species around the area: don't pile the
+				// first predator, brute and flyer on the same coordinates.
+				const ordinal = spawnOrdinal++
+				const angle = ordinal * 2.399963229728653
+				const offset = encounter.nearLanding
+					? 28 + (ordinal % 3) * 7 : 27 + (ordinal % 3) * 8
+				const home = routePoint
+					.clone()
+					.add(
+						new THREE.Vector3(
+							Math.cos(angle) *
+								offset,
+							0,
+							Math.sin(angle) * offset
+						)
 					)
-					return
-				}
-				def.home.copy(spot)
+				const typeConfig = {
+					runner: {
+						path: ALIEN_MODELS.predator,
+						kind: 'ground',
+						fit: 5.4,
+						speed: 12,
+						radius: 2,
+						ramDamage: 15,
+					},
+					brute: {
+						path: ALIEN_MODELS.brute,
+						kind: 'ground',
+						fit: 6.6,
+						speed: 9,
+						radius: 2.7,
+						ramDamage: 30,
+					},
+					flyer: {
+						path: ALIEN_MODELS.flying,
+						kind: 'flyer',
+						fit: 7.2,
+						speed: 33,
+						altitude: 28,
+						orbitRadius:
+							42 + (index % 3) * 9,
+						orbitSpeed:
+							index % 2
+								? -0.15
+								: 0.17,
+						ramDamage: 15,
+					},
+				}[type]
+				this._pendingAlienSpawns.push({
+					encounter,
+					reinforcement,
+					major: Boolean(encounter.major),
+					def: {
+						...typeConfig,
+						home,
+						homeRadius: 75,
+						flankAngle: angle,
+					},
+				})
+				encounter.total++
 			}
-			const alien = new Alien(this, def)
-			this.aliens.push(alien)
-			this._alienTimers.push(
-				setTimeout(
-					() => alien.load(),
-					600 + index * 550
-				)
+		}
+	}
+
+	_spawnEncounterAlien(entry) {
+		const { encounter, def } = entry
+		const spot = this._findAlienSpot(def.home, def.radius || 2)
+		if (!spot) {
+			console.warn(
+				`[Level2] No safe spawn location for ${encounter.id}; actor skipped.`
 			)
-		})
+			encounter.skipped++
+			return
+		}
+		def.home.copy(spot)
+		const alien = new Alien(this, def)
+		alien.encounterId = encounter.id
+		alien.isMajor = entry.major
+		alien._encounterLoaded = false
+		alien._encounterDefeated = false
+		this.aliens.push(alien)
+		encounter.aliens.push(alien)
+		encounter.spawned++
+		this.encounterStats.spawned++
+		const timer = setTimeout(() => alien.load(), 0)
+		this._alienTimers.push(timer)
+	}
+
+	/** Move expensive off-screen skeleton actors out of memory after the rover
+	 * has moved well past them. A later encounter can then use the same slot.
+	 */
+	_retireDistantAliens() {
+		const target = this.boarded ? this.rover.group.position : this.playerRoot.position
+		for (let i = this.aliens.length - 1; i >= 0; i--) {
+			const alien = this.aliens[i]
+			if (!alien._loaded || alien.smashed) continue
+			if (Math.hypot(alien.position.x - target.x, alien.position.z - target.z) < 220) continue
+			const encounter = this.encounters.find((entry) => entry.id === alien.encounterId)
+			if (encounter) {
+				encounter.retired++
+				encounter.aliens = encounter.aliens.filter((entry) => entry !== alien)
+			}
+			alien.dispose()
+			alien.group.removeFromParent()
+			if (alien.collider) {
+				const index = this.gameplayColliders.indexOf(alien.collider)
+				if (index >= 0) this.gameplayColliders.splice(index, 1)
+			}
+			this.aliens.splice(i, 1)
+		}
+	}
+
+	_updateEncounters(delta) {
+		if (
+			this._radioScriptSet !== 2 ||
+			!this.roverApproach ||
+			this.completed ||
+			this.transitionHeld ||
+			this.cinematic
+		)
+			return
+		const progress = this._approachWaypoint
+		for (const encounter of this.encounters) {
+			if (encounter.started || progress < encounter.waypoint)
+				continue
+			encounter.started = true
+			this._queueEncounterWave(
+				encounter,
+				encounter.composition
+			)
+			this._showMovementFeedback(
+				`${encounter.label} — HOSTILES INBOUND`,
+				3
+			)
+		}
+		const hubDefense = this.encounters.at(-1)
+		if (
+			hubDefense?.started &&
+			hubDefense.reinforcements &&
+			!hubDefense.reinforcementsQueued &&
+			progress >= hubDefense.waypoint &&
+			hubDefense.defeated >= hubDefense.reinforcementDefeats
+		) {
+			hubDefense.reinforcementsQueued = true
+			this._queueEncounterWave(
+				hubDefense,
+				hubDefense.reinforcements,
+				true
+			)
+			this._showMovementFeedback(
+				'HUB DEFENSE — REINFORCEMENTS',
+				3
+			)
+		}
+
+		this._retireDistantAliens()
+		const active = this.aliens.filter((alien) => !alien.smashed)
+		const majorActive = active.some((alien) => alien.isMajor)
+		const pendingMajor = this._pendingAlienSpawns[0]?.major ?? false
+		const activeLimit =
+			majorActive || pendingMajor
+				? this.combatConfig.maxMajorEnemies
+				: this.combatConfig.maxActiveEnemies
+		this._encounterSpawnTimer -= delta
+		const initialWave = this._pendingAlienSpawns[0]?.encounter?.nearLanding
+		const initialBurst = initialWave ? 4 : 2
+		if (
+			this._pendingAlienSpawns.length &&
+			active.length < activeLimit &&
+			this._encounterSpawnTimer <= 0
+		) {
+			for (let i = 0; i < initialBurst && this._pendingAlienSpawns.length && active.length + i < activeLimit; i++) {
+				this._spawnEncounterAlien(this._pendingAlienSpawns.shift())
+			}
+			this._encounterSpawnTimer = initialWave ? 0.25 : this.combatConfig.spawnInterval
+		}
+		for (const encounter of this.encounters) {
+			if (
+				encounter.started &&
+				!encounter.completed &&
+				encounter.spawned + encounter.skipped ===
+					encounter.total &&
+				encounter.defeated + encounter.retired === encounter.spawned &&
+				(!encounter.reinforcements ||
+					encounter.reinforcementsQueued)
+			)
+				encounter.completed = true
+		}
+		this.encounterStats.maxSimultaneous = Math.max(
+			this.encounterStats.maxSimultaneous,
+			active.length
+		)
+	}
+
+	_trackEncounterAlien(alien) {
+		if (!alien.encounterId) return
+		const encounter = this.encounters.find(
+			(entry) => entry.id === alien.encounterId
+		)
+		if (!encounter) return
+		if (alien._loaded && !alien._encounterLoaded) {
+			alien._encounterLoaded = true
+			this.encounterStats.loaded++
+		}
+		if (alien.smashed && !alien._encounterDefeated) {
+			alien._encounterDefeated = true
+			encounter.defeated++
+			this.encounterStats.defeated++
+			const cleanupTimer = setTimeout(() => {
+				alien.dispose()
+				alien.group.removeFromParent()
+				if (alien.collider) {
+					const index =
+						this.gameplayColliders.indexOf(
+							alien.collider
+						)
+					if (index >= 0)
+						this.gameplayColliders.splice(
+							index,
+							1
+						)
+				}
+				this.aliens = this.aliens.filter(
+					(entry) => entry !== alien
+				)
+				encounter.aliens = encounter.aliens.filter(
+					(entry) => entry !== alien
+				)
+			}, 9000)
+			this._alienTimers.push(cleanupTimer)
+		}
 	}
 
 	async _loadPilot() {
@@ -863,6 +1081,7 @@ export class Level2 extends Level {
 	}
 
 	_setPilot(model, character = 'zara') {
+		this.pilotWalk?.dispose()
 		this.pilotModel?.removeFromParent()
 		this.pilotModel = model
 		this.pilotWalk = new PilotWalk(this, model, character)
@@ -1999,8 +2218,14 @@ export class Level2 extends Level {
 	_updateLavaDamage(delta) {
 		if (this.completed || this.transitionHeld || this.cinematic)
 			return false
-		const lava = this.planet.lava
-		if (!lava) return false // Level 3 shares this controller without lava.
+		const lava = this.lavaHazards || this.planet.lava
+		if (!lava || typeof lava.touches !== 'function') return false
+		const interval =
+			this.combatConfig?.lavaDamageInterval ??
+			LAVA_HIT_INTERVAL
+		const damage =
+			(this.combatConfig?.lavaDamagePerSecond ??
+				LAVA_DAMAGE / LAVA_HIT_INTERVAL) * interval
 		this._lavaPlayerCooldown = Math.max(
 			0,
 			this._lavaPlayerCooldown - delta
@@ -2016,21 +2241,24 @@ export class Level2 extends Level {
 			if (lava.touches(this._feetScratch)) {
 				this.playerHP = Math.max(
 					0,
-					this.playerHP - LAVA_DAMAGE
+					this.playerHP - damage
 				)
-				this._lavaPlayerCooldown = LAVA_HIT_INTERVAL
+				this._lavaPlayerCooldown = interval
 				this._flashDamage()
 				hurt = true
 			}
 		}
+		// Check contact every frame, even during the damage cooldown, so
+		// the warning reflects an actual crossing rather than one wheel tick.
+		const roverOnLava = this.roverHP > 0 && this.rover.isTouchingLava(lava)
+		if (roverOnLava && !this._lavaRoverWarned) {
+			this._showMovementFeedback('WARNING — LAVA IS DAMAGING THE ROVER', 2)
+		}
+		this._lavaRoverWarned = roverOnLava
 		// The hull takes the heat while driving; the seated pilot is safe.
-		if (
-			this.roverHP > 0 &&
-			this._lavaRoverCooldown <= 0 &&
-			this.rover.isTouchingLava(lava)
-		) {
-			this.roverHP = Math.max(0, this.roverHP - LAVA_DAMAGE)
-			this._lavaRoverCooldown = LAVA_HIT_INTERVAL
+		if (roverOnLava && this._lavaRoverCooldown <= 0) {
+			this.roverHP = Math.max(0, this.roverHP - damage)
+			this._lavaRoverCooldown = interval
 			if (this.boarded) {
 				this._flashDamage()
 				this._requestShake(0.35)
@@ -2040,7 +2268,7 @@ export class Level2 extends Level {
 		if (hurt) {
 			this._updateLevelHUD()
 			if (this.playerHP <= 0 || this.roverHP <= 0) {
-				this._gameOver()
+				this._gameOver(this.roverHP <= 0 ? 'rover' : 'pilot')
 				return true
 			}
 		}
@@ -2052,7 +2280,6 @@ export class Level2 extends Level {
 		if (this.completed || this.transitionHeld) return false
 		if (this.boarded) return this._applyRoverHit(amount)
 		if (this.damageCooldown > 0) return false
-		if (this._radioScriptSet === 2) amount *= 20
 		this.playerHP = Math.max(this.playerHP - amount, 0)
 		this.damageCooldown = 0.8
 		this._flashDamage()
@@ -2064,6 +2291,10 @@ export class Level2 extends Level {
 		return false
 	}
 
+	_alienAttackDamage(alien) {
+		return alien.currentAttackDamage ?? alien.attackDamage ?? 1
+	}
+
 	_applyRoverHit(amount = 1) {
 		if (
 			this.completed ||
@@ -2072,7 +2303,6 @@ export class Level2 extends Level {
 			this.roverDamageCooldown > 0
 		)
 			return false
-		if (this._radioScriptSet === 2) amount *= 20
 		this.roverHP = Math.max(0, this.roverHP - amount)
 		this.roverDamageCooldown = 0.8
 		this._requestShake(0.35)
@@ -2083,7 +2313,7 @@ export class Level2 extends Level {
 				'ROVER DESTROYED - MISSION FAILED',
 				5
 			)
-			this._gameOver()
+			this._gameOver('rover')
 			return true
 		}
 		return false
@@ -2099,6 +2329,11 @@ export class Level2 extends Level {
 		if (this.completed) return
 		if (this.roverApproach) {
 			if (!this.boarded || this._approachTriggered) return
+			if (
+				this._approachWaypoint <
+				this.roverApproach.points.length - 1
+			)
+				return
 			const position = this.rover.group.position
 			const trigger = this.roverApproach.trigger
 			if (
@@ -2157,6 +2392,9 @@ export class Level2 extends Level {
 
 	update(delta) {
 		if (this.paused) return
+		// Keep the explosion alive after gameplay has been frozen.
+		this._roverExplosion?.update(delta)
+		if (this.completed && this._roverExplosion) return
 		this._updateRadio(delta)
 		this.planet.update(delta)
 		this.fighterHub?.update(delta)
@@ -2236,6 +2474,7 @@ export class Level2 extends Level {
 		this.elapsedPlayTime += delta
 		this._applyWormholeSuction(delta)
 		this.portal.update(delta)
+		this.lavaHazards?.update?.(delta)
 		// No waypoints on camera: the cinematic's gate is its own landmark,
 		// and a guide ribbon to the rover would cut through every wide shot.
 		this.guide.update(delta, this.playerRoot.position, {
@@ -2245,13 +2484,18 @@ export class Level2 extends Level {
 				!this.boarded &&
 				!this._hasBoarded,
 		})
-		this.portalGuide.update(delta, this.playerRoot.position, {
-			active:
-				!this.cinematic &&
-				(this._hasBoarded ||
-					this._radioScriptSet === 3) &&
-				!this.completed,
-		})
+		this.portalGuide.update(
+			delta,
+			this.boarded ? this.rover.group.position : this.playerRoot.position,
+			{
+				active:
+					!this.cinematic &&
+					(this._hasBoarded ||
+						this._radioScriptSet === 3) &&
+					!this.completed,
+			}
+		)
+		this._updateEncounters(delta)
 		this.dust.update(delta)
 		this.damageCooldown = Math.max(0, this.damageCooldown - delta)
 		this.roverDamageCooldown = Math.max(
@@ -2262,17 +2506,25 @@ export class Level2 extends Level {
 		if (this._updateLavaDamage(delta)) return
 
 		for (const alien of this.aliens) {
-			alien.update(delta, this.playerRoot.position)
+			alien.update(
+				delta,
+				this.boarded
+				? this.rover.group.position
+				: this.playerRoot.position
+			)
+			this._trackEncounterAlien(alien)
 
 			if (this.completed || !alien.combatMode) continue
 
 			// A flyer's talon pass connects: hull damage plus a shove.
 			if (alien.pendingStrike) {
 				alien.pendingStrike = false
-				if (this.damageCooldown <= 0) {
+				if ((this.boarded ? this.roverDamageCooldown : this.damageCooldown) <= 0) {
 					if (
 						this._applyAlienHit(
-							alien.attackDamage ?? 1
+							this._alienAttackDamage(
+								alien
+							)
 						)
 					)
 						return
@@ -2333,19 +2585,20 @@ export class Level2 extends Level {
 			) {
 				if (
 					this._applyRoverHit(
-						alien.attackDamage ?? 1
+						this._alienAttackDamage(alien)
 					)
 				)
 					return
 			}
 
 			if (
+				!this.boarded &&
 				this.damageCooldown <= 0 &&
 				alien.checkPlayerCollision(this.playerRoot)
 			) {
 				if (
 					this._applyAlienHit(
-						alien.attackDamage ?? 1
+						this._alienAttackDamage(alien)
 					)
 				)
 					return
@@ -2551,8 +2804,21 @@ export class Level2 extends Level {
 		this.damageFlashEl.style.background = 'rgba(255, 0, 0, 0)'
 	}
 
-	_gameOver() {
+	_gameOver(cause = 'pilot') {
 		if (this.completed) return
+
+		// A destroyed rover ends the run for its pilot as well, including
+		// when the pilot has stepped out. Trigger once, before freezing.
+		if (cause === 'rover' && this._radioScriptSet === 2) {
+			this.roverHP = 0
+			this.playerHP = 0
+			this.roverDisabled = true
+			this._roverExplosion = new RoverExplosion(this, this.rover.group.position)
+			this.rover.group.visible = false
+			this.playerRoot.visible = false
+			if (this.rover.collider) this.rover.collider.enabled = false
+			this._updateLevelHUD()
+		}
 
 		this.completed = true
 		this.state.status = STATUS.GAME_OVER
@@ -2584,7 +2850,7 @@ export class Level2 extends Level {
 				progress: 0,
 				level: 2,
 			})
-		}, 1000)
+		}, this._roverExplosion ? 2400 : 1000)
 	}
 
 	dispose() {
@@ -2601,9 +2867,13 @@ export class Level2 extends Level {
 		)
 		if (this._endTimer) clearTimeout(this._endTimer)
 		for (const timer of this._alienTimers || []) clearTimeout(timer)
+		this._roverExplosion?.dispose()
+		for (const alien of this.aliens || []) alien.dispose()
+		this.pilotWalk?.dispose()
 		this.objectiveEl?.remove()
 		this.feedbackEl?.remove()
 		this.fighterHub?.dispose()
+		this.lavaHazards?.dispose?.()
 		this.rover?.dispose()
 		this.audio?.stopRoverEngine()
 		this.audio?.stopAmbience()

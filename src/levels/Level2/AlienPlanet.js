@@ -123,6 +123,7 @@ export class AlienPlanet {
 			center,
 			baseY = -140,
 			size = 1000,
+			terrainSegments = 512,
 			clearZones = [],
 			drivingRoute = [],
 		} = {}
@@ -133,6 +134,7 @@ export class AlienPlanet {
 			center?.clone?.() || new THREE.Vector3(0, baseY, 0)
 		this.baseY = baseY
 		this.size = size
+		this.terrainSegments = terrainSegments
 		this.playableMargin = 34
 		this.colliders = []
 		this.clearZones = clearZones.map((zone) => ({
@@ -459,7 +461,7 @@ export class AlienPlanet {
 
 	_buildTerrain() {
 		// About 2 m between samples: ruts and rock shelves are actual geometry.
-		const segments = 512
+		const segments = this.terrainSegments || 512
 		const geometry = this.level.own(
 			new THREE.PlaneGeometry(
 				this.size,
@@ -921,7 +923,7 @@ export class AlienPlanet {
 	}
 
 	update(delta) {
-		this.lava.update(delta)
+		this.lava?.update(delta)
 	}
 
 	dispose() {

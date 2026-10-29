@@ -12,11 +12,15 @@ The final Level 2 rover approach now starts a controlled missile escape. The pil
 
 ## Playable approach
 
-The original 1100-metre terrain size and rover controls/physics remain. The route bends through the existing basin with a smooth 24-metre shelf, clear shoulders, varied existing terrain texture and prop exclusion along the driving corridor. The same height function builds the render mesh and Rapier triangles. The terrain rectangle is centred around the existing sites plus the escape route, keeping the final landing pad inside the mesh even when the Level 1 landing/crash heading varies; world-space sites are not scaled.
+Level 2 keeps the rover's Rapier physics and terrain-following route, while extending the actual terrain rectangle from 1100 to 2400 metres. Terrain sampling increases only for this expanded Level 2 surface; Level 3 retains its existing terrain resolution. Sites and models keep their world-space scale.
 
-Relative to the landing site the route is `(95, −55) → (300, 150) → (235, 340) → (75, 440) → (−70, 460)`, approximately **826 metres** to the trigger. The gate is at `(−150, 460)` and the ship pad at `(−70, 488)`. The yellow guide follows route waypoints rather than pointing across obstructing terrain. The gate faces the final approach, and its upper ring remains visible in dense chase-camera sightline samples along the whole route.
+Relative to the landing site, the driving corridor runs from the rover at `(95, -55)` through `(300, 150)`, `(220, 340)`, `(420, 490)`, `(650, 420)`, `(880, 560)`, `(830, 800)`, `(1010, 900)` and ends at the hub approach `(960, 1100)`. This is approximately **1910 metres**, around **2.4 times** the previous ~790-metre route. A sequential waypoint gate prevents driving directly to the endpoint from triggering the cinematic early. The gate is at `(700, 1300)` and the ship pad is at `(1000, 1135)`. The existing guide and the missile/escape/boarding/takeoff/wormhole sequence remain in use.
 
-The trigger is a 24-metre radius around the last waypoint and requires the pilot to be aboard the rover. It latches once before completion; simply walking to the old portal position cannot trigger it. The rover keeps its captured momentum during the establishing/threat shots and brakes decisively on impact through its existing rigid body, gravity and suspension.
+The Level 2-only lava hazards occupy the initial approach, rocky passage, volcanic valley and hub approach. Animated molten pools and streams use a flowing emissive shader, ember particles, pulsing lights, bubbling surfaces and collidable volcanic rocks. Player and rover contact applies configurable periodic damage rather than frame-by-frame damage. Ground-alien spawns and movement avoid the pools; the route retains clear paths around every hazard.
+
+Five route-triggered encounter zones contain 30 main-wave aliens, with 6 additional hub reinforcements after four hub defenders are defeated: **36 planned encounters total**. The roster uses the existing optimized flying-predator, predator and armored-brute GLBs. Regular waves cap at 8 active aliens and the hub defense at 10. Spawns are staggered and queued against that cap; encounter loaded/defeated/completed counts are tracked. Brutes have 180 HP with 20 basic / 30 heavy damage, flyers have 60 HP and 10-damage diving strikes, and ground runners have 60 HP. Their existing procedural movement now adds distinct flanking approaches and lava avoidance.
+
+The trigger is a 24-metre radius around the final waypoint and requires the pilot to be aboard the rover and to have progressed through the preceding route waypoints. It latches once before completion; walking to the old portal position or bypassing the route cannot trigger it. The rover keeps its captured momentum during the establishing/threat shots and brakes decisively on impact through its existing rigid body, gravity and suspension.
 
 ## State machine and camera
 
@@ -60,7 +64,7 @@ There are no new dependencies or binary assets. Missile effects use 28 exhaust p
 
 Other repository checks are `npm run test:level2`, `npm run test:pilots`, `node scripts/check-level3.mjs`, `node scripts/check-level3-terrain.mjs`, `npm run build` and `npm run test:deployment`. The generated `.tmp-cutscene-test/` bundle and any isolated local browser review artifacts remain ignored by Git.
 
-Results: the full sequence suite passed **390/390** checks. After the launch-pitch correction, targeted full playback at 30/60/120 FPS passed **189/189** checks, including all eight hull corners clearing the launch terrain. The final completed-encounter hazard regression passed **10/10** checks using real storms, gravity registration and resource teardown. These additional regressions are included in the permanent suite. Existing rover, pilot, Level 3 flight and terrain suites passed. A real Rapier traversal reached the final trigger in **37.97 seconds**, driving 785.72 metres along the 825.78-metre authored route, with sampled corridor slopes up to 7.23 degrees. Production build and deployment validation passed; the existing large-bundle warning remains.
+Results for the Level 2 route update: the bundled cutscene regression passed **437/437** checks, including the 2.4× route-length assertion, seven lava pools across four regions, configurable pilot/rover contact damage, 36 planned aliens, actual outskirts spawns, eight simultaneously loaded combatants, route-gated arrival, full-hull launch clearance, and the existing Level 3 arrival. `npm run test:level2`, `npm run test:combat`, `npm run test:survival` and `npm run build` also passed. The build retains the existing large-bundle warning. Automated tests verify route geometry and encounter activation; target-hardware gameplay/performance still needs playtesting.
 
 Real-model browser captures were inspected for the missile, impact, running, boarding, takeoff, portal entry/exit, landing and disembark. A headless software-WebGL watchdog lost its context during an initial Level 3 capture; that white capture was rejected. Fresh captures with the watchdog disabled had a valid context and showed the actual arrival and pilot on terrain without JavaScript exceptions. These captures verify composition, not target-hardware GPU performance or an audible mix.
 
@@ -68,24 +72,20 @@ Real-model browser captures were inspected for the missile, impact, running, boa
 
 The former discovery/ascent/signal/interference/presence/space-flight timeline, synthetic planet and separate deep-space entry path were replaced **inside** `Level2ToLevel3Cutscene.js`. The shared ship, portal, backdrop, models, animation and audio systems remain in use. No source files or shared assets have been removed, and no source-file deletion is proposed. Local generated bundles, review pages/screenshots and isolated browser profiles are the only disposable artifacts; any additional file removals will be proposed before deletion.
 
-Modified/new files for this revision:
+Files changed for the Level 2 route update (excluding pre-existing Level 3 work in the worktree):
 
 - `src/levels/Level2/Level2.js`
+- `src/levels/Level2/Level2LavaHazards.js` (new)
+- `src/levels/Level2/Alien.js`
 - `src/levels/Level2/AlienPlanet.js`
 - `src/cutscenes/Level2ToLevel3Cutscene.js`
-- `src/cutscenes/CinematicMissileStrike.js` (new)
-- `src/cutscenes/CinematicShip.js`
-- `src/audio/AudioManager.js`
 - `scripts/check-void-cutscene.mjs`
 - `docs/level2-level3-cinematic.md`
-- `docs/level2-level3-dialogue-proposal.md` (new)
-
-Proposed deletions, awaiting approval: only the Git-ignored `.tmp-cutscene-test/` generated bundles, obsolete local review helpers, physics probes, screenshots and isolated browser profiles. Runtime imports, shared asset manifests and dynamic `loadVoidModel`/`AssetManager` paths still use the retained source modules and game assets. No source/asset deletion is needed for this revision.
 
 ## Pull request draft
 
-**Title:** Rebuild Level 2 escape with rover strike, stolen alien ship and wormhole arrival
+**Title:** Extend Level 2 with lava hazards and route-based alien encounters
 
-**Description:** Extend Level 2's playable rover route and trigger a single missile near miss on its final approach. The pilot exits the disabled rover, runs to the existing anomaly ship, boards under concealed framing and accelerates through the same surface gate. Show the craft emerging into the existing Level 3 environment, landing and restoring its on-foot controls without changing objectives or combat mechanics.
+**Description:** Extend the traversable Level 2 rover route to approximately 2.4 times its former length, add four lava regions with configurable contact damage, and introduce five progression-based alien encounters with staggered waves and a 10-enemy hub-defense cap. Preserve the existing missile escape, boarding, takeoff and wormhole transition, and keep Level 3 gameplay unchanged.
 
-Reuse the current physics, static-model gait, cached GLBs, radio recordings and audio buses. Add bounded missile effects, grounded launch/shadows, continuous flight, cancellable sound cues and regression coverage for readiness, geometric portal crossing, skips and cleanup. Validation: full cinematic suite and targeted frame-rate/launch-clearance checks; rover/pilot/Level 3 suites; production build and deployment checks.
+Validation: bundled cinematic and route regression, Level 2 rover test, Level 3 combat and survival regressions, and production build.

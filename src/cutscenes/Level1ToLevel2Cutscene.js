@@ -5,6 +5,7 @@ import { SHIPS } from '../systems/ShipManager.js'
 import { MODEL_YAW } from '../levels/Level1/Spaceship.js'
 import { alienTerrainHeight } from '../levels/Level2/AlienPlanet.js'
 import { ComicCutsceneRenderer } from './ComicCutsceneRenderer.js'
+import { PilotRigAnimator } from '../models/PilotRigAnimator.js'
 
 const SKIP_HINT = 'SPACE / ENTER / ESC  —  SKIP'
 const MODEL_WAIT_MS = 6000
@@ -904,9 +905,12 @@ export class Level1ToLevel2Cutscene {
 	}
 
 	_setPilot(model) {
+		this.pilotRig?.dispose()
 		this.pilotModelRoot.clear()
 		this.pilot = model
 		this.pilotModelRoot.add(model)
+		// The selected pilot may be a genuine skinned GLB or the block fallback.
+		this.pilotRig = new PilotRigAnimator(model)
 	}
 
 	_fallbackShip() {
@@ -1656,6 +1660,13 @@ export class Level1ToLevel2Cutscene {
 				break
 		}
 
+		// Flight and parachute poses use actual arm/leg joints on rigged pilots.
+		const inAir = [PHASE.EJECTION, PHASE.FREE_FALL,
+			PHASE.PARACHUTE, PHASE.SHIP_ENTRY].includes(this.phase)
+		this.pilotRig?.update(dt, {
+			airborne: inAir && this.parachuteOpen > 0.1,
+			falling: inAir && this.parachuteOpen <= 0.1,
+		})
 		this._updateComicPresentation(dt)
 		this._updateControlAlert()
 	}
@@ -2091,6 +2102,7 @@ export class Level1ToLevel2Cutscene {
 	dispose() {
 		if (this._disposed) return
 		this._disposed = true
+		this.pilotRig?.dispose()
 		clearTimeout(this._waitTimer)
 		this.radio?.stop()
 		window.removeEventListener('keydown', this._onKeyDown)

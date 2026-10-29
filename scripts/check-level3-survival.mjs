@@ -211,6 +211,64 @@ for (const crouching of [true, false]) {
 	)
 	f.debris.dispose()
 }
+
+const routePoints = [0, 0.18, 0.38, 0.58, 0.8, 1].map(
+	(progress, index) =>
+		new THREE.Vector3(
+			(index % 2 ? 35 : -25) * progress,
+			0,
+			-990 * progress
+		)
+)
+const lavaHits = []
+const lavaLevel = {
+	landingSite: routePoints[0],
+	portalSite: routePoints.at(-1),
+	playerRoot: new THREE.Group(),
+	planet: {
+		drivingRoute: routePoints,
+		heightAt: () => 0,
+	},
+	monuments: { sites: { reactor: new THREE.Vector3(0, 0, -500) } },
+	combatConfig: {
+		lavaDamagePerSecond: 8,
+		lavaDamageInterval: 1,
+	},
+	addObject() {},
+	_applyAlienHit(amount) {
+		lavaHits.push(amount)
+	},
+}
+const dimension = new MatterDimension(lavaLevel)
+assert.ok(
+	dimension.routeLength > 934 && dimension.routeLength < 1168,
+	'Level 3 route is 2–2.5 times the previous 467 metre route'
+)
+assert.equal(dimension.lavaZones.length, 8)
+assert.ok(
+	dimension.routeProgress(dimension.routePoints.at(-1)) > 0.99,
+	'route progression reaches the destination'
+)
+const hazard = dimension.lavaZones[0]
+lavaLevel.playerRoot.position.set(
+	hazard.center.x,
+	hazard.ground,
+	hazard.center.z
+)
+dimension.updateLavaDamage(1 / 60)
+dimension.updateLavaDamage(0.99)
+assert.deepEqual(lavaHits, [8], 'lava applies configured damage once per tick')
+lavaLevel.playerRoot.position.y = hazard.ground + 12
+dimension.lavaDamageTimer = 0
+dimension.updateLavaDamage(1 / 60)
+assert.equal(lavaHits.length, 1, 'flying above lava avoids contact damage')
+const safePoint = hazard.center.clone()
+dimension.avoidLava(safePoint, 4)
+assert.ok(
+	!dimension.isLavaAt(safePoint.x, safePoint.z, 0),
+	'ground navigation is steered outside lava'
+)
+dimension.dispose()
 console.log(
-	'Survival: separate health, collapse/support, stable pads, fuel, pickups, reset, targeting and ducking passed (30/60/120 FPS).'
+	'Survival: separate health, collapse/support, stable pads, fuel, pickups, debris avoidance, extended route, lava damage and navigation passed (30/60/120 FPS).'
 )

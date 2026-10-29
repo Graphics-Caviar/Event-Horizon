@@ -236,6 +236,7 @@ export class VoidEnemy {
 		this._stuckTimer = 0
 		this._stuckScratch = this.position.clone()
 		this._detour = null
+		this._moveTargetScratch = new THREE.Vector3()
 		this._patrolTarget = null
 		this._ramCooldown = 0
 		this._contactCooldown = 0
@@ -453,10 +454,11 @@ export class VoidEnemy {
 				count >=
 				(this.level.combatConfig?.maxAttackers ?? 3)
 			)
-				return
+				return false
 		}
 		this.state = state
 		this._phaseT = 0
+		return true
 	}
 
 	// ------------------------------------------------------------------
@@ -478,7 +480,13 @@ export class VoidEnemy {
 					distance <= this.style.attackRange &&
 					this._cooldown <= 0
 				) {
-					this._enter('prepare')
+					if (!this._enter('prepare')) {
+						this._cooldown = Math.max(
+							this._cooldown,
+							0.3
+						)
+						break
+					}
 					this._struckThisAttack = false
 					this._windupOverride = 0
 					this._onPrepareStart?.()
@@ -761,18 +769,30 @@ export class VoidEnemy {
 					this._cooldown <= 0 &&
 					!this.pendingStrike
 				) {
-					this._attackIndex += 1
+					const attackIndex =
+						(this._attackIndex ?? 0) + 1
 					const heavy =
-						this._attackIndex %
+						attackIndex %
 							this.style
 								.heavyEvery ===
 						0
 					const dive =
-						this._attackIndex %
+						attackIndex %
 							this.style.diveEvery ===
 						0
+					if (
+						!this._enter(
+							dive ? 'dive' : 'charge'
+						)
+					) {
+						this._cooldown = Math.max(
+							this._cooldown,
+							0.3
+						)
+						break
+					}
+					this._attackIndex = attackIndex
 					this._heavyNext = heavy && !dive
-					this._enter(dive ? 'dive' : 'charge')
 					this._struckThisAttack = false
 					this._voidAudio?.play(
 						'charge',
@@ -1099,8 +1119,14 @@ export class VoidEnemy {
 	}
 
 	_moveTowards(point, delta, speed) {
-		const dx = point.x - this.position.x
-		const dz = point.z - this.position.z
+		const target = this._moveTargetScratch.copy(point)
+		if (this.kind !== 'flyer')
+			this.level.matterDimension?.avoidLava(
+				target,
+				this.radius + 3
+			)
+		const dx = target.x - this.position.x
+		const dz = target.z - this.position.z
 		const distance = Math.hypot(dx, dz)
 		if (distance > 0.001) {
 			// Accelerate toward the desired pace; never snap.
