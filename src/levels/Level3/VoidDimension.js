@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { VoidSpaceBackdrop } from './VoidSpaceBackdrop.js'
 import { VoidDrifters } from './VoidDrifters.js'
+import { VoidBoss } from './VoidBoss.js'
 
 // Player gun settings inside the void dimension
 const GUN_DAMAGE = 35 // damage per bullet that hits the boss
@@ -79,7 +80,22 @@ export class VoidDimension {
 			)
 		)
 		this.spaceBackdrop = new VoidSpaceBackdrop(level, this.group)
+		this.shards = this.spaceBackdrop.shards
 		this.drifters = new VoidDrifters(level, this.group)
+
+		const glow = own(
+			new THREE.MeshBasicMaterial({ color: 0x79eeff })
+		)
+		this.rings = []
+		const ringGeometry = own(
+			new THREE.TorusGeometry(14, 0.18, 8, 96)
+		)
+		for (let i = 0; i < 6; i++) {
+			const ring = new THREE.Mesh(ringGeometry, glow)
+			ring.position.set(0, 8, -45 - i * 65)
+			this.group.add(ring)
+			this.rings.push(ring)
+		}
 		this.exit = this.rings.at(-1).position
 		level.playerRoot.position.set(0, 8, 15)
 		level.playerRoot.visible = true
@@ -167,11 +183,11 @@ export class VoidDimension {
 			if (e.button === 0) {
 				level._mouseDown = true
 			}
-			if (e.button === 2) {
+			if (e.button === 0 || e.button === 2) {
 				this._lookDragging = true
 				this._lastPointerX = e.clientX
 				this._lastPointerY = e.clientY
-				e.preventDefault()
+				e.preventDefault?.()
 			}
 		}
 		this._onPointerMove = (e) => {
@@ -186,7 +202,7 @@ export class VoidDimension {
 				-1.05,
 				0.78
 			)
-			e.preventDefault()
+			e.preventDefault?.()
 		}
 		this._onPointerUp = (e) => {
 			if (e.type === 'pointercancel') {
@@ -196,6 +212,7 @@ export class VoidDimension {
 			}
 			if (e.button === 0) {
 				level._mouseDown = false
+				this._lookDragging = false
 			}
 			if (e.button === 2) this._lookDragging = false
 		}
@@ -260,18 +277,8 @@ export class VoidDimension {
 			pointerEvents: 'none',
 			zIndex: '1000',
 		})
-		const aimDot = document.createElement('span')
-		Object.assign(aimDot.style, {
-			position: 'absolute',
-			width: '3px',
-			height: '3px',
-			left: '50%',
-			top: '50%',
-			transform: 'translate(-50%, -50%)',
-			borderRadius: '50%',
-			background: '#e8fdff',
-		})
-		this._aimReticleEl.appendChild(aimDot)
+		this._aimReticleEl.innerHTML =
+			'<span style="position:absolute;width:3px;height:3px;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;background:#e8fdff;"></span>'
 		document.body.appendChild(this._aimReticleEl)
 	}
 
@@ -544,8 +551,11 @@ export class VoidDimension {
 	}
 
 	_updateBossHUD() {
-		if (this._bossHudEl)
-			this._bossHudEl.innerHTML = this._bossHudHTML()
+		const html = this._bossHudHTML()
+		if (this._bossHudEl && this._lastBossHudHtml !== html) {
+			this._lastBossHudHtml = html
+			this._bossHudEl.innerHTML = html
+		}
 	}
 
 	// ── Gun / shooting ───────────────────────────────────────────────────────
@@ -608,6 +618,7 @@ export class VoidDimension {
 		this.time += dt
 		this.spaceBackdrop.update(this.time)
 		this.drifters.update(dt)
+		this._attachGunToPilot()
 		l.playerRoot.visible = true
 		if (l.pilotModel) l.pilotModel.visible = true
 		this.pilotLight.position
@@ -652,11 +663,93 @@ export class VoidDimension {
 			}
 			l.thrusting = flying
 			l.pilotWalk?.update(dt, 0, true)
-			l.objectiveEl.innerHTML =
-				'<strong>VOID DIMENSION // BEYOND MATTER</strong><br>WASD drift · Space rise · C descend · Shift boost<br>Avoid the three guardians. Follow the cyan rings to the far gate.'
-			if (l.playerRoot.position.distanceTo(this.exit) < 12)
-				l._completeMission()
+
+			// ── Boss fight logic ─────────────────────────────────────────
+			if (!this._bossDefeated && !this._playerDefeated) {
+				const playerPos = l.playerRoot.position
+				this._aimGunAtView()
+
+				// Update boss AI + fireballs
+				this.boss.update(dt, playerPos)
+
+				// Fireball hit: deduct player HP
+				if (this.boss.pendingHit) {
+					this._playerHP = Math.max(
+						0,
+						this._playerHP - BOSS_DAMAGE
+					)
+					// Sync to level HP so the main HUD bar reacts
+					l.playerHP = Math.round(
+						(this._playerHP /
+							PLAYER_MAX_HP) *
+							(l.maxPlayerHP ?? 100)
+					)
+					// Flash the HUD
+					l.hud?.setWarning?.(true)
+					setTimeout(
+						() =>
+							l.hud?.setWarning?.(
+								false
+							),
+						600
+					)
+					if (this._playerHP <= 0) {
+						this._playerDefeated = true
+						this._showOutcome(false)
+					}
+				}
+
+				// Boss defeated
+				if (this.boss.won && !this._bossDefeated) {
+					this._bossDefeated = true
+					l._bossDefeated = true
+					this._showOutcome(true)
+				}
+
+				// Player gun: Left-click or E key fires
+				this._gunCooldown = Math.max(
+					0,
+					this._gunCooldown - dt
+				)
+				const shooting =
+					l.keys.has('KeyE') || l._mouseDown
+				if (shooting && this._gunCooldown <= 0) {
+					this._gunCooldown = GUN_COOLDOWN
+					this._tryShoot(playerPos.clone())
+				}
+				this._updateBullets(dt, playerPos)
+
+				// Update objective text
+				const bossHpPct = Math.round(
+					(this.boss.hp / this.boss.maxHp) * 100
+				)
+				const myHpPct = Math.round(
+					(this._playerHP / PLAYER_MAX_HP) * 100
+				)
+				l.objectiveEl.innerHTML =
+					`<strong>VOID BOSS FIGHT</strong><br>` +
+					`<span style="color:#ff4400">VOID DEVOURER ${bossHpPct}% HP</span>` +
+					` &nbsp;|&nbsp; ` +
+					`<span style="color:#44ff88">YOUR HP ${myHpPct}%</span><br>` +
+					`<span style="font-size:11px;opacity:.8">` +
+					`Dodge fireballs (C descend / Space rise). Right-drag to aim, then left-click or E to shoot!` +
+					`</span>`
+
+				this._updateBossHUD()
+			} else if (this._bossDefeated) {
+				l.objectiveEl.innerHTML =
+					'<strong>VOID DEVOURER DEFEATED!</strong><br><span style="color:#79eeff">Fly through the cyan rings to the exit gate.</span>'
+				if (l.playerRoot.position.distanceTo(this.exit) < 12)
+					l._completeMission()
+			} else if (this._playerDefeated) {
+				// Player died — game over handled by _showOutcome
+			}
 		}
+
+		for (let i = 0; i < this.rings.length; i++)
+			this.rings[i].scale.setScalar(
+				1 + Math.sin(this.time * 1.5 + i) * 0.035
+			)
 
 		// ── Environment animations ────────────────────────────────────────
 		// Camera follows the pilot while preserving the player's orbit angle.
