@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { VoidSpaceBackdrop } from './VoidSpaceBackdrop.js'
+import { VoidDrifters } from './VoidDrifters.js'
 
 /** A separate, explorable zero-gravity space beyond the Matter wormhole. */
 export class VoidDimension {
@@ -107,6 +108,7 @@ export class VoidDimension {
 			this.rings.push(ring)
 		}
 		this.spaceBackdrop = new VoidSpaceBackdrop(level, this.group)
+		this.drifters = new VoidDrifters(level, this.group)
 		this.exit = this.rings.at(-1).position
 		level.playerRoot.position.set(0, 8, 15)
 		level.playerRoot.visible = true
@@ -139,6 +141,7 @@ export class VoidDimension {
 			dt = Math.min(delta, 0.05)
 		this.time += dt
 		this.spaceBackdrop.update(this.time)
+		this.drifters.update(dt)
 		l.playerRoot.visible = true
 		if (l.pilotModel) l.pilotModel.visible = true
 		this.pilotLight.position
@@ -172,7 +175,7 @@ export class VoidDimension {
 			)
 			l.pilotWalk?.update(dt, 0, true)
 			l.objectiveEl.innerHTML =
-				'<strong>VOID DIMENSION // BEYOND MATTER</strong><br>WASD drift · Space rise · C descend · Shift boost<br>Follow the cyan rings to the far gate.'
+				'<strong>VOID DIMENSION // BEYOND MATTER</strong><br>WASD drift · Space rise · C descend · Shift boost<br>Avoid the three guardians. Follow the cyan rings to the far gate.'
 			if (l.playerRoot.position.distanceTo(this.exit) < 12)
 				l._completeMission()
 		}
@@ -197,6 +200,7 @@ export class VoidDimension {
 		l.sceneManager.camera.lookAt(this.cameraTarget)
 	}
 	dispose() {
+		this.drifters.dispose()
 		this.spaceBackdrop.dispose()
 		this.level.sceneManager.camera.far = this.previousFar
 		this.level.sceneManager.camera.updateProjectionMatrix()

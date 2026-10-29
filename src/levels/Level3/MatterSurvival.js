@@ -17,6 +17,7 @@ export class MatterSurvival {
 		this.level = level
 		this.config = { ...SURVIVAL_DEFAULTS, ...options }
 		this.time = 0
+		this.collapseAnnounced = false
 		this.fuel = this.config.maxFuel
 		this.start = level.landingSite.clone()
 		this.end = level.portalSite.clone()
@@ -168,7 +169,7 @@ export class MatterSurvival {
 		}
 		return floor
 	}
-	burn(delta, requested) {
+	burn(delta, requested, boost = false) {
 		if (
 			this.level.transitionHeld ||
 			this.level.completed ||
@@ -180,7 +181,8 @@ export class MatterSurvival {
 			return false
 		this.fuel = Math.max(
 			0,
-			this.fuel - this.config.burnRate * delta
+			this.fuel -
+				this.config.burnRate * (boost ? 1.8 : 1) * delta
 		)
 		return true
 	}
@@ -193,6 +195,17 @@ export class MatterSurvival {
 		)
 			return
 		this.time += delta
+		if (
+			!this.collapseAnnounced &&
+			this.time >= this.config.countdown
+		) {
+			this.collapseAnnounced = true
+			this.level._showMovementFeedback?.(
+				'DIMENSION COLLAPSING — BOOST TO THE RIFT',
+				4
+			)
+			this.level._requestShake?.(0.4)
+		}
 		this.edge =
 			this.time < this.config.countdown
 				? -Infinity
