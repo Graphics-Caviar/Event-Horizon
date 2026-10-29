@@ -114,6 +114,7 @@ export class Spaceship {
 		this.nitrogenTimer = 0
 
 		this.createEngineEffects()
+		this.createHeadlights()
 		this.createSpeedStreaks()
 		this.setupInitialCamera()
 
@@ -231,6 +232,37 @@ export class Spaceship {
 		this.engineLight = new THREE.PointLight(0x66ccff, 0, 30, 2)
 		this.engineLight.position.set(0, 0, 8)
 		this.engineGroup.add(this.engineLight)
+	}
+
+	/** Forward lights stay on the physics group, so they remain active when
+	 * the ship visuals are hidden for the first-person camera. Ship models are
+	 * fitted nose-forward along local -z, matching the flight controller. */
+	createHeadlights() {
+		this.headlightGroup = new THREE.Group()
+		this.headlightGroup.name = 'ship-headlights'
+		this.shipGroup.add(this.headlightGroup)
+
+		for (const side of [-1, 1]) {
+			const x = side * 2.8
+			const light = new THREE.SpotLight(
+				0x9adfff,
+				650,
+				260,
+				Math.PI / 8,
+				0.65,
+				1.5
+			)
+			light.name = `ship-headlight-${side < 0 ? 'left' : 'right'}`
+			light.position.set(x, 0.45, -7.2)
+
+			// SpotLight aims at a world-space Object3D. Keeping the target in
+			// this group makes its aim follow the ship through turns.
+			const target = new THREE.Object3D()
+			target.name = `${light.name}-target`
+			target.position.set(side * 3.2, 0.2, -140)
+			this.headlightGroup.add(light, target)
+			light.target = target
+		}
 	}
 
 	createSpeedStreaks() {
