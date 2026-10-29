@@ -645,7 +645,7 @@ export class Level1 extends Level {
 		this.ended = true
 		if (this.objectiveEl) this.objectiveEl.style.display = 'none'
 		this._syncCockpit()
-		this.collisionWarning.clear()=
+		this.collisionWarning.clear()
 		const won = outcome === 'escaped'
 		const time = this.elapsedPlayTime
 		const hull = Math.max(0, this.state.integrity)
