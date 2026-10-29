@@ -14,7 +14,7 @@ import { DustParticles } from './DustParticles.js'
 import { Alien, ALIEN_MODELS } from './Alien.js'
 import { Portal } from './Portal.js'
 import { WaypointGuide } from './WaypointGuide.js'
-import { PilotWalk, orientPilot } from './PilotWalk.js'
+import { PilotRig, orientPilot } from './PilotRig.js'
 import { constrainTerrainCamera } from './TerrainCamera.js'
 
 const PLAYER_RADIUS = 0.9
@@ -41,7 +41,7 @@ function releaseButtonFocus() {
 
 // On-foot locomotion feel. The pilot carries momentum instead of snapping
 // to a fixed speed and turns through its body; the measured ground speed
-// and turn rate then drive the procedural gait in PilotWalk.
+// and turn rate then drive the procedural skeleton in PilotRig.
 const WALK_SPEED = 4
 const RUN_SPEED = 7
 const MOVE_ACCEL_DAMP = 6.5 // approach rate while input is held
@@ -868,7 +868,7 @@ export class Level2 extends Level {
 	_setPilot(model, character = 'zara') {
 		this.pilotModel?.removeFromParent()
 		this.pilotModel = model
-		this.pilotWalk = new PilotWalk(this, model, character)
+		this.pilotWalk = new PilotRig(this, model, character)
 		this.playerRoot.add(model)
 		if (!this.boarded) this._syncPlayerToTerrain()
 	}
@@ -1885,9 +1885,15 @@ export class Level2 extends Level {
 			})
 		}
 
-		// Feed the measured travel distance to the shader gait so the
-		// stride rate tracks the actual ground speed.
-		this.pilotWalk?.update(delta, travelled, false)
+		// Feed the measured travel distance to the skeleton so the stride
+		// rate tracks the actual ground speed; the jump arc drives the
+		// airborne and landing poses, acceleration and turning the lean.
+		this.pilotWalk?.update(delta, travelled, false, {
+			airborne: this._airborne,
+			verticalSpeed: this._verticalSpeed,
+			accel: this._accel,
+			turnRate: this._turnRate,
+		})
 	}
 
 	_updateMovementFeedback(delta) {
