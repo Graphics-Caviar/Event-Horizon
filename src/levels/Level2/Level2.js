@@ -54,6 +54,7 @@ const MIN_GRAVITY_MULT = 0.1 // the pilot never gets zero/negative gravity
 const PORTAL_ARRIVE_RADIUS = 8 // XZ distance that counts as reaching the gate
 // On-foot footstep dust cadence, in metres of measured travel.
 const FOOTSTEP_STRIDE = 2.4
+const FIRST_PERSON_WALK_BOB = 0.055
 
 const vec3From = (value, fallback = new THREE.Vector3()) => {
 	if (value?.isVector3) return value.clone()
@@ -300,6 +301,8 @@ export class Level2 extends Level {
 		this._inputScratch = new THREE.Vector3()
 		this._dustScratch = new THREE.Vector3()
 		this._footstepDistance = 0
+		this._walkCameraBobPhase = 0
+		this._walkCameraBob = 0
 		const pilot =
 			CHARACTERS[this.state.selectedCharacter] ||
 			CHARACTERS.zara
@@ -1845,6 +1848,26 @@ export class Level2 extends Level {
 			this.playerRoot.position.z - startZ
 		)
 		const groundSpeed = Math.max(speed, this._slideSpeed)
+		const bobSpeed = delta > 0 ? travelled / delta : 0
+		const firstPersonWalking =
+			this.firstPerson && !this.boarded && !this._airborne
+		if (firstPersonWalking && bobSpeed > 0.02) {
+			this._walkCameraBobPhase =
+				(this._walkCameraBobPhase +
+					(bobSpeed * delta * Math.PI * 2) / FOOTSTEP_STRIDE) %
+				(Math.PI * 2)
+		}
+		const bobTarget = firstPersonWalking
+			? Math.sin(this._walkCameraBobPhase) *
+				  FIRST_PERSON_WALK_BOB *
+				  clamp01(bobSpeed / WALK_SPEED)
+			: 0
+		this._walkCameraBob = THREE.MathUtils.damp(
+			this._walkCameraBob,
+			bobTarget,
+			12,
+			delta
+		)
 		if (!this._airborne) {
 			this._footstepDistance += travelled
 		}
@@ -2390,7 +2413,11 @@ export class Level2 extends Level {
 				// FIRST PERSON: ON FOOT
 				camera.position.set(
 					this.playerRoot.position.x,
-					this.playerRoot.position.y + 1.5,
+					this.playerRoot.position.y +
+						1.5 +
+						(this._airborne || this.completed
+							? 0
+							: this._walkCameraBob),
 					this.playerRoot.position.z
 				)
 
