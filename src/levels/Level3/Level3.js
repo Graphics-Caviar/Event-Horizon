@@ -43,8 +43,6 @@ export class Level3 extends Level2 {
 				collider.enabled = false
 		}
 		this.hazards.enabled = false
-		// Level 3 owns the objective panel; stop Level2 rewriting it each frame.
-		this._customObjective = true
 		this.roverDisabled = true
 		this.rover.group.visible = false
 		if (this.rover.collider) this.rover.collider.enabled = false
@@ -70,7 +68,7 @@ export class Level3 extends Level2 {
 		// Exactly thirty playable seconds, regardless of the route length.
 		this.survival = new MatterSurvival(this, {
 			countdown: 30,
-			collapseSeconds: 90,
+			collapseSeconds: 45,
 			...options.survivalConfig,
 		})
 		this.blade = new EnergyBlade(this)
@@ -304,18 +302,8 @@ export class Level3 extends Level2 {
 				object.position
 					.copy(object.target.position)
 					.add(new THREE.Vector3(-180, 155, -112))
-				// The void wastes most of the 400 m shadow frustum on empty
-				// ground; 1024² with PCF is plenty and much cheaper to rasterize.
-				object.shadow.mapSize.set(1024, 1024)
 			}
 		}
-		const renderer = this.sceneManager.renderer
-		if (renderer) {
-			renderer.shadowMap.type = THREE.PCFShadowMap
-			renderer.shadowMap.autoUpdate = false
-			renderer.shadowMap.needsUpdate = true
-		}
-		this._shadowTick = 0
 	}
 
 	_buildJetpack() {
@@ -427,12 +415,7 @@ export class Level3 extends Level2 {
 	_updatePlayerMovement(delta) {
 		if (this.transitionHeld || this.completed) return
 		const thrust = this.survival
-			? this.survival.burn(
-					delta,
-					this.keys.has('Space'),
-					this.keys.has('ShiftLeft') ||
-						this.keys.has('ShiftRight')
-				)
+			? this.survival.burn(delta, this.keys.has('Space'), this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'))
 			: this.keys.has('Space')
 		this.crouching =
 			this.keys.has('KeyC') && !this._airborne && !thrust
@@ -517,17 +500,20 @@ export class Level3 extends Level2 {
 				: 18
 		)
 		this.velocity.lerp(input, 1 - Math.exp(-5 * delta))
+		// Once collapse begins, a backwards/downward void current fights the jetpack.
+		// Apply acceleration with delta time; do not teleport or override input.
+		const suction = this.survival?.getSuction(position)
+		if (suction?.backwards) {
+			this.velocity.addScaledVector(this.survival.direction, -suction.backwards * delta)
+			this.velocity.clampLength(0, 38)
+		}
 		this._verticalSpeed = THREE.MathUtils.damp(
 			this._verticalSpeed,
-			thrust
-				? this.keys.has('ShiftLeft') ||
-					this.keys.has('ShiftRight')
-					? 23
-					: 15
-				: -12,
+			thrust ? (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 23 : 15) : -12,
 			4,
 			delta
 		)
+		if (suction?.downwards) this._verticalSpeed -= suction.downwards * delta
 		position.y += this._verticalSpeed * delta
 		const candidate = position
 			.clone()
@@ -622,14 +608,10 @@ export class Level3 extends Level2 {
 				this.levelHudEl.appendChild(this.survivalHudEl)
 			}
 			const fuel = Math.ceil(this.survival.fuel)
-			const percent = Math.round(
-				(100 * fuel) / this.survival.config.maxFuel
-			)
-			const survivalHud = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
-			if (this._survivalHudHtml !== survivalHud) {
-				this._survivalHudHtml = survivalHud
-				this.survivalHudEl.innerHTML = survivalHud
-			}
+			const percent =
+				(100 * this.survival.fuel) /
+				this.survival.config.maxFuel
+			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
 		}
 		const target = this.aliens
 			.filter(
@@ -649,13 +631,9 @@ export class Level3 extends Level2 {
 						this.playerRoot.position
 					)
 			)[0]
-		const enemyStatus = target
+		this.enemyStatusEl.textContent = target
 			? `${target.styleName.toUpperCase()}  ${target.hp} / ${target.maxHp} HP`
 			: ''
-		if (this._enemyStatusText !== enemyStatus) {
-			this._enemyStatusText = enemyStatus
-			this.enemyStatusEl.textContent = enemyStatus
-		}
 	}
 
 	_checkPortalArrival() {
@@ -676,14 +654,6 @@ export class Level3 extends Level2 {
 
 	update(delta) {
 		if (this.paused) return
-		// Refresh the shadow map on alternate frames: half the shadow-pass
-		// cost, with no perceptible lag at 30–60 fps.
-		const renderer = this.sceneManager.renderer
-		if (renderer) {
-			this._shadowTick = (this._shadowTick + 1) & 1
-			if (this._shadowTick === 0)
-				renderer.shadowMap.needsUpdate = true
-		}
 		if (this.voidDimension) {
 			this.voidDimension.update(delta)
 			return
@@ -879,8 +849,6 @@ export class Level3 extends Level2 {
 		this.stormLandscape?.dispose()
 		if (import.meta.env.DEV && window.__level3 === this)
 			delete window.__level3
-		const renderer = this.sceneManager.renderer
-		if (renderer) renderer.shadowMap.autoUpdate = true
 		super.dispose()
 	}
 }

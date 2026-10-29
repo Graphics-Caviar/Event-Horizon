@@ -2,10 +2,10 @@ import * as THREE from 'three'
 
 export const MATTER_DEBRIS_DEFAULTS = Object.freeze({
 	fragments: 64,
-	poolSize: 8,
+	poolSize: 14,
 	warningSeconds: 3,
 	fallSeconds: 2.4,
-	interval: 5,
+	interval: 4.3,
 	targetPlayer: true,
 	damage: 15,
 	radius: 5,
@@ -265,24 +265,32 @@ export class MatterDebris {
 			this.time >= this.nextEvent &&
 			(this.config.targetPlayer || this.zones.length)
 		) {
-			this.nextEvent =
-				this.time +
-				(this.level.survival?.remaining <= 0
-					? 3.8
-					: this.config.interval)
+			this.nextEvent = this.time + (this.level.survival?.remaining <= 0 ? 2.65 : this.config.interval)
 			if (this.config.targetPlayer) {
-				const point =
-					this.level.playerRoot.position.clone()
-				const duckable = this.serial % 3 === 1
-				if (duckable) point.y += 2
-				this.trigger(point, {
-					delay: delta,
-					duckable,
-					airborne: true,
-					major:
-						!duckable &&
-						this.serial % 4 === 3,
-				})
+				// A shower has one clearly telegraphed attack plus several scattered
+				// visual impacts, not several unavoidable hits on the same spot.
+				const center = this.level.playerRoot.position
+				const collapsing = this.level.survival?.remaining <= 0
+				const count = collapsing ? 4 : 2
+				for (let i = 0; i < count; i++) {
+					const point = center.clone()
+					if (i > 0) {
+						const a = noise(this.serial + i * 31 + 5) * Math.PI * 2
+						const r = 12 + noise(this.serial + i * 17 + 9) * 25
+						point.x += Math.cos(a) * r
+						point.z += Math.sin(a) * r
+						point.y -= noise(i * 43 + this.serial) * 6
+					}
+					const duckable = i === 0 && this.serial % 3 === 1
+					if (duckable) point.y += 2
+					this.trigger(point, {
+						delay: delta + i * 0.3,
+						duckable,
+						medium: i !== 0,
+						airborne: true,
+						major: i === 0 && !duckable && this.serial % 4 === 3,
+					})
+				}
 			} else {
 				const nearby = this.zones.filter(
 					(zone) =>

@@ -757,12 +757,7 @@ export class Level2ToLevel3Cutscene {
 		const hub = this.level.fighterHub
 		this._hub = hub?.group
 		this._fleet = hub?.fleet || []
-		if (hub) {
-			hub.hero.group.visible = false
-			// The stolen fighter replaces the parked hero and the fleet is
-			// leaving; invisible hull colliders must not block the boarding run.
-			hub.setCollisionEnabled(false)
-		}
+		if (hub) hub.hero.group.visible = false
 	}
 
 	_updatePursuit(dt) {
