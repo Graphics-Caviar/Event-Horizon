@@ -44,8 +44,12 @@ export function orientPilot(model, key) {
 	// The three new pilot rigs share one forward axis; Kai's historical
 	// static mesh needed a yaw correction that the rigged export does not.
 	let hasSkin = false
-	model.traverse((node) => { if (node.isSkinnedMesh) hasSkin = true })
-	root.rotation.y = hasSkin ? 0 : (PILOT_GAITS[key] || PILOT_GAITS.zara).yaw
+	model.traverse((node) => {
+		if (node.isSkinnedMesh) hasSkin = true
+	})
+	root.rotation.y = hasSkin
+		? 0
+		: (PILOT_GAITS[key] || PILOT_GAITS.zara).yaw
 	root.add(model)
 	return root
 }
@@ -241,14 +245,22 @@ export class PilotWalk {
 	// still call the original three-argument API, so keep it compatible.
 	update(delta, distance, boarded, motion = {}) {
 		if (this.rigAnimator?.isRigged) {
-			const airborne = !boarded && Boolean(
-				motion.airborne ?? (this.level?._airborne || this.level?.voidDimension)
-			)
+			const airborne =
+				!boarded &&
+				Boolean(
+					motion.airborne ??
+					(this.level?._airborne ||
+						this.level?.voidDimension)
+				)
 			this.rigAnimator.update(delta, {
 				distance,
 				boarded,
 				airborne,
-				falling: airborne && (motion.falling || (motion.verticalSpeed ?? 0) < -0.2),
+				falling:
+					airborne &&
+					(motion.falling ||
+						(motion.verticalSpeed ?? 0) <
+							-0.2),
 				accel: motion.accel ?? 0,
 				turnRate: motion.turnRate ?? 0,
 			})

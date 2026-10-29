@@ -800,7 +800,8 @@ export class Level2 extends Level {
 
 	_queueEncounterWave(encounter, composition, reinforcement = false) {
 		const routePoint = encounter.nearLanding
-			? this.landingSite : this.roverApproach.points[encounter.waypoint]
+			? this.landingSite
+			: this.roverApproach.points[encounter.waypoint]
 		let spawnOrdinal = 0
 		for (const [type, count] of Object.entries(composition)) {
 			for (let index = 0; index < count; index++) {
@@ -809,7 +810,8 @@ export class Level2 extends Level {
 				const ordinal = spawnOrdinal++
 				const angle = ordinal * 2.399963229728653
 				const offset = encounter.nearLanding
-					? 28 + (ordinal % 3) * 7 : 27 + (ordinal % 3) * 8
+					? 28 + (ordinal % 3) * 7
+					: 27 + (ordinal % 3) * 8
 				const home = routePoint
 					.clone()
 					.add(
@@ -896,21 +898,36 @@ export class Level2 extends Level {
 	 * has moved well past them. A later encounter can then use the same slot.
 	 */
 	_retireDistantAliens() {
-		const target = this.boarded ? this.rover.group.position : this.playerRoot.position
+		const target = this.boarded
+			? this.rover.group.position
+			: this.playerRoot.position
 		for (let i = this.aliens.length - 1; i >= 0; i--) {
 			const alien = this.aliens[i]
 			if (!alien._loaded || alien.smashed) continue
-			if (Math.hypot(alien.position.x - target.x, alien.position.z - target.z) < 220) continue
-			const encounter = this.encounters.find((entry) => entry.id === alien.encounterId)
+			if (
+				Math.hypot(
+					alien.position.x - target.x,
+					alien.position.z - target.z
+				) < 220
+			)
+				continue
+			const encounter = this.encounters.find(
+				(entry) => entry.id === alien.encounterId
+			)
 			if (encounter) {
 				encounter.retired++
-				encounter.aliens = encounter.aliens.filter((entry) => entry !== alien)
+				encounter.aliens = encounter.aliens.filter(
+					(entry) => entry !== alien
+				)
 			}
 			alien.dispose()
 			alien.group.removeFromParent()
 			if (alien.collider) {
-				const index = this.gameplayColliders.indexOf(alien.collider)
-				if (index >= 0) this.gameplayColliders.splice(index, 1)
+				const index = this.gameplayColliders.indexOf(
+					alien.collider
+				)
+				if (index >= 0)
+					this.gameplayColliders.splice(index, 1)
 			}
 			this.aliens.splice(i, 1)
 		}
@@ -968,17 +985,28 @@ export class Level2 extends Level {
 				? this.combatConfig.maxMajorEnemies
 				: this.combatConfig.maxActiveEnemies
 		this._encounterSpawnTimer -= delta
-		const initialWave = this._pendingAlienSpawns[0]?.encounter?.nearLanding
+		const initialWave =
+			this._pendingAlienSpawns[0]?.encounter?.nearLanding
 		const initialBurst = initialWave ? 4 : 2
 		if (
 			this._pendingAlienSpawns.length &&
 			active.length < activeLimit &&
 			this._encounterSpawnTimer <= 0
 		) {
-			for (let i = 0; i < initialBurst && this._pendingAlienSpawns.length && active.length + i < activeLimit; i++) {
-				this._spawnEncounterAlien(this._pendingAlienSpawns.shift())
+			for (
+				let i = 0;
+				i < initialBurst &&
+				this._pendingAlienSpawns.length &&
+				active.length + i < activeLimit;
+				i++
+			) {
+				this._spawnEncounterAlien(
+					this._pendingAlienSpawns.shift()
+				)
 			}
-			this._encounterSpawnTimer = initialWave ? 0.25 : this.combatConfig.spawnInterval
+			this._encounterSpawnTimer = initialWave
+				? 0.25
+				: this.combatConfig.spawnInterval
 		}
 		for (const encounter of this.encounters) {
 			if (
@@ -986,7 +1014,8 @@ export class Level2 extends Level {
 				!encounter.completed &&
 				encounter.spawned + encounter.skipped ===
 					encounter.total &&
-				encounter.defeated + encounter.retired === encounter.spawned &&
+				encounter.defeated + encounter.retired ===
+					encounter.spawned &&
 				(!encounter.reinforcements ||
 					encounter.reinforcementsQueued)
 			)
@@ -2077,11 +2106,12 @@ export class Level2 extends Level {
 						FOOTSTEP_STRIDE) %
 				(Math.PI * 2)
 		}
-		const bobTarget = firstPersonWalking && bobSpeed > 0.02
-			? Math.sin(this._walkCameraBobPhase) *
-				FIRST_PERSON_WALK_BOB *
-				clamp01(bobSpeed / WALK_SPEED)
-			: 0
+		const bobTarget =
+			firstPersonWalking && bobSpeed > 0.02
+				? Math.sin(this._walkCameraBobPhase) *
+					FIRST_PERSON_WALK_BOB *
+					clamp01(bobSpeed / WALK_SPEED)
+				: 0
 		this._walkCameraBob = THREE.MathUtils.damp(
 			this._walkCameraBob,
 			bobTarget,
@@ -2280,9 +2310,13 @@ export class Level2 extends Level {
 		}
 		// Check contact every frame, even during the damage cooldown, so
 		// the warning reflects an actual crossing rather than one wheel tick.
-		const roverOnLava = this.roverHP > 0 && this.rover.isTouchingLava(lava)
+		const roverOnLava =
+			this.roverHP > 0 && this.rover.isTouchingLava(lava)
 		if (roverOnLava && !this._lavaRoverWarned) {
-			this._showMovementFeedback('WARNING — LAVA IS DAMAGING THE ROVER', 2)
+			this._showMovementFeedback(
+				'WARNING — LAVA IS DAMAGING THE ROVER',
+				2
+			)
 		}
 		this._lavaRoverWarned = roverOnLava
 		// The hull takes the heat while driving; the seated pilot is safe.
@@ -2298,7 +2332,9 @@ export class Level2 extends Level {
 		if (hurt) {
 			this._updateLevelHUD()
 			if (this.playerHP <= 0 || this.roverHP <= 0) {
-				this._gameOver(this.roverHP <= 0 ? 'rover' : 'pilot')
+				this._gameOver(
+					this.roverHP <= 0 ? 'rover' : 'pilot'
+				)
 				return true
 			}
 		}
@@ -2516,7 +2552,9 @@ export class Level2 extends Level {
 		})
 		this.portalGuide.update(
 			delta,
-			this.boarded ? this.rover.group.position : this.playerRoot.position,
+			this.boarded
+				? this.rover.group.position
+				: this.playerRoot.position,
 			{
 				active:
 					!this.cinematic &&
@@ -2539,8 +2577,8 @@ export class Level2 extends Level {
 			alien.update(
 				delta,
 				this.boarded
-				? this.rover.group.position
-				: this.playerRoot.position
+					? this.rover.group.position
+					: this.playerRoot.position
 			)
 			this._trackEncounterAlien(alien)
 
@@ -2549,7 +2587,11 @@ export class Level2 extends Level {
 			// A flyer's talon pass connects: hull damage plus a shove.
 			if (alien.pendingStrike) {
 				alien.pendingStrike = false
-				if ((this.boarded ? this.roverDamageCooldown : this.damageCooldown) <= 0) {
+				if (
+					(this.boarded
+						? this.roverDamageCooldown
+						: this.damageCooldown) <= 0
+				) {
 					if (
 						this._applyAlienHit(
 							this._alienAttackDamage(
@@ -2848,10 +2890,14 @@ export class Level2 extends Level {
 			this.roverHP = 0
 			this.playerHP = 0
 			this.roverDisabled = true
-			this._roverExplosion = new RoverExplosion(this, this.rover.group.position)
+			this._roverExplosion = new RoverExplosion(
+				this,
+				this.rover.group.position
+			)
 			this.rover.group.visible = false
 			this.playerRoot.visible = false
-			if (this.rover.collider) this.rover.collider.enabled = false
+			if (this.rover.collider)
+				this.rover.collider.enabled = false
 			this._updateLevelHUD()
 		}
 
@@ -2875,17 +2921,20 @@ export class Level2 extends Level {
 		this.state.score = score
 
 		// Brief delay before showing the results screen.
-		this._endTimer = setTimeout(() => {
-			this.onEnd?.({
-				outcome: 'overrun',
-				won: false,
-				score,
-				time,
-				hull: 0,
-				progress: 0,
-				level: 2,
-			})
-		}, this._roverExplosion ? 2400 : 1000)
+		this._endTimer = setTimeout(
+			() => {
+				this.onEnd?.({
+					outcome: 'overrun',
+					won: false,
+					score,
+					time,
+					hull: 0,
+					progress: 0,
+					level: 2,
+				})
+			},
+			this._roverExplosion ? 2400 : 1000
+		)
 	}
 
 	dispose() {

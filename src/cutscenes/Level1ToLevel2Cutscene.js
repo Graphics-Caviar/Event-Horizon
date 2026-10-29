@@ -1661,8 +1661,12 @@ export class Level1ToLevel2Cutscene {
 		}
 
 		// Flight and parachute poses use actual arm/leg joints on rigged pilots.
-		const inAir = [PHASE.EJECTION, PHASE.FREE_FALL,
-			PHASE.PARACHUTE, PHASE.SHIP_ENTRY].includes(this.phase)
+		const inAir = [
+			PHASE.EJECTION,
+			PHASE.FREE_FALL,
+			PHASE.PARACHUTE,
+			PHASE.SHIP_ENTRY,
+		].includes(this.phase)
 		this.pilotRig?.update(dt, {
 			airborne: inAir && this.parachuteOpen > 0.1,
 			falling: inAir && this.parachuteOpen <= 0.1,

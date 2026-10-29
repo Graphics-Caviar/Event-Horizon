@@ -31,7 +31,9 @@ export const ALIENS = {
 	},
 	2: {
 		name: 'flyer',
-		model: ['/assets/models/aliens/alien-flying-predator-rigged.glb'],
+		model: [
+			'/assets/models/aliens/alien-flying-predator-rigged.glb',
+		],
 		stats: {
 			speed: 33,
 			hp: 120,
@@ -187,7 +189,9 @@ export class Alien {
 
 	async load() {
 		try {
-			const model = await this.level.assetManager.loadModel(this.path)
+			const model = await this.level.assetManager.loadModel(
+				this.path
+			)
 			if (!this.group.parent) return // level torn down mid-load
 			this.level._fit(model, this.fit)
 			this._fitScale = model.scale.x
@@ -208,7 +212,10 @@ export class Alien {
 			})
 			this.group.add(model)
 			this.model = model
-			this.animation = new AlienAnimationController(model, this.type.name)
+			this.animation = new AlienAnimationController(
+				model,
+				this.type.name
+			)
 			if (this.kind === 'ground') {
 				this.collider =
 					this.level._registerGameplayCollider(
@@ -326,21 +333,44 @@ export class Alien {
 	_updateAnimation(delta) {
 		if (!this.animation) return
 		const state = this._combatState
-		const groundAttack = this.combatMode && this.kind !== 'flyer' &&
+		const groundAttack =
+			this.combatMode &&
+			this.kind !== 'flyer' &&
 			(state === 'windup' || state === 'lunge')
-		const swoop = this.combatMode && this.kind === 'flyer' && state === 'swoop'
-		const duration = state === 'windup'
-			? (this.type.name === 'launcher' ? 0.62 : 0.32)
-			: state === 'lunge'
-				? (this.type.name === 'launcher' ? 0.5 : 0.34) : 1
+		const swoop =
+			this.combatMode &&
+			this.kind === 'flyer' &&
+			state === 'swoop'
+		const duration =
+			state === 'windup'
+				? this.type.name === 'launcher'
+					? 0.62
+					: 0.32
+				: state === 'lunge'
+					? this.type.name === 'launcher'
+						? 0.5
+						: 0.34
+					: 1
 		const attackProgress = swoop
 			? Math.min(1, this._swoopT / this._swoopDuration)
-			: Math.min(1, Math.max(0, 1 - this._stateTimer / duration))
+			: Math.min(
+					1,
+					Math.max(
+						0,
+						1 - this._stateTimer / duration
+					)
+				)
 		this.animation.update(delta, {
 			speed: this.kind === 'flyer' ? 0 : this._walkSpeed,
 			baseSpeed: this.speed,
-			attackPhase: groundAttack ? state : swoop ? 'swoop'
-				: this.kind === 'flyer' && state === 'climb' ? 'climb' : '',
+			attackPhase: groundAttack
+				? state
+				: swoop
+					? 'swoop'
+					: this.kind === 'flyer' &&
+						  state === 'climb'
+						? 'climb'
+						: '',
 			attackProgress,
 			hit: this.stopTimer > 0 || this._hitWobble > 0.4,
 			dead: this.smashed,
@@ -460,7 +490,9 @@ export class Alien {
 			this.model.position.y =
 				this._baseY +
 				Math.abs(Math.sin(this._bob * 2.4)) *
-					(this.animation?.isRigged ? 0.035 : 0.16) *
+					(this.animation?.isRigged
+						? 0.035
+						: 0.16) *
 					bobAmount
 			this.model.rotation.z = this._bank
 		}
@@ -626,7 +658,11 @@ export class Alien {
 					(brute ? 1.05 : 1.55) *
 					// A moving rover is faster than an on-foot pilot.
 					// Let pursuing creatures keep pressure without teleporting.
-					(this.level.boarded ? (brute ? 1.35 : 1.45) : 1)
+					(this.level.boarded
+						? brute
+							? 1.35
+							: 1.45
+						: 1)
 				if (dist < strikeRange) {
 					this._combatState = 'windup'
 					this._stateTimer = brute ? 0.62 : 0.32
@@ -709,8 +745,10 @@ export class Alien {
 		// Allow a single contact hit near the middle of an intentional strike.
 		const attackDuration = brute ? 0.5 : 0.34
 		const strikeProgress = 1 - this._stateTimer / attackDuration
-		this._damageWindow = this._combatState === 'lunge' &&
-			strikeProgress >= 0.3 && strikeProgress <= 0.82 &&
+		this._damageWindow =
+			this._combatState === 'lunge' &&
+			strikeProgress >= 0.3 &&
+			strikeProgress <= 0.82 &&
 			this.stopTimer <= 0
 		this.currentAttackDamage =
 			brute && this._combatState === 'lunge'
@@ -823,8 +861,14 @@ export class Alien {
 			this._bob += delta * (2.2 + bobAmount * 3.4)
 			this.model.position.y =
 				this._baseY +
-				Math.abs(Math.sin(this._bob)) * (this.animation?.isRigged ? 0.045 : 0.22) * bobAmount
-			this.model.rotation.x = this._pitch * (this.animation?.isRigged ? 0.35 : 1)
+				Math.abs(Math.sin(this._bob)) *
+					(this.animation?.isRigged
+						? 0.045
+						: 0.22) *
+					bobAmount
+			this.model.rotation.x =
+				this._pitch *
+				(this.animation?.isRigged ? 0.35 : 1)
 			this.model.rotation.z = this._bank
 			const shudder =
 				Math.sin(this._hitWobble * 28) *
@@ -893,14 +937,22 @@ export class Alien {
 			// Follow the target's new location during the early approach.
 			if (this._swoopT < this._swoopDuration * 0.5) {
 				this._swoopApex.x = THREE.MathUtils.damp(
-					this._swoopApex.x, target.x, 4, delta
+					this._swoopApex.x,
+					target.x,
+					4,
+					delta
 				)
 				this._swoopApex.z = THREE.MathUtils.damp(
-					this._swoopApex.z, target.z, 4, delta
+					this._swoopApex.z,
+					target.z,
+					4,
+					delta
 				)
-				this._swoopApex.y = this.planet.heightAt(
-					this._swoopApex.x, this._swoopApex.z
-				) + 2.1
+				this._swoopApex.y =
+					this.planet.heightAt(
+						this._swoopApex.x,
+						this._swoopApex.z
+					) + 2.1
 			}
 			this._swoopT += delta
 			const t = Math.min(
@@ -1022,7 +1074,10 @@ export class Alien {
 		if (this.model) {
 			this.model.position.y =
 				this._baseY +
-				Math.sin(this._wingPhase) * (this.animation?.isRigged ? beatAmp * 0.2 : beatAmp)
+				Math.sin(this._wingPhase) *
+					(this.animation?.isRigged
+						? beatAmp * 0.2
+						: beatAmp)
 			this.model.rotation.x =
 				this._pitch +
 				Math.sin(this._wingPhase + 1.1) *
@@ -1200,7 +1255,8 @@ export class Alien {
 			// Tumble out of the sky, then flatten where we land.
 			this._flyFall = Math.min(1, this._flyFall + delta * 0.9)
 			this.position.y -= (14 + 26 * this._flyFall) * delta
-			this.group.rotation.z += delta * (this.animation?.isRigged ? 1.5 : 7)
+			this.group.rotation.z +=
+				delta * (this.animation?.isRigged ? 1.5 : 7)
 			const ground =
 				this.planet.heightAt(
 					this.position.x,
@@ -1235,9 +1291,21 @@ export class Alien {
 		// Squash: a quick pop up, then flatten into a pancake that stays.
 		if (this._smashT >= 0 && this._smashT < 1) {
 			if (this.animation?.isRigged) {
-				this._smashT = Math.min(1, this._smashT + delta / 0.8)
-				if (this.model) this.model.rotation.z = THREE.MathUtils.damp(
-					this.model.rotation.z, this.type.name === 'launcher' ? -0.35 : 0.45, 4, delta)
+				this._smashT = Math.min(
+					1,
+					this._smashT + delta / 0.8
+				)
+				if (this.model)
+					this.model.rotation.z =
+						THREE.MathUtils.damp(
+							this.model.rotation.z,
+							this.type.name ===
+								'launcher'
+								? -0.35
+								: 0.45,
+							4,
+							delta
+						)
 				return
 			}
 			this._smashT = Math.min(1, this._smashT + delta / 0.34)
@@ -1329,7 +1397,8 @@ export class Alien {
 			Math.hypot(dx, dz) <= enemyRadius + playerRadius &&
 			Math.abs(dy) <= enemyRadius + playerRadius &&
 			this.collisionCooldown <= 0 &&
-			this._damageWindow && !this._attackConnected
+			this._damageWindow &&
+			!this._attackConnected
 		if (hit) {
 			this._attackConnected = true
 			// Landed the bite: brief recoil before circling back in.

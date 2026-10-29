@@ -97,23 +97,43 @@ export class Level2LavaHazards {
 		this._buildEmbers()
 	}
 
-
 	_createRouteCrossings() {
 		const points = this.level.roverApproach?.points
 		if (!points || points.length < 8) return []
 		return [
-			{ from: 2, to: 3, fraction: 0.48, width: 70, depth: 15 },
-			{ from: 4, to: 5, fraction: 0.58, width: 82, depth: 18 },
-			{ from: 6, to: 7, fraction: 0.48, width: 76, depth: 17 },
+			{
+				from: 2,
+				to: 3,
+				fraction: 0.48,
+				width: 70,
+				depth: 15,
+			},
+			{
+				from: 4,
+				to: 5,
+				fraction: 0.58,
+				width: 82,
+				depth: 18,
+			},
+			{
+				from: 6,
+				to: 7,
+				fraction: 0.48,
+				width: 76,
+				depth: 17,
+			},
 		].map(({ from, to, fraction, width, depth }) => {
-			const a = points[from], b = points[to]
+			const a = points[from],
+				b = points[to]
 			return {
 				x: THREE.MathUtils.lerp(a.x, b.x, fraction),
 				z: THREE.MathUtils.lerp(a.z, b.z, fraction),
 				rx: width,
 				rz: depth,
 				// The long axis cuts across the road, not alongside it.
-				rotation: Math.atan2(b.z - a.z, b.x - a.x) + Math.PI / 2,
+				rotation:
+					Math.atan2(b.z - a.z, b.x - a.x) +
+					Math.PI / 2,
 			}
 		})
 	}

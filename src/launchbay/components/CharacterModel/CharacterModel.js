@@ -137,17 +137,25 @@ export default class CharacterModel {
 		try {
 			// Launch bay and gameplay share the same preferred rigged/fallback paths.
 			const paths = Array.isArray(this.character.model)
-				? this.character.model : [this.character.model]
+				? this.character.model
+				: [this.character.model]
 			let gltf, lastError
 			for (const path of paths) {
 				try {
-					gltf = await loadGLTF(path, this._onProgress)
+					gltf = await loadGLTF(
+						path,
+						this._onProgress
+					)
 					break
 				} catch (error) {
 					lastError = error
 				}
 			}
-			if (!gltf) throw lastError || new Error('No pilot model found')
+			if (!gltf)
+				throw (
+					lastError ||
+					new Error('No pilot model found')
+				)
 			this._onModelLoaded(gltf)
 		} catch (err) {
 			console.warn(
@@ -289,7 +297,11 @@ export default class CharacterModel {
 				} else if (this.rigAnimator?.isRigged) {
 					this.rigAnimator.update(dt)
 				} else {
-					this._applyProceduralIdle(this.model, elapsed, 0)
+					this._applyProceduralIdle(
+						this.model,
+						elapsed,
+						0
+					)
 				}
 				break
 

@@ -14,12 +14,18 @@ export class RoverExplosion {
 
 		const geometry = new THREE.SphereGeometry(1, 12, 8)
 		const innerMaterial = new THREE.MeshBasicMaterial({
-			color: 0xffe6a0, transparent: true, opacity: 0.95,
-			depthWrite: false, blending: THREE.AdditiveBlending,
+			color: 0xffe6a0,
+			transparent: true,
+			opacity: 0.95,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
 		})
 		const outerMaterial = new THREE.MeshBasicMaterial({
-			color: 0xff4d16, transparent: true, opacity: 0.8,
-			depthWrite: false, blending: THREE.AdditiveBlending,
+			color: 0xff4d16,
+			transparent: true,
+			opacity: 0.8,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
 		})
 		this.resources.push(geometry, innerMaterial, outerMaterial)
 		this.inner = new THREE.Mesh(geometry, innerMaterial)
@@ -28,8 +34,11 @@ export class RoverExplosion {
 
 		const ringGeometry = new THREE.TorusGeometry(1, 0.09, 6, 40)
 		const ringMaterial = new THREE.MeshBasicMaterial({
-			color: 0xffac45, transparent: true, opacity: 0.85,
-			depthWrite: false, blending: THREE.AdditiveBlending,
+			color: 0xffac45,
+			transparent: true,
+			opacity: 0.85,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
 		})
 		this.resources.push(ringGeometry, ringMaterial)
 		this.ring = new THREE.Mesh(ringGeometry, ringMaterial)
@@ -38,16 +47,22 @@ export class RoverExplosion {
 
 		const fragmentGeometry = new THREE.TetrahedronGeometry(0.55)
 		const fragmentMaterial = new THREE.MeshStandardMaterial({
-			color: 0x49454c, emissive: 0x9a3510, roughness: 0.65,
+			color: 0x49454c,
+			emissive: 0x9a3510,
+			roughness: 0.65,
 		})
 		this.resources.push(fragmentGeometry, fragmentMaterial)
 		this.fragments = []
 		for (let i = 0; i < 16; i++) {
-			const mesh = new THREE.Mesh(fragmentGeometry, fragmentMaterial)
+			const mesh = new THREE.Mesh(
+				fragmentGeometry,
+				fragmentMaterial
+			)
 			const angle = (i / 16) * Math.PI * 2
 			const speed = 6 + (i % 4) * 1.8
 			const velocity = new THREE.Vector3(
-				Math.cos(angle) * speed, 6 + (i % 5) * 1.3,
+				Math.cos(angle) * speed,
+				6 + (i % 5) * 1.3,
 				Math.sin(angle) * speed
 			)
 			this.fragments.push({ mesh, velocity })
@@ -72,7 +87,10 @@ export class RoverExplosion {
 		this.ring.material.opacity = Math.max(0, 0.85 * (1 - t * 1.8))
 		this.light.intensity = 8 * flash
 		for (const fragment of this.fragments) {
-			fragment.mesh.position.addScaledVector(fragment.velocity, dt)
+			fragment.mesh.position.addScaledVector(
+				fragment.velocity,
+				dt
+			)
 			fragment.velocity.y -= 17 * dt
 			fragment.mesh.rotation.x += dt * 4
 			fragment.mesh.rotation.y += dt * 6
