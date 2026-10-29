@@ -415,7 +415,12 @@ export class Level3 extends Level2 {
 	_updatePlayerMovement(delta) {
 		if (this.transitionHeld || this.completed) return
 		const thrust = this.survival
-			? this.survival.burn(delta, this.keys.has('Space'), this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'))
+			? this.survival.burn(
+					delta,
+					this.keys.has('Space'),
+					this.keys.has('ShiftLeft') ||
+						this.keys.has('ShiftRight')
+				)
 			: this.keys.has('Space')
 		this.crouching =
 			this.keys.has('KeyC') && !this._airborne && !thrust
@@ -504,16 +509,25 @@ export class Level3 extends Level2 {
 		// Apply acceleration with delta time; do not teleport or override input.
 		const suction = this.survival?.getSuction(position)
 		if (suction?.backwards) {
-			this.velocity.addScaledVector(this.survival.direction, -suction.backwards * delta)
+			this.velocity.addScaledVector(
+				this.survival.direction,
+				-suction.backwards * delta
+			)
 			this.velocity.clampLength(0, 38)
 		}
 		this._verticalSpeed = THREE.MathUtils.damp(
 			this._verticalSpeed,
-			thrust ? (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 23 : 15) : -12,
+			thrust
+				? this.keys.has('ShiftLeft') ||
+					this.keys.has('ShiftRight')
+					? 23
+					: 15
+				: -12,
 			4,
 			delta
 		)
-		if (suction?.downwards) this._verticalSpeed -= suction.downwards * delta
+		if (suction?.downwards)
+			this._verticalSpeed -= suction.downwards * delta
 		position.y += this._verticalSpeed * delta
 		const candidate = position
 			.clone()

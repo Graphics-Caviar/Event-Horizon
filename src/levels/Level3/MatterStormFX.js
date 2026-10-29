@@ -17,7 +17,13 @@ export class MatterStormFX {
 		this.bolts = []
 		for (let k = 0; k < 2; k++) {
 			const geometry = new THREE.BufferGeometry()
-			geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(16 * 2 * 3), 3))
+			geometry.setAttribute(
+				'position',
+				new THREE.BufferAttribute(
+					new Float32Array(16 * 2 * 3),
+					3
+				)
+			)
 			const material = new THREE.LineBasicMaterial({
 				color: k ? 0xba75ff : 0x97edff,
 				transparent: true,
@@ -36,7 +42,10 @@ export class MatterStormFX {
 
 		this.vortexGeometry = new THREE.BufferGeometry()
 		this.vortexPositions = new Float32Array(96 * 3)
-		this.vortexGeometry.setAttribute('position', new THREE.BufferAttribute(this.vortexPositions, 3))
+		this.vortexGeometry.setAttribute(
+			'position',
+			new THREE.BufferAttribute(this.vortexPositions, 3)
+		)
 		this.vortexMaterial = new THREE.PointsMaterial({
 			color: 0xb980ff,
 			size: 1.5,
@@ -46,7 +55,10 @@ export class MatterStormFX {
 			depthWrite: false,
 			blending: THREE.AdditiveBlending,
 		})
-		this.vortex = new THREE.Points(this.vortexGeometry, this.vortexMaterial)
+		this.vortex = new THREE.Points(
+			this.vortexGeometry,
+			this.vortexMaterial
+		)
 		this.vortex.frustumCulled = false
 		this.vortex.visible = false
 		this.group.add(this.vortex)
@@ -68,15 +80,27 @@ export class MatterStormFX {
 			const ground = this.level.planet.heightAt(x, z) + 3
 			const height = 105 + this._rand() * 85
 			const a = bolt.geometry.attributes.position
-			let px = x, py = ground + height, pz = z
+			let px = x,
+				py = ground + height,
+				pz = z
 			for (let i = 0; i < 12; i++) {
 				const t = (i + 1) / 12
-				const nx = x + (this._rand() - 0.5) * 23 * (1 - t * 0.7)
-				const nz = z + (this._rand() - 0.5) * 23 * (1 - t * 0.7)
+				const nx =
+					x +
+					(this._rand() - 0.5) *
+						23 *
+						(1 - t * 0.7)
+				const nz =
+					z +
+					(this._rand() - 0.5) *
+						23 *
+						(1 - t * 0.7)
 				const ny = ground + height * (1 - t)
 				a.setXYZ(i * 2, px, py, pz)
 				a.setXYZ(i * 2 + 1, nx, ny, nz)
-				px = nx; py = ny; pz = nz
+				px = nx
+				py = ny
+				pz = nz
 			}
 			for (let j = 0; j < 4; j++) {
 				const index = j * 3 + 1
@@ -84,50 +108,84 @@ export class MatterStormFX {
 				const by = a.getY(index * 2 + 1)
 				const bz = a.getZ(index * 2 + 1)
 				a.setXYZ(24 + j * 2, bx, by, bz)
-				a.setXYZ(25 + j * 2, bx + (this._rand() - 0.5) * 30, by - 14 - this._rand() * 15, bz + (this._rand() - 0.5) * 30)
+				a.setXYZ(
+					25 + j * 2,
+					bx + (this._rand() - 0.5) * 30,
+					by - 14 - this._rand() * 15,
+					bz + (this._rand() - 0.5) * 30
+				)
 			}
 			a.needsUpdate = true
 			bolt.line.visible = true
-			if (k === 0) this.flashLight.position.set(x, ground + 45, z)
+			if (k === 0)
+				this.flashLight.position.set(x, ground + 45, z)
 		}
 		this.flashRemaining = this.flashLength
 	}
 
 	_updateVortex() {
 		const survival = this.level.survival
-		if (!survival?.collapseAnnounced || this.level.completed || this.level.transitionHeld) {
+		if (
+			!survival?.collapseAnnounced ||
+			this.level.completed ||
+			this.level.transitionHeld
+		) {
 			this.vortex.visible = false
 			return
 		}
 		const player = this.level.playerRoot.position
 		const sideX = -survival.direction.z
 		const sideZ = survival.direction.x
-		const lateral = (player.x - survival.start.x) * sideX + (player.z - survival.start.z) * sideZ
-		const cx = survival.start.x + survival.direction.x * (survival.edge + 12) + sideX * lateral
-		const cz = survival.start.z + survival.direction.z * (survival.edge + 12) + sideZ * lateral
+		const lateral =
+			(player.x - survival.start.x) * sideX +
+			(player.z - survival.start.z) * sideZ
+		const cx =
+			survival.start.x +
+			survival.direction.x * (survival.edge + 12) +
+			sideX * lateral
+		const cz =
+			survival.start.z +
+			survival.direction.z * (survival.edge + 12) +
+			sideZ * lateral
 		const cy = this.level.planet.heightAt(cx, cz) + 3
 		for (let i = 0; i < 96; i++) {
-			const height = (i % 24) / 23 * 30
-			const angle = (i / 24) * Math.PI * 2 + height * 0.35 + this.time * 1.7
+			const height = ((i % 24) / 23) * 30
+			const angle =
+				(i / 24) * Math.PI * 2 +
+				height * 0.35 +
+				this.time * 1.7
 			const radius = 2.5 + height * 0.42
-			this.vortexPositions[i * 3] = cx + Math.cos(angle) * radius
+			this.vortexPositions[i * 3] =
+				cx + Math.cos(angle) * radius
 			this.vortexPositions[i * 3 + 1] = cy + height
-			this.vortexPositions[i * 3 + 2] = cz + Math.sin(angle) * radius
+			this.vortexPositions[i * 3 + 2] =
+				cz + Math.sin(angle) * radius
 		}
 		this.vortexGeometry.attributes.position.needsUpdate = true
 		this.vortex.visible = true
 	}
 
 	update(delta, cinematic = false) {
-		if (this.disposed || !Number.isFinite(delta) || delta <= 0) return
+		if (this.disposed || !Number.isFinite(delta) || delta <= 0)
+			return
 		this.time += Math.min(delta, 0.1)
-		const active = !cinematic && !this.level.completed && !this.level.transitionHeld
+		const active =
+			!cinematic &&
+			!this.level.completed &&
+			!this.level.transitionHeld
 		if (active && this.time >= this.nextFlash) {
 			this._strike()
-			this.nextFlash = this.time + (this.level.survival?.collapseAnnounced ? 2.3 : 4.3) + this._rand() * 2
+			this.nextFlash =
+				this.time +
+				(this.level.survival?.collapseAnnounced
+					? 2.3
+					: 4.3) +
+				this._rand() * 2
 		}
 		this.flashRemaining = Math.max(0, this.flashRemaining - delta)
-		const flash = active ? this.flashRemaining / this.flashLength : 0
+		const flash = active
+			? this.flashRemaining / this.flashLength
+			: 0
 		this.flashLight.intensity = flash * 9
 		for (const bolt of this.bolts) {
 			bolt.material.opacity = flash

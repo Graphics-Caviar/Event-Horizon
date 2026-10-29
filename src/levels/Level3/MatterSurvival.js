@@ -135,18 +135,32 @@ export class MatterSurvival {
 
 	/** Collapse accelerates slightly as the world breaks apart. */
 	_collapseProgress() {
-		const t = Math.max(0, (this.time - this.config.countdown) / this.config.collapseSeconds)
+		const t = Math.max(
+			0,
+			(this.time - this.config.countdown) /
+				this.config.collapseSeconds
+		)
 		return t * (0.8 + 0.2 * Math.min(t, 1))
 	}
 
 	/** World-space suction near the advancing collapse, for jetpack flight only. */
 	getSuction(position) {
-		if (!this.collapseAnnounced || this.level.completed || this.level.transitionHeld)
+		if (
+			!this.collapseAnnounced ||
+			this.level.completed ||
+			this.level.transitionHeld
+		)
 			return { backwards: 0, downwards: 0 }
-		const ahead = (position.x - this.start.x) * this.direction.x +
-			(position.z - this.start.z) * this.direction.z - this.edge
+		const ahead =
+			(position.x - this.start.x) * this.direction.x +
+			(position.z - this.start.z) * this.direction.z -
+			this.edge
 		const near = 1 - THREE.MathUtils.clamp((ahead - 18) / 135, 0, 1)
-		const ramp = THREE.MathUtils.clamp((this.time - this.config.countdown) / 12, 0, 1)
+		const ramp = THREE.MathUtils.clamp(
+			(this.time - this.config.countdown) / 12,
+			0,
+			1
+		)
 		return {
 			backwards: ramp * (4 + 24 * near),
 			downwards: ramp * (2.5 + 7 * near),
@@ -202,7 +216,8 @@ export class MatterSurvival {
 			return false
 		this.fuel = Math.max(
 			0,
-			this.fuel - this.config.burnRate * (boost ? 1.8 : 1) * delta
+			this.fuel -
+				this.config.burnRate * (boost ? 1.8 : 1) * delta
 		)
 		return true
 	}
@@ -215,14 +230,27 @@ export class MatterSurvival {
 		)
 			return
 		this.time += delta
-		if (!this.collapseAnnounced && this.time >= this.config.countdown) {
+		if (
+			!this.collapseAnnounced &&
+			this.time >= this.config.countdown
+		) {
 			this.collapseAnnounced = true
-			this.level._showMovementFeedback?.('DIMENSION COLLAPSING — BOOST TO THE RIFT', 4)
+			this.level._showMovementFeedback?.(
+				'DIMENSION COLLAPSING — BOOST TO THE RIFT',
+				4
+			)
 			this.level._requestShake?.(0.4)
 		}
-		if (this.collapseAnnounced && !this.suctionWarned && this.time >= this.config.countdown + 4) {
+		if (
+			this.collapseAnnounced &&
+			!this.suctionWarned &&
+			this.time >= this.config.countdown + 4
+		) {
 			this.suctionWarned = true
-			this.level._showMovementFeedback?.('VOID CURRENT ACTIVE — BOOST AGAINST THE PULL', 3)
+			this.level._showMovementFeedback?.(
+				'VOID CURRENT ACTIVE — BOOST AGAINST THE PULL',
+				3
+			)
 		}
 		this.edge =
 			this.time < this.config.countdown

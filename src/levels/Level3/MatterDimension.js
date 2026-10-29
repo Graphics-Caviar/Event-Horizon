@@ -24,14 +24,19 @@ function createRockIslandGeometry() {
 	const mid = []
 	const low = []
 	for (let i = 0; i < n; i++) {
-		const angle = i / n * Math.PI * 2
-		const c = Math.cos(angle), t = Math.sin(angle)
+		const angle = (i / n) * Math.PI * 2
+		const c = Math.cos(angle),
+			t = Math.sin(angle)
 		const edge = 0.95 + Math.sin(i * 3.6) * 0.045
 		const x = Math.sign(c) * Math.pow(Math.abs(c), 0.55) * 9 * edge
 		const z = Math.sign(t) * Math.pow(Math.abs(t), 0.55) * 11 * edge
 		top.push([x, 1.5, z])
-		mid.push([x * (0.78 + 0.07 * Math.sin(i * 1.9)), -2.5 - (i % 3) * 0.5, z * 0.79])
-		low.push([x * 0.36, -6 - (i % 4) * 0.7, z * 0.40])
+		mid.push([
+			x * (0.78 + 0.07 * Math.sin(i * 1.9)),
+			-2.5 - (i % 3) * 0.5,
+			z * 0.79,
+		])
+		low.push([x * 0.36, -6 - (i % 4) * 0.7, z * 0.4])
 	}
 	function triangle(a, b, c, color) {
 		for (const v of [a, b, c]) {
@@ -44,12 +49,15 @@ function createRockIslandGeometry() {
 		triangle([0, 1.5, 0], top[j], top[i], [0.24, 0.23, 0.34])
 		triangle(top[i], top[j], mid[j], [0.15, 0.15, 0.24])
 		triangle(top[i], mid[j], mid[i], [0.15, 0.15, 0.24])
-		triangle(mid[i], mid[j], low[j], [0.11, 0.10, 0.19])
-		triangle(mid[i], low[j], low[i], [0.11, 0.10, 0.19])
+		triangle(mid[i], mid[j], low[j], [0.11, 0.1, 0.19])
+		triangle(mid[i], low[j], low[i], [0.11, 0.1, 0.19])
 		triangle(low[i], low[j], [0, -9.8, 0], [0.07, 0.06, 0.13])
 	}
 	const g = new THREE.BufferGeometry()
-	g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+	g.setAttribute(
+		'position',
+		new THREE.Float32BufferAttribute(vertices, 3)
+	)
 	g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
 	g.computeVertexNormals()
 	return g
@@ -71,25 +79,36 @@ export class MatterDimension {
 		const box = own(new THREE.BoxGeometry(1, 1, 1))
 		const shardGeometry = own(new THREE.ConeGeometry(1, 1, 5))
 		const islandGeometry = own(createRockIslandGeometry())
-		const islandMaterial = own(new THREE.MeshStandardMaterial({
-			vertexColors: true,
-			roughness: 0.96,
-			metalness: 0.08,
-			flatShading: true,
-			emissive: 0x12051e,
-			emissiveIntensity: 0.3,
-		}))
-		const crackMaterial = own(new THREE.LineBasicMaterial({
-			color: 0x9357df, transparent: true, opacity: 0.72,
-		}))
+		const islandMaterial = own(
+			new THREE.MeshStandardMaterial({
+				vertexColors: true,
+				roughness: 0.96,
+				metalness: 0.08,
+				flatShading: true,
+				emissive: 0x12051e,
+				emissiveIntensity: 0.3,
+			})
+		)
+		const crackMaterial = own(
+			new THREE.LineBasicMaterial({
+				color: 0x9357df,
+				transparent: true,
+				opacity: 0.72,
+			})
+		)
 		const crackGeometry = own(new THREE.BufferGeometry())
-		crackGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
-			-7, 1.56, -4, -2, 1.56, -1,
-			-2, 1.56, -1, 1, 1.56, -3,
-			1, 1.56, -3, 6, 1.56, 3,
-			-4, 1.56, 6, 0, 1.56, 2,
-			0, 1.56, 2, 5, 1.56, 7,
-		], 3))
+		crackGeometry.setAttribute(
+			'position',
+			new THREE.Float32BufferAttribute(
+				[
+					-7, 1.56, -4, -2, 1.56, -1, -2, 1.56,
+					-1, 1, 1.56, -3, 1, 1.56, -3, 6, 1.56,
+					3, -4, 1.56, 6, 0, 1.56, 2, 0, 1.56, 2,
+					5, 1.56, 7,
+				],
+				3
+			)
+		)
 		const metal = own(
 			new THREE.MeshStandardMaterial({
 				color: 0x222538,
@@ -161,11 +180,22 @@ export class MatterDimension {
 						sign * (36 + (i % 3) * 7)
 					)
 				floating.y += 28 + (i % 4) * 9
-				const slab = new THREE.Mesh(islandGeometry, islandMaterial)
+				const slab = new THREE.Mesh(
+					islandGeometry,
+					islandMaterial
+				)
 				slab.name = 'floating-fractured-rock-island'
 				slab.position.copy(floating)
-				slab.rotation.y = Math.atan2(direction.x, direction.z)
-				slab.add(new THREE.LineSegments(crackGeometry, crackMaterial))
+				slab.rotation.y = Math.atan2(
+					direction.x,
+					direction.z
+				)
+				slab.add(
+					new THREE.LineSegments(
+						crackGeometry,
+						crackMaterial
+					)
+				)
 				this.group.add(slab)
 				this.platforms.push({
 					mesh: slab,

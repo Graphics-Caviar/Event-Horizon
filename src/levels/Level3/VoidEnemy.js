@@ -1258,7 +1258,11 @@ export class VoidEnemy {
 			)
 		}
 		this.group.rotation.y = this._heading
-		this.rigAnimator?.update(delta, { state: this.state, speed, airborne: this.kind === 'flyer' })
+		this.rigAnimator?.update(delta, {
+			state: this.state,
+			speed,
+			airborne: this.kind === 'flyer',
+		})
 	}
 
 	_syncToTerrain(delta) {

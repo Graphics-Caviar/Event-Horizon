@@ -122,7 +122,10 @@ export async function loadVoidModel(assetManager, key) {
 	try {
 		await assetManager.preloadModel(def.path)
 		if (!_prepped.has(key)) {
-			if (!def.rigged && !assetUrl(def.path).endsWith('-web.glb')) {
+			if (
+				!def.rigged &&
+				!assetUrl(def.path).endsWith('-web.glb')
+			) {
 				const raw = assetManager.getRawModel(def.path)
 				if (raw) {
 					await decimateModel(
