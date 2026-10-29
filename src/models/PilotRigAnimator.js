@@ -33,6 +33,8 @@ export class PilotRigAnimator {
 		this.phase = 0
 		this.blend = 0
 		this.speedBlend = 0
+		this.motionLean = 0
+		this.motionBank = 0
 		this.state = 'IDLE'
 		const available = new Map()
 		let skinned = 0
@@ -81,7 +83,7 @@ export class PilotRigAnimator {
 	}
 
 	/** distance is world units travelled this frame, speed is world units/sec. */
-	update(delta, { distance = 0, speed = 0, boarded = false, airborne = false, falling = false } = {}) {
+	update(delta, { distance = 0, speed = 0, boarded = false, airborne = false, falling = false, accel = 0, turnRate = 0 } = {}) {
 		if (!this.isRigged) return
 		const dt = THREE.MathUtils.clamp(delta || 0, 0, 0.1)
 		this.time += dt
@@ -91,6 +93,13 @@ export class PilotRigAnimator {
 		this.blend = THREE.MathUtils.damp(this.blend, desired, 11, dt)
 		this.speedBlend = THREE.MathUtils.damp(this.speedBlend,
 			THREE.MathUtils.clamp((speed - 2.6) / 3.3, 0, 1), 7, dt)
+		// Small acceleration/steering reactions preserve the merged movement
+		// feedback without rebuilding the skeleton of an already-rigged GLB.
+		const active = boarded || airborne || falling ? 0 : 1
+		this.motionLean = THREE.MathUtils.damp(this.motionLean,
+			THREE.MathUtils.clamp(accel / 35, -1, 1) * 0.06 * active, 8, dt)
+		this.motionBank = THREE.MathUtils.damp(this.motionBank,
+			THREE.MathUtils.clamp(turnRate / 2.4, -1, 1) * 0.05 * active, 8, dt)
 		const stride = THREE.MathUtils.lerp(1.5, 2.2, this.speedBlend)
 		if (motion) this.phase += distance / stride * TAU
 		this.state = falling ? 'FALL' : airborne ? 'AIRBORNE' : boarded ? 'SEATED' :
@@ -117,10 +126,10 @@ export class PilotRigAnimator {
 		this._set('rightElbow', -0.09 - 0.15 * this.blend, 0, 0, alpha)
 		this._set('pelvis', bounce + this.blend * Math.cos(this.phase * 2) * 0.008,
 			this.blend * wave * 0.032, this.blend * Math.cos(this.phase) * 0.016, alpha)
-		this._set('spine', -this.blend * this.speedBlend * 0.07, 0,
-			Math.sin(this.time * 1.2) * 0.008, alpha)
-		this._set('chest', -this.blend * this.speedBlend * 0.08,
-			-this.blend * wave * 0.035, Math.sin(this.time * 1.6) * 0.007, alpha)
+		this._set('spine', -this.blend * this.speedBlend * 0.07 + this.motionLean, 0,
+			Math.sin(this.time * 1.2) * 0.008 + this.motionBank, alpha)
+		this._set('chest', -this.blend * this.speedBlend * 0.08 + this.motionLean * 0.5,
+			-this.blend * wave * 0.035, Math.sin(this.time * 1.6) * 0.007 + this.motionBank * 0.6, alpha)
 		this._set('neck', 0, 0, -Math.sin(this.time * 0.7) * 0.009, alpha)
 		this._set('head', this.blend * this.speedBlend * 0.06,
 			Math.sin(this.time * 0.6) * 0.022 * (1 - this.blend), 0, alpha)

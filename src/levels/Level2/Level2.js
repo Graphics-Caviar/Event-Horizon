@@ -18,7 +18,6 @@ import { Portal } from './Portal.js'
 import { WaypointGuide } from './WaypointGuide.js'
 import { advanceRouteWaypoint } from './RouteProgress.js'
 import { PilotWalk, orientPilot } from './PilotWalk.js'
-import { PilotRig, orientPilot } from './PilotRig.js'
 import { constrainTerrainCamera } from './TerrainCamera.js'
 
 const PLAYER_RADIUS = 0.9
@@ -119,7 +118,7 @@ function releaseButtonFocus() {
 
 // On-foot locomotion feel. The pilot carries momentum instead of snapping
 // to a fixed speed and turns through its body; the measured ground speed
-// and turn rate then drive the procedural skeleton in PilotRig.
+// and turn rate then drive the existing skeletal gait in PilotWalk.
 const WALK_SPEED = 4
 const RUN_SPEED = 7
 const MOVE_ACCEL_DAMP = 6.5 // approach rate while input is held
@@ -1088,7 +1087,7 @@ export class Level2 extends Level {
 		this.pilotWalk?.dispose()
 		this.pilotModel?.removeFromParent()
 		this.pilotModel = model
-		this.pilotWalk = new PilotRig(this, model, character)
+		this.pilotWalk = new PilotWalk(this, model, character)
 		this.playerRoot.add(model)
 		if (!this.boarded) this._syncPlayerToTerrain()
 	}
@@ -2078,7 +2077,7 @@ export class Level2 extends Level {
 						FOOTSTEP_STRIDE) %
 				(Math.PI * 2)
 		}
-		const bobTarget = firstPersonWalking
+		const bobTarget = firstPersonWalking && bobSpeed > 0.02
 			? Math.sin(this._walkCameraBobPhase) *
 				FIRST_PERSON_WALK_BOB *
 				clamp01(bobSpeed / WALK_SPEED)
