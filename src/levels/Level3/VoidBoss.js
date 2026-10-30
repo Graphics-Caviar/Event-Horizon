@@ -1,11 +1,11 @@
 import * as THREE from 'three'
+import { loadVoidModel } from './voidAssets.js'
 
 /**
  * VoidBoss — the final boss of the Void Dimension zero-gravity arena.
  *
- * Built entirely from Three.js primitives (same principle as Character.js /
- * Nyx.js / Kai.js): a hierarchical Group tree whose joints are Groups and
- * whose limb segments are Mesh children of those Groups.  No GLB is needed.
+ * Uses the optimized void_god GLB for its final appearance. The procedural
+ * creature remains as a visual fallback if the asset fails to load.
  *
  * Performance notes (freeze prevention):
  *  - All scratch vectors are pre-allocated as instance fields; no `new
@@ -56,13 +56,14 @@ export class VoidBoss {
 	 * @param {THREE.Group}   parentGroup  scene group owned by VoidDimension
 	 * @param {THREE.Vector3} arenaCenter  world position of the arena centre
 	 */
-	constructor(parentGroup, arenaCenter) {
+	constructor(parentGroup, arenaCenter, assetManager) {
 		this.arena = arenaCenter.clone()
 		this.hp = BOSS_MAX_HP
 		this.maxHp = BOSS_MAX_HP
 		this.pendingHit = false
 		this.dead = false
 		this.won = false
+		this._disposed = false
 
 		// State machine
 		this._state = 'idle'
@@ -78,7 +79,7 @@ export class VoidBoss {
 		// Pre-allocated scratch vectors — avoids `new THREE.Vector3` in update()
 		this._scratchOrbit = new THREE.Vector3()
 		this._scratchDir = new THREE.Vector3()
-		this._scratchFbOfs = new THREE.Vector3()
+		this._scratchAim = new THREE.Vector3()
 
 		this._fireballs = []
 		this._resources = []
@@ -278,7 +279,7 @@ export class VoidBoss {
 		)
 		const aura = new THREE.Sprite(this._auraMat)
 		aura.scale.setScalar(6)
-		this.body.add(aura)
+		this.root.add(aura)
 
 		// ── point light ────────────────────────────────────────────────────
 		this._light = new THREE.PointLight(0xff3300, 0, 80, 2)
@@ -308,6 +309,34 @@ export class VoidBoss {
 
 		// Expose world position reference
 		this.position = this.root.position
+		this._loadGodModel(assetManager)
+	}
+
+	async _loadGodModel(assetManager) {
+		if (!assetManager) return
+		const model = await loadVoidModel(assetManager, 'voidGod')
+		if (!model || this._disposed) return
+
+		model.updateMatrixWorld(true)
+		const bounds = new THREE.Box3().setFromObject(model)
+		const size = bounds.getSize(new THREE.Vector3())
+		const center = bounds.getCenter(new THREE.Vector3())
+		const fit = 6 / Math.max(size.x, size.y, size.z, 0.001)
+		model.scale.setScalar(fit)
+		model.position.set(
+			-center.x * fit,
+			-center.y * fit,
+			-center.z * fit
+		)
+		model.name = 'void-god-final-boss-model'
+		model.traverse((part) => {
+			if (!part.isMesh) return
+			part.castShadow = false
+			part.receiveShadow = false
+		})
+		this.root.add(model)
+		this._godModel = model
+		this.body.visible = false
 	}
 
 	// ── HP bar ──────────────────────────────────────────────────────────────
@@ -357,7 +386,7 @@ export class VoidBoss {
 		ctx.font = 'bold 10px monospace'
 		ctx.textAlign = 'center'
 		ctx.fillText(
-			`VOID DEVOURER  ${hp} / ${this.maxHp}`,
+			`VOID GOD  ${hp} / ${this.maxHp}`,
 			cv.width / 2,
 			cv.height - 4
 		)
@@ -366,15 +395,24 @@ export class VoidBoss {
 
 	// ── fireball spawning ───────────────────────────────────────────────────
 
-	_spawnFireball(targetPos) {
+	_spawnFireball(targetPos, playerVelocity) {
 		// Only ever reactivates a pre-warmed pool entry — no alloc at runtime.
 		const fb = this._fireballs.find((f) => !f.active)
 		if (!fb) return // pool exhausted (all 6 in flight) — silently skip
 
 		// Spawn from the boss head (world position via scratch)
 		this.headGroup.getWorldPosition(fb.group.position)
+		// Lead the pilot by the projectile's travel time so shots stay aimed
+		// at their flight path instead of the position from the start of windup.
+		const distance = fb.group.position.distanceTo(targetPos)
+		this._scratchAim.copy(targetPos)
+		if (playerVelocity)
+			this._scratchAim.addScaledVector(
+				playerVelocity,
+				Math.min(distance / FIREBALL_SPEED, 1.5)
+			)
 		this._scratchDir
-			.subVectors(targetPos, fb.group.position)
+			.subVectors(this._scratchAim, fb.group.position)
 			.normalize()
 		// Offset spawn point so ball starts outside the boss body
 		fb.group.position.addScaledVector(this._scratchDir, 2.5)
@@ -411,7 +449,7 @@ export class VoidBoss {
 
 	// ── update ──────────────────────────────────────────────────────────────
 
-	update(delta, playerPos) {
+	update(delta, playerPos, playerVelocity) {
 		this._time += delta
 		this._hitFlash = Math.max(0, this._hitFlash - delta * 2.5)
 
@@ -502,24 +540,15 @@ export class VoidBoss {
 					this._jawOpen + delta * 2
 				)
 				if (this._timer <= 0) {
-					this._spawnFireball(playerPos)
+					this._spawnFireball(
+						playerPos,
+						playerVelocity
+					)
 					if (enraged) {
-						// Second fireball with slight spread — use scratch to avoid alloc
-						this._scratchFbOfs
-							.copy(playerPos)
-							.add(
-								this._scratchFbOfs.set(
-									(Math.random() -
-										0.5) *
-										6,
-									(Math.random() -
-										0.5) *
-										6,
-									0
-								)
-							)
+						// Keep the enraged follow-up aimed at the same predicted path.
 						this._spawnFireball(
-							this._scratchFbOfs
+							playerPos,
+							playerVelocity
 						)
 					}
 					this._state = 'recover'
@@ -608,6 +637,7 @@ export class VoidBoss {
 	// ── dispose ─────────────────────────────────────────────────────────────
 
 	dispose() {
+		this._disposed = true
 		for (const fb of this._fireballs) fb.group.removeFromParent()
 		this._fireballs.length = 0
 		this._hpBarSprite.removeFromParent()

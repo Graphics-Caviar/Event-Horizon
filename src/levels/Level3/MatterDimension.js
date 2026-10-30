@@ -172,7 +172,18 @@ export class MatterDimension {
 				edge.y =
 					level.planet.heightAt(edge.x, edge.z) +
 					0.6
-				mesh(i < 9 ? cyan : violet, edge, [0.5, 1.2, 5])
+				const routeBlock = mesh(
+					i < 9 ? cyan : violet,
+					edge,
+					[0.5, 1.2, 5]
+				)
+				level._registerGameplayCollider(
+					edge.x,
+					edge.z,
+					2.6,
+					'route-block',
+					routeBlock
+				)
 				const floating = p
 					.clone()
 					.addScaledVector(

@@ -23,8 +23,10 @@ import {
 	getDocs,
 	query,
 	orderBy,
+	where,
 	limit as limitTo,
 	serverTimestamp,
+	getCountFromServer,
 } from 'firebase/firestore'
 import { db, isFirebaseReady } from './firebaseConfig.js'
 import { withTimeout } from './timeout.js'
@@ -132,10 +134,26 @@ export class LeaderboardService {
 				undefined,
 				`read ${levelId} leaderboard`
 			)
-			return snapshot.docs.map((entry, index) => ({
-				rank: index + 1,
-				...entry.data(),
-			}))
+			return snapshot.docs.map((entry, index, entries) => {
+				const run = entry.data()
+				const rank =
+					1 +
+					entries
+						.slice(0, index)
+						.filter((previous) => {
+							const earlier =
+								previous.data()
+							return (
+								earlier.score >
+									run.score ||
+								(earlier.score ===
+									run.score &&
+									earlier.timeElapsed <
+										run.timeElapsed)
+							)
+						}).length
+				return { rank, ...run }
+			})
 		} catch (error) {
 			if (error?.code === 'failed-precondition') {
 				console.warn(
@@ -148,6 +166,71 @@ export class LeaderboardService {
 				)
 			}
 			return []
+		}
+	}
+
+	/** Best run for the signed-in player, even when it falls outside top-N. */
+	async getPersonalBest(levelId, userId) {
+		if (
+			!isFirebaseReady() ||
+			!LEVEL_IDS.includes(levelId) ||
+			!userId
+		)
+			return null
+
+		try {
+			const snapshot = await withTimeout(
+				getDocs(
+					query(
+						this._scoresRef(levelId),
+						where('userId', '==', userId),
+						orderBy('score', 'desc'),
+						orderBy('timeElapsed', 'asc'),
+						limitTo(1)
+					)
+				),
+				undefined,
+				`read ${levelId} personal best`
+			)
+			const personalBest = snapshot.docs[0]?.data()
+			if (!personalBest) return null
+
+			// Rank the player's best run across the full board, not just the
+			// top-N window. Equal score/time runs share the same competition rank.
+			const betterScore = await getCountFromServer(
+				query(
+					this._scoresRef(levelId),
+					where('score', '>', personalBest.score)
+				)
+			)
+			const fasterTie = await getCountFromServer(
+				query(
+					this._scoresRef(levelId),
+					where(
+						'score',
+						'==',
+						personalBest.score
+					),
+					where(
+						'timeElapsed',
+						'<',
+						personalBest.timeElapsed
+					)
+				)
+			)
+			return {
+				...personalBest,
+				rank:
+					betterScore.data().count +
+					fasterTie.data().count +
+					1,
+			}
+		} catch (error) {
+			console.warn(
+				`[Leaderboard] Personal best read for ${levelId} failed:`,
+				error?.message
+			)
+			return null
 		}
 	}
 

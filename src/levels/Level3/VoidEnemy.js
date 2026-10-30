@@ -416,7 +416,6 @@ export class VoidEnemy {
 		if (!this.combatMode) {
 			if (distance < this.style.noticeRange) {
 				this.combatMode = true
-				if (this.collider) this.collider.enabled = false
 				this._enter('detect')
 				this._timer = 0.45
 				this._voidAudio?.play(
@@ -1199,14 +1198,28 @@ export class VoidEnemy {
 		}
 		this.position.x += _step.x
 		this.position.z += _step.z
-		if (this.kind !== 'flyer' || this.position.y < nextGround + 18)
+		if (
+			this.kind !== 'flyer' ||
+			this.position.y < nextGround + 18
+		) {
+			const colliderEnabled = this.collider?.enabled
+			if (this.collider) this.collider.enabled = false
 			this.planet.resolveCircleCollisions(
 				this.position,
 				this.radius,
 				this.level.gameplayColliders
 			)
+			if (this.collider)
+				this.collider.enabled = colliderEnabled
+		}
 		this.planet.clampToBounds(this.position, this.radius)
 		this._syncToTerrain(delta)
+		// The enemy moves every frame, so keep its solid footprint aligned
+		// with the body instead of leaving a pass-through gap at its spawn.
+		if (this.collider) {
+			this.collider.x = this.position.x
+			this.collider.z = this.position.z
+		}
 
 		const speed = Math.hypot(this._velocity.x, this._velocity.z)
 		this._walked += speed * delta

@@ -571,6 +571,17 @@ export class Level2 extends Level {
 				this.cameraZoom.change(zoom, this.boarded)
 				return
 			}
+			if (
+				e.code === 'Space' &&
+				(e.target === document.body ||
+					e.target ===
+						this.sceneManager.renderer
+							.domElement) &&
+				!this.paused &&
+				!this.completed &&
+				!this.transitionHeld
+			)
+				e.preventDefault()
 			if (!this.paused && !this.transitionHeld)
 				this.keys.add(e.code)
 		}
@@ -1486,6 +1497,16 @@ export class Level2 extends Level {
 		)
 	}
 
+	_cameraSurfaceHeightAt(x, z) {
+		return this.planet.heightAt(x, z)
+	}
+
+	_constrainCameraToTerrain(position, target) {
+		constrainTerrainCamera(position, target, this.planet, (x, z) =>
+			this._cameraSurfaceHeightAt(x, z)
+		)
+	}
+
 	_setupCamera() {
 		const camera = this.sceneManager.camera
 		camera.fov = 68
@@ -1499,10 +1520,9 @@ export class Level2 extends Level {
 		this._lookAt = this.playerRoot.position
 			.clone()
 			.add(new THREE.Vector3(0, 1.8, 0))
-		constrainTerrainCamera(
+		this._constrainCameraToTerrain(
 			camera.position,
-			this._lookAt.clone(),
-			this.planet
+			this._lookAt.clone()
 		)
 		camera.lookAt(this._lookAt)
 		camera.updateProjectionMatrix()
@@ -2783,7 +2803,7 @@ export class Level2 extends Level {
 
 			const targetHeight = this.boarded ? 3.5 : 1.8
 
-			constrainTerrainCamera(
+			this._constrainCameraToTerrain(
 				camera.position,
 				focus
 					.clone()
@@ -2793,8 +2813,7 @@ export class Level2 extends Level {
 							targetHeight,
 							0
 						)
-					),
-				this.planet
+					)
 			)
 
 			const lookLead = this.boarded
