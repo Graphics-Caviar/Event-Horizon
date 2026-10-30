@@ -372,7 +372,7 @@ export class MatterSurvival {
 						'JETPACK OVERLOAD — FATAL SYSTEM FAILURE',
 						2
 					)
-					this.level._gameOver()
+					this.level._gameOver('nitrogen-overload')
 					return
 				}
 				this.fuel = Math.min(

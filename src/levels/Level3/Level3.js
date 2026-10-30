@@ -11,6 +11,7 @@ import { VoidColossus } from './VoidColossus.js'
 import { MatterDimension } from './MatterDimension.js'
 import { MatterSurvival } from './MatterSurvival.js'
 import { VoidDimension } from './VoidDimension.js'
+import { RoverExplosion } from '../Level2/RoverExplosion.js'
 
 // Shared locomotion and rover, with an independent Level 3 planet.
 export class Level3 extends Level2 {
@@ -75,6 +76,7 @@ export class Level3 extends Level2 {
 			...options.survivalConfig,
 		})
 		this.blade = new EnergyBlade(this)
+		this._pilotExplosion = null
 		this._voidKills = 0
 		this._bossDefeated = false
 		this._galactusDefeated = false
@@ -747,6 +749,15 @@ export class Level3 extends Level2 {
 			: ''
 	}
 
+	_applyWormholeSuction(delta) {
+		if (!this.encounters?.at(-1)?.completed) {
+			this.portal.suckLevel = 0
+			this._suckShake = 0
+			return
+		}
+		super._applyWormholeSuction(delta)
+	}
+
 	_checkPortalArrival() {
 		if (
 			Math.abs(
@@ -760,11 +771,14 @@ export class Level3 extends Level2 {
 			) > 7
 		)
 			return
+		const finalEncounter = this.encounters?.at(-1)
+		if (finalEncounter && !finalEncounter.completed) return
 		super._checkPortalArrival()
 	}
 
 	update(delta) {
 		if (this.paused) return
+		this._pilotExplosion?.update(delta)
 		// Refresh dynamic shadows on alternate frames. The player and enemies
 		// still cast moving shadows without rerasterizing the whole void every
 		// frame while the jetpack is active.
@@ -855,7 +869,7 @@ export class Level3 extends Level2 {
 				? ` · F attack · R change attack mode (${bladeMode})`
 				: ' · R changes blade attack mode'
 			const riftObjective =
-				'Cross the Grav Rift to reach the final boss.'
+				'Defeat the final encounter to enter the Grav Rift.'
 			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>${riftObjective} Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
 			this._objectiveKey = ''
 		}
@@ -914,6 +928,8 @@ export class Level3 extends Level2 {
 	_completeMission() {
 		if (this.completed) return
 		if (!this.voidDimension) {
+			this.playerHP = this.maxPlayerHP
+			this._updateLevelHUD()
 			this.audio?.playEscape()
 			this.voidDimension = new VoidDimension(this)
 			return
@@ -952,8 +968,17 @@ export class Level3 extends Level2 {
 	}
 
 	/** Same flow as Level2's, but the results screen should say Level 3. */
-	_gameOver() {
+	_gameOver(cause = 'overrun') {
 		if (this.completed) return
+		const nitrogenOverload = cause === 'nitrogen-overload'
+		if (nitrogenOverload) {
+			this.playerRoot.visible = false
+			this.jetpack.visible = false
+			this._pilotExplosion = new RoverExplosion(
+				this,
+				this.playerRoot.position
+			)
+		}
 		this.completed = true
 		this.state.status = STATUS.GAME_OVER
 		this.keys.clear()
@@ -965,9 +990,10 @@ export class Level3 extends Level2 {
 		this.radio?.stop()
 		const time = this.elapsedPlayTime
 		this.state.score = 0
+		const outcome = nitrogenOverload ? 'overload' : 'overrun'
 		this._endTimer = setTimeout(() => {
 			this.onEnd?.({
-				outcome: 'overrun',
+				outcome,
 				won: false,
 				score: 0,
 				time,
@@ -975,10 +1001,11 @@ export class Level3 extends Level2 {
 				progress: 0,
 				level: this.level,
 			})
-		}, 1000)
+		}, nitrogenOverload ? 2400 : 1000)
 	}
 
 	dispose() {
+		this._pilotExplosion?.dispose()
 		this.voidDimension?.dispose()
 		this.survival?.dispose()
 		this.matterDimension?.dispose()
