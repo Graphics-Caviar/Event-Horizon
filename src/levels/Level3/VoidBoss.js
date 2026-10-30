@@ -1,11 +1,12 @@
 import * as THREE from 'three'
+import { loadVoidModel } from './voidAssets.js'
+import { VoidRigAnimator } from './VoidRigAnimator.js'
 
 /**
  * VoidBoss — the final boss of the Void Dimension zero-gravity arena.
  *
- * Built entirely from Three.js primitives (same principle as Character.js /
- * Nyx.js / Kai.js): a hierarchical Group tree whose joints are Groups and
- * whose limb segments are Mesh children of those Groups.  No GLB is needed.
+ * Prefers the supplied 66-bone Galactus GLB. A cheap procedural stand-in
+ * remains available if the asset is missing or still loading.
  *
  * Performance notes (freeze prevention):
  *  - All scratch vectors are pre-allocated as instance fields; no `new
@@ -20,7 +21,7 @@ import * as THREE from 'three'
 const BOSS_MAX_HP = 500
 const FIREBALL_SPEED = 28 // m/s
 const FIREBALL_RADIUS = 3.5 // hit-sphere radius in world units
-const FIREBALL_DAMAGE = 18 // HP deducted per fireball hit
+export const FIREBALL_DAMAGE = 18 // HP deducted per fireball hit
 const FIREBALL_LIFE = 6 // seconds before auto-despawn
 const FIREBALL_POOL = 6 // pre-warmed pool size (avoids runtime alloc)
 const ORBIT_RADIUS = 38 // metres from arena centre
@@ -29,7 +30,7 @@ const WINDUP_TIME = 1.8 // seconds of telegraph before firing
 const RECOVER_TIME = 1.2 // seconds between volleys (phase 1)
 const ENRAGE_THRESHOLD = 0.33 // fraction of maxHp at which boss enrages
 const BOSS_SCALE = 3.4 // world-space size multiplier
-const HP_BAR_OFFSET_Y = 6 // world units above root.position for the HP bar
+const HP_BAR_OFFSET_Y = 12 // world units above root.position for the HP bar
 
 // ─── glow texture (shared singleton) ──────────────────────────────────────────
 
@@ -57,6 +58,11 @@ export class VoidBoss {
 	 * @param {THREE.Vector3} arenaCenter  world position of the arena centre
 	 */
 	constructor(parentGroup, arenaCenter) {
+		this.activated = false
+		this.disposed = false
+		this.model = null
+		this.animator = null
+		this._loadStarted = false
 		this.arena = arenaCenter.clone()
 		this.hp = BOSS_MAX_HP
 		this.maxHp = BOSS_MAX_HP
@@ -73,6 +79,7 @@ export class VoidBoss {
 		this._deathT = -1
 		this._hitFlash = 0
 		this._jawOpen = 0
+		this._strikeT = 0
 		this._lastHpDrawn = -1 // dirty flag for HP bar canvas
 
 		// Pre-allocated scratch vectors — avoids `new THREE.Vector3` in update()
@@ -181,7 +188,7 @@ export class VoidBoss {
 
 		// ── root group ─────────────────────────────────────────────────────
 		this.root = new THREE.Group()
-		this.root.name = 'void-boss'
+		this.root.name = 'galactus-final-boss'
 		this.root.scale.setScalar(BOSS_SCALE)
 		this.root.position.set(
 			this.arena.x + ORBIT_RADIUS,
@@ -193,6 +200,12 @@ export class VoidBoss {
 		// ── body ───────────────────────────────────────────────────────────
 		this.body = new THREE.Group()
 		this.root.add(this.body)
+		// Visible interruptible chest core for the charge mechanic.
+		const chestGeo = own(new THREE.SphereGeometry(0.55, 10, 8))
+		const chestMat = own(new THREE.MeshBasicMaterial({ color: 0x89dfff }))
+		this.chestCore = new THREE.Mesh(chestGeo, chestMat)
+		this.chestCore.position.set(0, 0.45, 1.22)
+		this.body.add(this.chestCore)
 
 		this.body.add(new THREE.Mesh(gBodyCore, this._matBody))
 
@@ -265,6 +278,9 @@ export class VoidBoss {
 			else this.rightArm = armRoot
 		}
 
+		// Retain the original lightweight creature as a load-failure fallback.
+		this._fallbackParts = [...this.body.children]
+
 		// ── glow aura sprite ───────────────────────────────────────────────
 		this._auraMat = own(
 			new THREE.SpriteMaterial({
@@ -286,6 +302,8 @@ export class VoidBoss {
 
 		// ── HP bar sprite ──────────────────────────────────────────────────
 		this._buildHpBar(parentGroup)
+		this.root.visible = false
+		this._hpBarSprite.visible = false
 
 		// ── Pre-warm fireball pool (geometry never created at runtime) ──────
 		for (let i = 0; i < FIREBALL_POOL; i++) {
@@ -308,6 +326,68 @@ export class VoidBoss {
 
 		// Expose world position reference
 		this.position = this.root.position
+	}
+
+	/** Activate only near the last rings so the large asset does not block the
+	 * Matter Dimension or the first few minutes of Void exploration. */
+	activate(assetManager) {
+		if (this.disposed || this.activated) return
+		this.activated = true
+		this.root.visible = true
+		this._hpBarSprite.visible = true
+		if (!this._loadStarted) {
+			this._loadStarted = true
+			this.loadModel(assetManager)
+		}
+	}
+
+	async loadModel(assetManager) {
+		try {
+			const model = await loadVoidModel(assetManager, 'galactus')
+			if (!model || this.disposed || this.dead) return
+			// Fit the mesh *inside* the boss root (which has its own scale).
+			// Preserve the GLTF bones, inverse bind matrices and skin attributes.
+			model.updateMatrixWorld(true)
+			let bounds = new THREE.Box3().setFromObject(model)
+			const size = bounds.getSize(this._scratchFbOfs)
+			const longest = Math.max(size.x, size.y, size.z) || 1
+			model.scale.multiplyScalar(16 / (BOSS_SCALE * longest))
+			model.updateMatrixWorld(true)
+			bounds = new THREE.Box3().setFromObject(model)
+			model.position.sub(bounds.getCenter(this._scratchFbOfs))
+			model.traverse((node) => {
+				if (!node.isMesh) return
+				node.castShadow = false
+				node.receiveShadow = false
+				// This export has metallicFactor=1 but the Void intentionally has
+				// no environment map. Full metallic shading would make it black.
+				const shade = (material) => {
+					const copy = material.clone()
+					copy.color.set(0x816baf)
+					copy.metalness = 0.2
+					copy.roughness = 0.7
+					copy.emissive.set(0x261046)
+					copy.emissiveIntensity = 0.38
+					this._resources.push(copy)
+					return copy
+				}
+				node.material = Array.isArray(node.material)
+					? node.material.map(shade)
+					: shade(node.material)
+			})
+			this.body.add(model)
+			this.model = model
+			this.animator = new VoidRigAnimator(model, 'galactus')
+			if (this.animator.isRigged) {
+				for (const part of this._fallbackParts) part.visible = false
+			} else {
+				// Prefer the known-good stand-in over a mesh with broken skinning.
+				model.visible = false
+				console.warn('[Level3] Galactus skin not usable; keeping fallback.')
+			}
+		} catch (error) {
+			console.warn('[Level3] Galactus GLB unavailable; using fallback:', error?.message)
+		}
 	}
 
 	// ── HP bar ──────────────────────────────────────────────────────────────
@@ -357,7 +437,7 @@ export class VoidBoss {
 		ctx.font = 'bold 10px monospace'
 		ctx.textAlign = 'center'
 		ctx.fillText(
-			`VOID DEVOURER  ${hp} / ${this.maxHp}`,
+			`GALACTUS  ${hp} / ${this.maxHp}`,
 			cv.width / 2,
 			cv.height - 4
 		)
@@ -390,7 +470,9 @@ export class VoidBoss {
 
 	receiveDamage(amount) {
 		if (this.dead) return
-		this.hp = Math.max(0, this.hp - amount)
+		const damage = Math.max(1, Math.round(amount * (this.specials?.damageFactor() ?? 1)))
+		this.hp = Math.max(0, this.hp - damage)
+		this.specials?.onDamage(damage)
 		this._hitFlash = 1
 		this._drawHpBar()
 		if (this.hp <= 0) this._die()
@@ -413,9 +495,12 @@ export class VoidBoss {
 
 	update(delta, playerPos) {
 		this._time += delta
+		if (!this.activated) return
 		this._hitFlash = Math.max(0, this._hitFlash - delta * 2.5)
+		this._strikeT = Math.max(0, this._strikeT - delta)
 
 		if (this.dead) {
+			this.animator?.update(delta, { state: 'dead', airborne: true })
 			this._updateDeath(delta)
 			return
 		}
@@ -452,6 +537,7 @@ export class VoidBoss {
 		this.body.position.y =
 			(Math.sin(this._time * 1.1) * 0.12) / BOSS_SCALE
 		this.body.rotation.z = Math.sin(this._time * 0.6) * 0.04
+		this.chestCore.scale.setScalar(this.specials?.activeAbility === 'finalAnnihilation' && this.specials.busy ? 1.5 + Math.sin(this._time * 12) * 0.2 : 1)
 		for (let i = 0; i < this._spineSegs.length; i++)
 			this._spineSegs[i].rotation.y =
 				Math.sin(this._time * 2 + i * 0.8) * 0.25
@@ -463,8 +549,11 @@ export class VoidBoss {
 		const enraged = this.hp / this.maxHp < ENRAGE_THRESHOLD
 		const cooldown = enraged ? RECOVER_TIME * 0.55 : RECOVER_TIME
 
+		// Special attack states suppress ordinary fireball windups so that
+		// overlapping attacks cannot hit without a fresh telegraph.
+		this.specials?.update(delta, playerPos)
 		// ── state machine ──────────────────────────────────────────────────
-		switch (this._state) {
+		if (!this.specials?.busy) switch (this._state) {
 			case 'idle':
 				this._timer -= delta
 				this._auraMat.opacity = Math.max(
@@ -502,22 +591,15 @@ export class VoidBoss {
 					this._jawOpen + delta * 2
 				)
 				if (this._timer <= 0) {
+					this._strikeT = 0.32
 					this._spawnFireball(playerPos)
 					if (enraged) {
 						// Second fireball with slight spread — use scratch to avoid alloc
-						this._scratchFbOfs
-							.copy(playerPos)
-							.add(
-								this._scratchFbOfs.set(
-									(Math.random() -
-										0.5) *
-										6,
-									(Math.random() -
-										0.5) *
-										6,
-									0
-								)
-							)
+						this._scratchFbOfs.set(
+							(Math.random() - 0.5) * 6,
+							(Math.random() - 0.5) * 6,
+							0
+						).add(playerPos)
 						this._spawnFireball(
 							this._scratchFbOfs
 						)
@@ -547,6 +629,11 @@ export class VoidBoss {
 				}
 				break
 		}
+
+		this.animator?.update(delta, {
+			state: this._hitFlash > 0.55 ? 'stagger' : this._strikeT > 0 ? 'strike' : this._state,
+			airborne: true,
+		})
 
 		// Jaw
 		this.jawPivot.rotation.x = this._jawOpen * 0.55
@@ -608,6 +695,9 @@ export class VoidBoss {
 	// ── dispose ─────────────────────────────────────────────────────────────
 
 	dispose() {
+		this.disposed = true
+		this.animator?.dispose()
+		this.model?.removeFromParent()
 		for (const fb of this._fireballs) fb.group.removeFromParent()
 		this._fireballs.length = 0
 		this._hpBarSprite.removeFromParent()

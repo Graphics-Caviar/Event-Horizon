@@ -46,6 +46,17 @@ export const VOID_ASSETS = {
 		fit: 6.6,
 		simplify: 0.2,
 	},
+	// Unique final boss; rigged GLB is loaded only once the Void arena activates.
+	galactus: {
+		path: [
+			'/assets/models/void/galactus-lite-rigged.glb',
+			'/assets/models/void/galactus-detail-rigged.glb',
+			'/assets/models/void/galactus-rigged.glb',
+		],
+		rigged: true,
+		role: 'final boss · Void Dimension',
+		fit: 16,
+	},
 	voidColossus: {
 		path: '/assets/models/void/void-colossus-web-rigged.glb',
 		rigged: true,

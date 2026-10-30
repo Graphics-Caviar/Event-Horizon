@@ -1,6 +1,9 @@
 import * as THREE from 'three'
 import { VoidSpaceBackdrop } from './VoidSpaceBackdrop.js'
 import { VoidDrifters } from './VoidDrifters.js'
+import { VoidBoss, FIREBALL_DAMAGE } from './VoidBoss.js'
+import { VoidArenaEffects, VoidArenaFighter } from './VoidArenaCombat.js'
+import { VoidGodAbilities } from './VoidGodAbilities.js'
 
 /** A separate, explorable zero-gravity space beyond the Matter wormhole. */
 export class VoidDimension {
@@ -109,6 +112,39 @@ export class VoidDimension {
 		}
 		this.spaceBackdrop = new VoidSpaceBackdrop(level, this.group)
 		this.drifters = new VoidDrifters(level, this.group)
+		// The original VoidBoss existed but was never connected to the level.
+		// Activate near the last gate; one rigged boss replaces a mass horde.
+		this.boss = new VoidBoss(this.group, new THREE.Vector3(0, 8, -305))
+		this.fx = new VoidArenaEffects(level, this.group)
+		this.boss.specials = new VoidGodAbilities(this.boss, this.fx, level)
+		// Sequential encounters: do not load all expensive GLBs simultaneously.
+		this.guardians = [
+			new VoidArenaFighter(level, this.group, this.fx, 'sentinel', new THREE.Vector3(-12, 7, -75)),
+			new VoidArenaFighter(level, this.group, this.fx, 'stalker', new THREE.Vector3(17, 15, -135)),
+			new VoidArenaFighter(level, this.group, this.fx, 'gravRift', new THREE.Vector3(-15, 8, -185)),
+			new VoidArenaFighter(level, this.group, this.fx, 'colossus', new THREE.Vector3(8, 9, -240)),
+		]
+		// A separate boss encounter, not merely another Galactus skin.
+		this.entity = new VoidArenaFighter(level, this.group, this.fx, 'entityBoss', new THREE.Vector3(0, 15, -360))
+		this.fx.fighters = this.guardians
+		this._stage = 'guardians'
+		this._victoryT = 0
+		this._bossStarted = false
+		this._shotCooldown = 0
+		this._gateWarningCooldown = 0
+		this._lastObjective = ''
+		this._pulseScratch = new THREE.Vector3()
+		this._pulseGeometry = own(new THREE.SphereGeometry(0.55, 8, 6))
+		this._pulseMaterial = own(new THREE.MeshBasicMaterial({
+			color: 0x62efff, transparent: true, opacity: 0.95,
+			depthWrite: false, blending: THREE.AdditiveBlending,
+		}))
+		this.pulses = Array.from({ length: 6 }, () => {
+			const mesh = new THREE.Mesh(this._pulseGeometry, this._pulseMaterial)
+			mesh.visible = false
+			this.group.add(mesh)
+			return { mesh, life: 0 }
+		})
 		this.exit = this.rings.at(-1).position
 		level.playerRoot.position.set(0, 8, 15)
 		level.playerRoot.visible = true
@@ -134,21 +170,51 @@ export class VoidDimension {
 		level.sceneManager.camera.position.set(0, 12, 27)
 		level.sceneManager.camera.lookAt(0, 9.5, 15)
 		this.direction = new THREE.Vector3()
+		this.worldMin = new THREE.Vector3(-250, -240, -480)
+		this.worldMax = new THREE.Vector3(250, 260, 140)
+		this.lightOffset = new THREE.Vector3(2, 4, 4)
+		this.camOffset = new THREE.Vector3(0, 4, 12)
+		this.lookOffset = new THREE.Vector3(0, 1.5, 0)
 		this.cameraTarget = new THREE.Vector3()
 	}
 	update(delta) {
 		const l = this.level,
 			dt = Math.min(delta, 0.05)
 		this.time += dt
+		// Level3 skips Level2.update() in the Void, so decay the inherited
+		// invulnerability window here or only the first projectile can hurt.
+		l.damageCooldown = Math.max(0, l.damageCooldown - dt)
+		this._gateWarningCooldown = Math.max(0, this._gateWarningCooldown - dt)
 		this.spaceBackdrop.update(this.time)
 		this.drifters.update(dt)
 		l.playerRoot.visible = true
 		if (l.pilotModel) l.pilotModel.visible = true
-		this.pilotLight.position
-			.copy(l.playerRoot.position)
-			.add(new THREE.Vector3(2, 4, 4))
+		this.pilotLight.position.copy(l.playerRoot.position).add(this.lightOffset)
 		if (!l.completed) {
 			l.elapsedPlayTime += dt
+			// Encounter activation is proximity based; retired guardians cannot
+			// respawn or deal damage after their defeat.
+			for (const foe of this.guardians) {
+				if (!foe.active && !foe.dead && l.playerRoot.position.distanceTo(foe.home) < 110) foe.activate()
+			}
+			if (this._stage === 'guardians' && this.guardians.every(foe => foe.dead)) {
+				this._stage = 'god'
+				l._showMovementFeedback?.('THE VOID-GOD AWAKENS — APPROACH THE FINAL ARENA', 3)
+			}
+			if (this._stage === 'god' && this.boss.dead) {
+				this._stage = 'entity'
+				this.entity.activate()
+				this.fx.clear()
+				this.fx.implode(this.boss.position, 0xb36aff)
+				l._showMovementFeedback?.('THE VOID-ENTITY AWAKENS — THE TRUE FINAL ENCOUNTER', 3)
+			}
+			if (this._stage === 'entity' && this.entity.dead) {
+				this._stage = 'escape'
+				this.fx.clear()
+				this.fx.implode(this.entity.position, 0x64ffff)
+				this._victoryT = 2.6
+				l._showMovementFeedback?.('VOID STABILIZING — ESCAPE THROUGH THE CYAN GATE', 3)
+			}
 			if (l.survivalHudEl)
 				l.survivalHudEl.textContent =
 					'ZERO GRAVITY // MATTER SIGNAL LOST'
@@ -169,16 +235,54 @@ export class VoidDimension {
 				1 - Math.exp(-dt * 3)
 			)
 			l.playerRoot.position.addScaledVector(l.velocity, dt)
-			l.playerRoot.position.clamp(
-				new THREE.Vector3(-250, -240, -480),
-				new THREE.Vector3(250, 260, 140)
-			)
+			l.playerRoot.position.clamp(this.worldMin, this.worldMax)
 			l.pilotWalk?.update(dt, 0, true)
-			l.objectiveEl.innerHTML =
-				'<strong>VOID DIMENSION // BEYOND MATTER</strong><br>WASD drift · Space rise · C descend · Shift boost<br>Avoid the three guardians. Follow the cyan rings to the far gate.'
-			if (l.playerRoot.position.distanceTo(this.exit) < 12)
-				l._completeMission()
+			// Entering the boss arena starts the encounter and lazy GLB load.
+			if (this._stage === 'god' && !this._bossStarted && l.playerRoot.position.distanceTo(this.boss.arena) < 195) {
+				this._bossStarted = true
+				this.boss.activate(l.assetManager)
+			}
+			const objective = this._stage
+			if (objective !== this._lastObjective) {
+				this._lastObjective = objective
+				l.objectiveEl.innerHTML = objective === 'escape'
+					? '<strong>VOID OF GODS // VICTORY</strong><br>The Void-Entity has fallen. Fly through the final cyan ring to escape.'
+					: objective === 'entity'
+						? '<strong>TRUE FINAL BOSS // VOID-ENTITY</strong><br>Hold F to fire. Watch telegraphed rifts, gravity fields and the exposed core; interrupt the final attack.'
+						: objective === 'god'
+							? '<strong>VOID-GOD // GALACTUS</strong><br>Hold F to fire energy pulses. Dodge marked attacks and target the chest core during the final charge.'
+							: '<strong>VOID GUARDIANS</strong><br>WASD drift · Space/C rise/descend · Shift boost · Hold F to fire. Defeat Sentinel, Rift-Stalker, Grav-Rift and Colossus.'
+			}
+			if (l.keys.has('KeyF') && this._shotCooldown <= 0) this._firePulse()
+			if (l.playerRoot.position.distanceTo(this.exit) < 12) {
+				if (this._stage === 'escape' && this._victoryT <= 0) l._completeMission()
+				else if (this._gateWarningCooldown <= 0) {
+					this._gateWarningCooldown = 2.5
+					l._showMovementFeedback?.('DEFEAT EVERY VOID GUARDIAN AND BOTH BOSSES TO UNLOCK THE EXIT', 2.5)
+				}
+			}
+
 		}
+		this._shotCooldown = Math.max(0, this._shotCooldown - dt)
+		for (const foe of this.guardians) foe.update(dt, l.playerRoot.position)
+		if (this._stage === 'entity' || this._stage === 'escape') this.entity.update(dt, l.playerRoot.position)
+		if (this._bossStarted && !l.completed) {
+			this.boss.update(dt, l.playerRoot.position)
+			if (this.boss.pendingHit) {
+				this.boss.pendingHit = false
+				l._applyAlienHit(FIREBALL_DAMAGE)
+			}
+		}
+		this.fx.update(dt)
+		this._victoryT = Math.max(0, this._victoryT - dt)
+		if (l.enemyStatusEl && !l.completed) {
+			const target = this._currentTarget()
+			l.enemyStatusEl.textContent = target
+				? `${target.kind === 'entityBoss' ? 'VOID-ENTITY' : target === this.boss ? 'VOID-GOD' : target.kind.toUpperCase()}  ${Math.ceil(target.hp)} / ${target.maxHp} HP${target === this.boss ? ` // ${this.boss.specials.phaseLabel}` : target.kind === 'entityBoss' ? ` // PHASE ${target.phase}` : ''}`
+				: this._stage === 'escape' ? 'VOID DEFEATED // EXIT OPEN' : 'LOCATE THE NEXT GUARDIAN'
+		}
+
+		this._updatePulses(dt)
 		for (const shard of this.shards) {
 			shard.rotation.x += dt * 0.06
 			shard.rotation.z += dt * 0.035
@@ -187,19 +291,69 @@ export class VoidDimension {
 			this.rings[i].scale.setScalar(
 				1 + Math.sin(this.time * 1.5 + i) * 0.035
 			)
-		this.cameraTarget
-			.copy(l.playerRoot.position)
-			.add(new THREE.Vector3(0, 4, 12))
+		this.cameraTarget.copy(l.playerRoot.position).add(this.camOffset)
 		l.sceneManager.camera.position.lerp(
 			this.cameraTarget,
 			1 - Math.exp(-dt * 5)
 		)
-		this.cameraTarget
-			.copy(l.playerRoot.position)
-			.add(new THREE.Vector3(0, 1.5, 0))
+		this.cameraTarget.copy(l.playerRoot.position).add(this.lookOffset)
 		l.sceneManager.camera.lookAt(this.cameraTarget)
 	}
+	_currentTarget() {
+		if (this._stage === 'guardians') {
+			let closest = null, distance = Number.POSITIVE_INFINITY
+			for (const foe of this.guardians) {
+				if (!foe.active || foe.dead) continue
+				const d = foe.position.distanceToSquared(this.level.playerRoot.position)
+				if (d < distance) { distance = d; closest = foe }
+			}
+			return closest
+		}
+		if (this._stage === 'god') return this._bossStarted && !this.boss.dead ? this.boss : null
+		if (this._stage === 'entity') return this.entity.active && !this.entity.dead ? this.entity : null
+		return null
+	}
+	_firePulse() {
+		const target = this._currentTarget()
+		if (!target || this.level.playerRoot.position.distanceTo(target.position) > 145) return
+		const shot = this.pulses.find(item => item.life <= 0)
+		if (!shot) return
+		shot.life = 1.85
+		shot.mesh.position.copy(this.level.playerRoot.position).add(this.lookOffset)
+		shot.mesh.visible = true
+		shot.target = target
+		shot.decoy = this.fx.pickDecoy(target.position)
+		this._shotCooldown = 0.6
+	}
+	_updatePulses(dt) {
+		for (const shot of this.pulses) {
+			if (shot.life <= 0) continue
+			shot.life -= dt
+			const target = shot.target
+			if (shot.life <= 0 || !target || target.dead || this.level.completed) {
+				shot.life = 0; shot.mesh.visible = false; continue
+			}
+			const aim = shot.decoy && shot.decoy.hp > 0 ? shot.decoy.mesh.position : target.position
+			this._pulseScratch.subVectors(aim, shot.mesh.position)
+			const distance = this._pulseScratch.length()
+			if (distance < (target === this.boss ? 8.5 : target.kind === 'entityBoss' ? 9 : 4.5)) {
+				if (shot.decoy && shot.decoy.hp > 0) this.fx.hitDecoy(shot.decoy, 35)
+				else if (target === this.boss) {
+					this.boss.receiveDamage(35)
+					if (this.boss.dead) this.level._galactusDefeated = true
+				} else target.takeDamage(35)
+				shot.life = 0; shot.mesh.visible = false
+			} else if (distance > 0.01) {
+				shot.mesh.position.addScaledVector(this._pulseScratch, Math.min(distance, 85 * dt) / distance)
+			}
+		}
+	}
+
 	dispose() {
+		this.boss.dispose()
+		for (const foe of this.guardians) foe.dispose()
+		this.entity.dispose()
+		this.fx.dispose()
 		this.drifters.dispose()
 		this.spaceBackdrop.dispose()
 		this.level.sceneManager.camera.far = this.previousFar
