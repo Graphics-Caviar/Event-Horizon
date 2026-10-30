@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { MatterDebris } from './MatterDebris.js'
+import { MatterStormFX } from './MatterStormFX.js'
 
 const LAVA_PROGRESS = [
 	[0.18, -1],
@@ -11,6 +12,56 @@ const LAVA_PROGRESS = [
 	[0.82, 1],
 	[0.86, -1],
 ]
+
+/** Flat, walkable top; irregular rocky sides and a fractured underside.
+ * Top stays at local +1.5 to match supportHeightAt collision geometry.
+ * Uses one shared, low-poly geometry for every floating platform. */
+function createRockIslandGeometry() {
+	const vertices = []
+	const colors = []
+	const n = 16
+	const top = []
+	const mid = []
+	const low = []
+	for (let i = 0; i < n; i++) {
+		const angle = (i / n) * Math.PI * 2
+		const c = Math.cos(angle),
+			t = Math.sin(angle)
+		const edge = 0.95 + Math.sin(i * 3.6) * 0.045
+		const x = Math.sign(c) * Math.pow(Math.abs(c), 0.55) * 9 * edge
+		const z = Math.sign(t) * Math.pow(Math.abs(t), 0.55) * 11 * edge
+		top.push([x, 1.5, z])
+		mid.push([
+			x * (0.78 + 0.07 * Math.sin(i * 1.9)),
+			-2.5 - (i % 3) * 0.5,
+			z * 0.79,
+		])
+		low.push([x * 0.36, -6 - (i % 4) * 0.7, z * 0.4])
+	}
+	function triangle(a, b, c, color) {
+		for (const v of [a, b, c]) {
+			vertices.push(...v)
+			colors.push(...color)
+		}
+	}
+	for (let i = 0; i < n; i++) {
+		const j = (i + 1) % n
+		triangle([0, 1.5, 0], top[j], top[i], [0.24, 0.23, 0.34])
+		triangle(top[i], top[j], mid[j], [0.15, 0.15, 0.24])
+		triangle(top[i], mid[j], mid[i], [0.15, 0.15, 0.24])
+		triangle(mid[i], mid[j], low[j], [0.11, 0.1, 0.19])
+		triangle(mid[i], low[j], low[i], [0.11, 0.1, 0.19])
+		triangle(low[i], low[j], [0, -9.8, 0], [0.07, 0.06, 0.13])
+	}
+	const g = new THREE.BufferGeometry()
+	g.setAttribute(
+		'position',
+		new THREE.Float32BufferAttribute(vertices, 3)
+	)
+	g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+	g.computeVertexNormals()
+	return g
+}
 
 /** Additive route dressing: the existing triangle terrain remains authoritative. */
 export class MatterDimension {
@@ -27,6 +78,37 @@ export class MatterDimension {
 		}
 		const box = own(new THREE.BoxGeometry(1, 1, 1))
 		const shardGeometry = own(new THREE.ConeGeometry(1, 1, 5))
+		const islandGeometry = own(createRockIslandGeometry())
+		const islandMaterial = own(
+			new THREE.MeshStandardMaterial({
+				vertexColors: true,
+				roughness: 0.96,
+				metalness: 0.08,
+				flatShading: true,
+				emissive: 0x12051e,
+				emissiveIntensity: 0.3,
+			})
+		)
+		const crackMaterial = own(
+			new THREE.LineBasicMaterial({
+				color: 0x9357df,
+				transparent: true,
+				opacity: 0.72,
+			})
+		)
+		const crackGeometry = own(new THREE.BufferGeometry())
+		crackGeometry.setAttribute(
+			'position',
+			new THREE.Float32BufferAttribute(
+				[
+					-7, 1.56, -4, -2, 1.56, -1, -2, 1.56,
+					-1, 1, 1.56, -3, 1, 1.56, -3, 6, 1.56,
+					3, -4, 1.56, 6, 0, 1.56, 2, 0, 1.56, 2,
+					5, 1.56, 7,
+				],
+				3
+			)
+		)
 		const metal = own(
 			new THREE.MeshStandardMaterial({
 				color: 0x222538,
@@ -98,19 +180,23 @@ export class MatterDimension {
 						sign * (36 + (i % 3) * 7)
 					)
 				floating.y += 28 + (i % 4) * 9
-				const slab = mesh(metal, floating, [18, 3, 22])
+				const slab = new THREE.Mesh(
+					islandGeometry,
+					islandMaterial
+				)
+				slab.name = 'floating-fractured-rock-island'
+				slab.position.copy(floating)
 				slab.rotation.y = Math.atan2(
 					direction.x,
 					direction.z
 				)
-				const shard = new THREE.Mesh(
-					shardGeometry,
-					metal
+				slab.add(
+					new THREE.LineSegments(
+						crackGeometry,
+						crackMaterial
+					)
 				)
-				shard.rotation.z = Math.PI
-				shard.position.y = -2
-				shard.scale.set(0.65, 3.5, 0.65)
-				slab.add(shard)
+				this.group.add(slab)
 				this.platforms.push({
 					mesh: slab,
 					side: side.clone(),
@@ -121,13 +207,6 @@ export class MatterDimension {
 					y: floating.y,
 					phase: i + sign,
 				})
-				const stripe = new THREE.Mesh(
-					box,
-					sign < 0 ? cyan : violet
-				)
-				stripe.position.y = 0.54
-				stripe.scale.set(0.6 / 18, 0.2 / 3, 17 / 22)
-				slab.add(stripe)
 			}
 			if ([5, 9, 13, 17, 21, 25].includes(i))
 				this.zones.push(p)
@@ -149,6 +228,8 @@ export class MatterDimension {
 		this.lava = this._buildLava(own)
 		this.debris = new MatterDebris(level, this.zones)
 		this.group.add(this.debris.group)
+		this.storm = new MatterStormFX(level)
+		this.group.add(this.storm.group)
 		level.addObject(this.group)
 		this.time = 0
 		this.arrivalStarted = false
@@ -526,12 +607,14 @@ export class MatterDimension {
 			cinematic,
 			active: cinematic || !this.level.completed,
 		})
+		this.storm.update(delta, cinematic)
 	}
 
 	dispose() {
 		if (this.disposed) return
 		this.disposed = true
 		this.debris.dispose()
+		this.storm.dispose()
 		this.group.removeFromParent()
 		this.group.clear()
 		for (const r of this.resources) r.dispose()

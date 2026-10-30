@@ -4,14 +4,12 @@ import { installCollapseEffect } from './collapseEffect.js'
 
 export const SURVIVAL_DEFAULTS = Object.freeze({
 	countdown: 30,
-	collapseSeconds: 90,
+	collapseSeconds: 45,
 	maxFuel: 100,
 	burnRate: 5,
 	refill: 45,
 	respawn: 12,
 })
-
-const BOMB_STATION_INTERVAL = 3
 
 /** Collapse and fuel share the playable clock; cinematics never spend either. */
 export class MatterSurvival {
@@ -20,6 +18,7 @@ export class MatterSurvival {
 		this.config = { ...SURVIVAL_DEFAULTS, ...options }
 		this.time = 0
 		this.collapseAnnounced = false
+		this.suctionWarned = false
 		this.fuel = this.config.maxFuel
 		this.start = level.landingSite.clone()
 		this.end = level.portalSite.clone()
@@ -33,7 +32,6 @@ export class MatterSurvival {
 			this.end.clone().sub(this.start).setY(0).length()
 		)
 		this.edge = -Infinity
-		this.sceneryScanTimer = 0
 		this.group = new THREE.Group()
 		this.group.name = 'nitrogen-refill-stations'
 		this.resources = []
@@ -60,15 +58,6 @@ export class MatterSurvival {
 				emissiveIntensity: 1.4,
 			})
 		)
-		const bombMaterial = own(
-			new THREE.MeshStandardMaterial({
-				color: 0xff3038,
-				emissive: 0xb40818,
-				emissiveIntensity: 1.6,
-				metalness: 0.18,
-				roughness: 0.32,
-			})
-		)
 		const capGeometry = own(
 			new THREE.CylinderGeometry(0.8, 0.8, 0.35, 12)
 		)
@@ -91,37 +80,17 @@ export class MatterSurvival {
 				depthWrite: false,
 			})
 		)
-		const bombHaloMaterial = own(
-			new THREE.MeshBasicMaterial({
-				color: 0xff3545,
-				transparent: true,
-				opacity: 0.78,
-				depthWrite: false,
-			})
-		)
 		const count = Math.max(4, Math.ceil(this.length / 38))
 		for (let i = 0; i <= count; i++) {
 			const point = this.start
 				.clone()
 				.lerp(this.end, i / count)
-			// Place the tile top on the same ground height used for walking;
-			// raising it above terrain makes the pilot's feet appear buried.
-			point.y = level.planet.heightAt(point.x, point.z)
-			const type =
-				i % BOMB_STATION_INTERVAL === 1
-					? 'bomb'
-					: 'nitrogen'
+			point.y = level.planet.heightAt(point.x, point.z) + 0.4
 			const pad = new THREE.Mesh(padGeometry, padMaterial)
 			pad.position.copy(point).y -= 1
 			const can = new THREE.Group()
-			can.name =
-				type === 'bomb'
-					? 'floating-red-bomb'
-					: 'floating-nitrogen-cell'
-			const core = new THREE.Mesh(
-				canGeometry,
-				type === 'bomb' ? bombMaterial : fuelMaterial
-			)
+			can.name = 'floating-nitrogen-cell'
+			const core = new THREE.Mesh(canGeometry, fuelMaterial)
 			can.add(core)
 			for (const sign of [-1, 1]) {
 				const cap = new THREE.Mesh(capGeometry, casing)
@@ -143,9 +112,7 @@ export class MatterSurvival {
 			for (const angle of [0.55, -0.55]) {
 				const ring = new THREE.Mesh(
 					ringGeometry,
-					type === 'bomb'
-						? bombHaloMaterial
-						: haloMaterial
+					haloMaterial
 				)
 				ring.rotation.set(Math.PI / 2, angle, angle)
 				halo.add(ring)
@@ -155,18 +122,49 @@ export class MatterSurvival {
 			this.group.add(pad, can)
 			this.pickups.push({
 				point,
-				index: i,
-				type,
 				can,
 				halo,
 				phase: i * 1.7,
 				cooldown: 0,
 			})
 		}
-		this.bombBlast = this._buildBombBlast(own)
 		level.addObject(this.group)
 		this._installTerrainEffect()
 		this.crumble = new TerrainCrumble(this)
+	}
+
+	/** Collapse accelerates slightly as the world breaks apart. */
+	_collapseProgress() {
+		const t = Math.max(
+			0,
+			(this.time - this.config.countdown) /
+				this.config.collapseSeconds
+		)
+		return t * (0.8 + 0.2 * Math.min(t, 1))
+	}
+
+	/** World-space suction near the advancing collapse, for jetpack flight only. */
+	getSuction(position) {
+		if (
+			!this.collapseAnnounced ||
+			this.level.completed ||
+			this.level.transitionHeld
+		)
+			return { backwards: 0, downwards: 0 }
+		const ahead =
+			(position.x - this.start.x) * this.direction.x +
+			(position.z - this.start.z) * this.direction.z -
+			this.edge
+		const near = 1 - THREE.MathUtils.clamp((ahead - 18) / 135, 0, 1)
+		const ramp = THREE.MathUtils.clamp(
+			(this.time - this.config.countdown) / 12,
+			0,
+			1
+		)
+		return {
+			backwards: ramp * (4 + 24 * near),
+			downwards: ramp * (2.5 + 7 * near),
+		}
 	}
 
 	get remaining() {
@@ -224,7 +222,6 @@ export class MatterSurvival {
 		return true
 	}
 	update(delta) {
-		this._updateBombBlast(delta)
 		if (
 			this.level.transitionHeld ||
 			this.level.completed ||
@@ -244,37 +241,33 @@ export class MatterSurvival {
 			)
 			this.level._requestShake?.(0.4)
 		}
+		if (
+			this.collapseAnnounced &&
+			!this.suctionWarned &&
+			this.time >= this.config.countdown + 4
+		) {
+			this.suctionWarned = true
+			this.level._showMovementFeedback?.(
+				'VOID CURRENT ACTIVE — BOOST AGAINST THE PULL',
+				3
+			)
+		}
 		this.edge =
 			this.time < this.config.countdown
 				? -Infinity
 				: -35 +
-					((this.time - this.config.countdown) /
-						this.config.collapseSeconds) *
+					this._collapseProgress() *
 						(this.length + 70)
 		this.uniform.value = Number.isFinite(this.edge)
 			? this.edge
 			: -100000
 		this.crumble.update(delta)
-		// GLB scenery arrives asynchronously. Discover it at a low cadence,
-		// then avoid walking the full planet hierarchy and copying all collider
-		// arrays on every gameplay frame (including every jetpack frame).
-		this.sceneryScanTimer -= delta
-		if (this.sceneryScanTimer <= 0) {
-			this.sceneryScanTimer = 0.75
-			this._scanScenery()
-			for (const colliders of [
-				this.level.planet.colliders,
-				this.level.gameplayColliders,
-			]) {
-				if (!colliders) continue
-				for (const c of colliders) {
-					if (
-						c.enabled !== false &&
-						this.isGone(c.x, c.z)
-					)
-						c.enabled = false
-				}
-			}
+		this._scanScenery()
+		for (const c of [
+			...(this.level.planet.colliders || []),
+			...(this.level.gameplayColliders || []),
+		]) {
+			if (this.isGone(c.x, c.z)) c.enabled = false
 		}
 		this.tremorUniform.value =
 			this.remaining > 0
@@ -306,17 +299,6 @@ export class MatterSurvival {
 				Math.sin(this.time * 1.1 + p.phase) * 0.14
 			p.halo.rotation.y -= delta * 1.8
 			if (
-				p.type === 'bomb' &&
-				p.can.visible &&
-				player.distanceTo(p.can.position) < 5.5
-			) {
-				this._explodeBomb(p.can.position)
-				this.level.playerHP = 0
-				this.level._gameOver?.()
-				break
-			}
-			if (
-				p.type === 'nitrogen' &&
 				p.cooldown <= 0 &&
 				this.fuel < this.config.maxFuel &&
 				player.distanceTo(p.can.position) < 5.5
@@ -332,128 +314,6 @@ export class MatterSurvival {
 					1.5
 				)
 			}
-		}
-	}
-	_buildBombBlast(own) {
-		const group = new THREE.Group()
-		group.name = 'nitrogen-bomb-explosion'
-		group.visible = false
-		const sphere = own(new THREE.SphereGeometry(1, 16, 12))
-		const flashMaterial = own(
-			new THREE.MeshBasicMaterial({
-				color: 0xff632d,
-				transparent: true,
-				opacity: 0.88,
-				blending: THREE.AdditiveBlending,
-				depthWrite: false,
-			})
-		)
-		const coreMaterial = own(
-			new THREE.MeshBasicMaterial({
-				color: 0xffefab,
-				transparent: true,
-				opacity: 0.95,
-				blending: THREE.AdditiveBlending,
-				depthWrite: false,
-			})
-		)
-		const flash = new THREE.Mesh(sphere, flashMaterial)
-		const core = new THREE.Mesh(sphere, coreMaterial)
-		const ringMaterial = own(
-			new THREE.MeshBasicMaterial({
-				color: 0xffb34c,
-				transparent: true,
-				opacity: 0.9,
-				blending: THREE.AdditiveBlending,
-				depthWrite: false,
-			})
-		)
-		const ring = new THREE.Mesh(
-			own(new THREE.TorusGeometry(1, 0.13, 8, 32)),
-			ringMaterial
-		)
-		const light = new THREE.PointLight(0xff642b, 90, 48, 2)
-		const debrisGeometry = own(
-			new THREE.TetrahedronGeometry(0.32, 0)
-		)
-		const debrisMaterial = own(
-			new THREE.MeshBasicMaterial({
-				color: 0xff8a46,
-				transparent: true,
-				opacity: 1,
-				blending: THREE.AdditiveBlending,
-				depthWrite: false,
-			})
-		)
-		const fragments = []
-		for (let i = 0; i < 18; i++) {
-			const y = (i % 5) / 2 - 1
-			const angle = i * 2.39996
-			const horizontal = Math.sqrt(1 - y * y)
-			const velocity = new THREE.Vector3(
-				Math.cos(angle) * horizontal,
-				y,
-				Math.sin(angle) * horizontal
-			).multiplyScalar(10 + (i % 6) * 2.4)
-			const mesh = new THREE.Mesh(
-				debrisGeometry,
-				debrisMaterial
-			)
-			mesh.rotation.set(i * 0.7, i * 1.1, i * 0.37)
-			group.add(mesh)
-			fragments.push({ mesh, velocity })
-		}
-		group.add(flash, core, ring, light)
-		this.group.add(group)
-		return {
-			group,
-			flash,
-			core,
-			ring,
-			light,
-			fragments,
-			age: 0,
-			active: false,
-			duration: 0.85,
-		}
-	}
-	_explodeBomb(position) {
-		const blast = this.bombBlast
-		if (blast.active) return
-		blast.active = true
-		blast.age = 0
-		blast.group.visible = true
-		blast.group.position.copy(position)
-		this.level._requestShake?.(0.6)
-		this.level.voidAudio?.play('shock', position, 0.8)
-	}
-	_updateBombBlast(delta) {
-		const blast = this.bombBlast
-		if (!blast?.active) return
-		blast.age += Math.max(0, Math.min(delta, 0.05))
-		const t = THREE.MathUtils.clamp(
-			blast.age / blast.duration,
-			0,
-			1
-		)
-		const growth = 1 - (1 - t) ** 3
-		blast.flash.scale.setScalar(0.4 + growth * 8.5)
-		blast.core.scale.setScalar(0.2 + growth * 3.1)
-		blast.ring.scale.setScalar(0.2 + growth * 7)
-		blast.flash.material.opacity = 0.88 * (1 - t)
-		blast.core.material.opacity = 0.95 * (1 - t)
-		blast.ring.material.opacity = 0.9 * (1 - t)
-		blast.light.intensity = 90 * (1 - t)
-		for (const { mesh, velocity } of blast.fragments) {
-			mesh.position.copy(velocity).multiplyScalar(blast.age)
-			mesh.position.y -= 9 * blast.age * blast.age
-			mesh.rotation.x += delta * 9
-			mesh.rotation.z += delta * 7
-			mesh.scale.setScalar(1 - t)
-		}
-		if (t >= 1) {
-			blast.active = false
-			blast.group.visible = false
 		}
 	}
 	_installTerrainEffect() {

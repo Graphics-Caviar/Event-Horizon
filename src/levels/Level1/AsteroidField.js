@@ -2,9 +2,8 @@ import * as THREE from 'three'
 import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js'
 import { NitrogenCanister } from './Nitrogen'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { ASTEROID_MODELS } from './asteroidAssets.js'
 
-export { ASTEROID_MODELS } from './asteroidAssets.js'
+export const ASTEROID_MODELS = ['/assets/models/asteroids/asteroid_01.glb']
 
 function randomUnit() {
 	return new THREE.Vector3(
