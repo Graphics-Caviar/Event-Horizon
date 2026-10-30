@@ -885,7 +885,7 @@ export class VoidArenaFighter {
 					: prepare(node.material)
 			})
 		}
-		if (this.animator.isRigged || model.children.length)
+		if (this.animator?.isRigged || model.children.length)
 			this.core.visible = false
 	}
 	takeDamage(amount) {

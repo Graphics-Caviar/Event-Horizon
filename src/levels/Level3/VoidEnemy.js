@@ -170,14 +170,22 @@ export const VOID_STYLES = {
 VOID_STYLES.predator = {
 	...VOID_STYLES.entity,
 	asset: 'flyingPredator',
-	diveEvery: 1,
-	cooldown: [2, 2],
-	noticeRange: 65,
+	speed: 23,
+	chaseSpeed: 27,
+	altitude: 15,
+	orbitRadius: 20,
+	diveEvery: 2,
+	cooldown: [1.7, 2.3],
+	noticeRange: 190,
 }
 VOID_STYLES.brute = {
 	...VOID_STYLES.sentinel,
 	asset: 'alienBrute',
-	cooldown: [2.5, 2.5],
+	speed: 8,
+	chaseSpeed: 13,
+	accel: 7,
+	noticeRange: 170,
+	cooldown: [1.7, 2.3],
 	heavyCooldown: 5,
 }
 
@@ -515,8 +523,8 @@ export class VoidEnemy {
 				// Sprint at range and settle as it closes: the approach
 				// reads as acceleration, not a constant-speed slide.
 				const speed = THREE.MathUtils.lerp(
-					this.style.chaseSpeed,
 					this.style.speed,
+					this.style.chaseSpeed,
 					Math.min(1, distance / 40)
 				)
 				this._moveTowards(playerPos, delta, speed)
@@ -855,7 +863,13 @@ export class VoidEnemy {
 					(this._phaseT - this.style.windup) /
 					this.style.diveDuration
 				if (t < 0.55) {
-					this._moveTowards(playerPos, delta, 17)
+					this._moveTowards(
+						playerPos,
+						delta,
+						this.styleName === 'predator'
+							? 32
+							: 17
+					)
 				} else if (t < 0.75) {
 					this._velocity.multiplyScalar(
 						Math.max(0, 1 - 4 * delta)
@@ -1305,12 +1319,27 @@ export class VoidEnemy {
 				this.style.windup +
 					this.style.diveDuration * 0.75
 		const staggerDip = this.state === 'stagger' ? 7 : 0
+		// Level 3 flying Predators follow the jetpack's altitude rather
+		// than repeatedly diving at ground level while the pilot is above.
+		const pilotY = this.level.playerRoot.position.y
+		const airborneY = THREE.MathUtils.clamp(
+			pilotY + 3,
+			ground + 7,
+			ground + 70
+		)
 		const targetY = hovering
-			? ground +
-				this.style.altitude +
+			? (this.styleName === 'predator'
+					? airborneY
+					: ground + this.style.altitude) +
 				Math.sin(this._bob) * 1.8 -
 				staggerDip
-			: ground + 3.2
+			: this.styleName === 'predator'
+				? THREE.MathUtils.clamp(
+						pilotY,
+						ground + 3.2,
+						ground + 70
+					)
+				: ground + 3.2
 		this.position.y =
 			delta > 0
 				? THREE.MathUtils.damp(

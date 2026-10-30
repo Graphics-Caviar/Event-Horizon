@@ -9,6 +9,7 @@ import { EnergyBlade } from './EnergyBlade.js'
 import { VoidEnemy } from './VoidEnemy.js'
 import { VoidColossus } from './VoidColossus.js'
 import { MatterDimension } from './MatterDimension.js'
+import { MatterTornadoHazards } from './MatterTornadoHazards.js'
 import { MatterSurvival } from './MatterSurvival.js'
 import { VoidDimension } from './VoidDimension.js'
 import { RoverExplosion } from '../Level2/RoverExplosion.js'
@@ -70,11 +71,12 @@ export class Level3 extends Level2 {
 		this.voidAudio = new VoidAudio(this.audio)
 		this.monuments = new VoidMonuments(this)
 		this.matterDimension = new MatterDimension(this)
-		// The terrain stays stable for two minutes before collapse begins.
+		// The Matter path fractures at the halfway marker, not on a timer.
 		this.survival = new MatterSurvival(this, {
 			collapseSeconds: 45,
 			...options.survivalConfig,
 		})
+		this.tornadoHazards = new MatterTornadoHazards(this)
 		this.blade = new EnergyBlade(this)
 		this._pilotExplosion = null
 		this._voidKills = 0
@@ -270,13 +272,18 @@ export class Level3 extends Level2 {
 		)
 		this._encounterDelay = Math.max(0, this._encounterDelay - delta)
 		for (const encounter of this.encounters) {
+			// Spawn *before* the player outruns the zone. The old >52
+			// condition delayed activation until after flying past a wave.
 			if (
 				!encounter.active &&
-				this._routeProgress >= encounter.progress &&
-				Math.hypot(
+				this._routeProgress >=
+					encounter.progress - 0.035 &&
+				(Math.hypot(
 					player.x - encounter.site.x,
 					player.z - encounter.site.z
-				) > 52
+				) < 175 ||
+					this._routeProgress >
+						encounter.progress + 0.08)
 			)
 				encounter.active = true
 			if (!encounter.active) continue
@@ -712,7 +719,7 @@ export class Level3 extends Level2 {
 			const percent =
 				(100 * this.survival.fuel) /
 				this.survival.config.maxFuel
-			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
+			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.collapseTriggeredAt === null ? 'COLLAPSE STARTS AT HALFWAY' : this.survival.remaining > 0 ? 'GROUND SHAKING — COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
 		}
 		if (!this.bladeModeHudEl) {
 			this.bladeModeHudEl = document.createElement('div')
@@ -759,21 +766,23 @@ export class Level3 extends Level2 {
 	}
 
 	_checkPortalArrival() {
-		if (
-			Math.abs(
-				this.playerRoot.position.y -
-					(this.planet.heightAt(
-						this.portalSite.x,
-						this.portalSite.z
-					) +
-						(this.pilotWalk?.footOffset ??
-							0))
-			) > 7
-		)
+		// Level 3 is a jetpack stage: allow entry from the air.
+		// Avoid a soft-lock when the final alien encounter cannot finish.
+		if (this.completed || this.transitionHeld || this.voidDimension)
 			return
-		const finalEncounter = this.encounters?.at(-1)
-		if (finalEncounter && !finalEncounter.completed) return
-		super._checkPortalArrival()
+		const pilot = this.playerRoot?.position
+		const gate = this.portal?.group?.position || this.portalSite
+		if (!pilot || !gate) return
+		const flatDistance = Math.hypot(
+			pilot.x - gate.x,
+			pilot.z - gate.z
+		)
+		const heightDistance = Math.abs(pilot.y - (gate.y + 8))
+		// Reach the visible Grav Rift, on foot or using the jetpack.
+		if (flatDistance > 24 || heightDistance > 60) return
+		this.portal?.playArrival?.()
+		this._showMovementFeedback?.('ENTERING THE VOID DIMENSION', 2)
+		this._completeMission()
 	}
 
 	update(delta) {
@@ -803,6 +812,12 @@ export class Level3 extends Level2 {
 		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
+		this.tornadoHazards?.update(
+			step,
+			!!this.voidDimension ||
+				!!this.transitionHeld ||
+				this.completed
+		)
 		this.matterDimension?.updateLavaDamage(step)
 		if (this.voidDimension) return
 		this._updateMissionRadio()
@@ -869,7 +884,7 @@ export class Level3 extends Level2 {
 				? ` · F attack · R change attack mode (${bladeMode})`
 				: ' · R changes blade attack mode'
 			const riftObjective =
-				'Defeat the final encounter to enter the Grav Rift.'
+				'Reach the glowing Grav Rift to enter the Void Dimension. Avoid or fight the aliens along the way.'
 			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>${riftObjective} Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
 			this._objectiveKey = ''
 		}
@@ -1011,6 +1026,7 @@ export class Level3 extends Level2 {
 		this._pilotExplosion?.dispose()
 		this.voidDimension?.dispose()
 		this.survival?.dispose()
+		this.tornadoHazards?.dispose()
 		this.matterDimension?.dispose()
 		this.arrivalBackdrop?.dispose()
 		this.arrivalShip?.dispose()

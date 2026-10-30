@@ -4,6 +4,9 @@ import { VoidDrifters } from './VoidDrifters.js'
 import { VoidBoss, FIREBALL_DAMAGE } from './VoidBoss.js'
 import { VoidArenaEffects, VoidArenaFighter } from './VoidArenaCombat.js'
 import { VoidGodAbilities } from './VoidGodAbilities.js'
+import { VoidPilotBlaster } from './VoidPilotBlaster.js'
+import { VoidPrisonBubble } from './VoidPrisonBubble.js'
+import { createLevel3Art } from './Level3VisualAssets.js'
 
 /** A separate, explorable zero-gravity space beyond the Matter wormhole. */
 export class VoidDimension {
@@ -124,6 +127,13 @@ export class VoidDimension {
 			this.fx,
 			level
 		)
+		this.prison = new VoidPrisonBubble(level, this.group)
+		this.boss.specials.prison = this.prison
+		this.arenaArt = createLevel3Art(level, this.group, 'arena', 150)
+		// This is decorative scenery behind the boss, not collision geometry.
+		this.arenaArt.root.position.set(0, 15, -425)
+		// Make the alien ruins visible as soon as the Void loads.
+		this.arenaArt.load()
 		// Sequential encounters: do not load all expensive GLBs simultaneously.
 		this.guardians = [
 			new VoidArenaFighter(
@@ -165,6 +175,8 @@ export class VoidDimension {
 		)
 		this.fx.fighters = this.guardians
 		this._stage = 'guardians'
+		this._guardianIndex = 0
+		this.guardians[0].activate()
 		this._victoryT = 0
 		this._bossStarted = false
 		this._shotCooldown = 0
@@ -180,6 +192,13 @@ export class VoidDimension {
 				depthWrite: false,
 				blending: THREE.AdditiveBlending,
 			})
+		)
+		this.blaster = new VoidPilotBlaster(level, this.group)
+		this.plasmaArt = createLevel3Art(
+			level,
+			this.group,
+			'projectile',
+			3
 		)
 		this.pulses = Array.from({ length: 6 }, () => {
 			const mesh = new THREE.Mesh(
@@ -240,25 +259,43 @@ export class VoidDimension {
 		this.pilotLight.position
 			.copy(l.playerRoot.position)
 			.add(this.lightOffset)
+		this.prison.update(dt)
 		if (!l.completed) {
 			l.elapsedPlayTime += dt
-			// Encounter activation is proximity based; retired guardians cannot
-			// respawn or deal damage after their defeat.
-			for (const foe of this.guardians) {
+			// Activate one guardian at a time. The next fighter appears only
+			// after the previous one is defeated; flying past an old spawn point
+			// cannot permanently hide an enemy and soft-lock the Void-God.
+			if (
+				this._stage === 'guardians' &&
+				this.guardians[this._guardianIndex]?.dead &&
+				this._guardianIndex < this.guardians.length - 1
+			) {
+				this._guardianIndex++
+				const next = this.guardians[this._guardianIndex]
+				// If the player has flown ahead, spawn the next guardian nearby
+				// instead of leaving it several arenas behind the pilot.
 				if (
-					!foe.active &&
-					!foe.dead &&
 					l.playerRoot.position.distanceTo(
-						foe.home
-					) < 110
+						next.home
+					) > 115
+				) {
+					next.home.copy(l.playerRoot.position)
+					next.home.z -= 55
+					next.root.position.copy(next.home)
+				}
+				next.activate()
+				l._showMovementFeedback?.(
+					`VOID GUARDIAN ${this._guardianIndex + 1} / ${this.guardians.length} APPROACHING`,
+					3
 				)
-					foe.activate()
 			}
 			if (
 				this._stage === 'guardians' &&
 				this.guardians.every((foe) => foe.dead)
 			) {
 				this._stage = 'god'
+				this._bossStarted = true
+				this.boss.activate(l.assetManager)
 				l._showMovementFeedback?.(
 					'THE VOID-GOD AWAKENS — APPROACH THE FINAL ARENA',
 					3
@@ -298,28 +335,59 @@ export class VoidDimension {
 			)
 			if (this.direction.lengthSq())
 				this.direction.normalize()
-			const speed = l.keys.has('ShiftLeft') ? 36 : 22
-			l.velocity.lerp(
-				this.direction.multiplyScalar(speed),
-				1 - Math.exp(-dt * 3)
-			)
-			l.playerRoot.position.addScaledVector(l.velocity, dt)
-			l.playerRoot.position.clamp(
-				this.worldMin,
-				this.worldMax
-			)
-			l.pilotWalk?.update(dt, 0, true)
-			// Entering the boss arena starts the encounter and lazy GLB load.
-			if (
-				this._stage === 'god' &&
-				!this._bossStarted &&
-				l.playerRoot.position.distanceTo(
-					this.boss.arena
-				) < 195
-			) {
-				this._bossStarted = true
-				this.boss.activate(l.assetManager)
+			if (this.prison.trapped) {
+				l.velocity.set(0, 0, 0)
+			} else {
+				const speed = l.keys.has('ShiftLeft') ? 36 : 22
+				l.velocity.lerp(
+					this.direction.multiplyScalar(speed),
+					1 - Math.exp(-dt * 3)
+				)
+				l.playerRoot.position.addScaledVector(
+					l.velocity,
+					dt
+				)
+				l.playerRoot.position.clamp(
+					this.worldMin,
+					this.worldMax
+				)
 			}
+			// Float pose, not the old seated/rover pose.
+			l.pilotWalk?.update(dt, l.velocity.length() * dt, false)
+			const visibleTarget = this._currentTarget()
+			if (visibleTarget?.position && !visibleTarget.dead) {
+				const dx =
+					visibleTarget.position.x -
+					l.playerRoot.position.x
+				const dz =
+					visibleTarget.position.z -
+					l.playerRoot.position.z
+				const yaw = Math.atan2(dx, dz)
+				const turn = Math.atan2(
+					Math.sin(yaw - l.playerRoot.rotation.y),
+					Math.cos(yaw - l.playerRoot.rotation.y)
+				)
+				l.playerRoot.rotation.y +=
+					turn * (1 - Math.exp(-dt * 4))
+			}
+			if (l.flightPivot) {
+				l.flightPivot.rotation.z = THREE.MathUtils.damp(
+					l.flightPivot.rotation.z,
+					-l.velocity.x / 150,
+					4,
+					dt
+				)
+				l.flightPivot.rotation.x = THREE.MathUtils.damp(
+					l.flightPivot.rotation.x,
+					-l.velocity.z / 180,
+					4,
+					dt
+				)
+			}
+			this.blaster.update(dt, visibleTarget)
+			// Entering the boss arena starts the encounter and lazy GLB load.
+			// The Void-God is deliberately spawned by killing all guardians,
+			// not by flying into its arena early.
 			const objective = this._stage
 			if (objective !== this._lastObjective) {
 				this._lastObjective = objective
@@ -330,7 +398,7 @@ export class VoidDimension {
 							? '<strong>TRUE FINAL BOSS // VOID-ENTITY</strong><br>Hold F to fire. Watch telegraphed rifts, gravity fields and the exposed core; interrupt the final attack.'
 							: objective === 'god'
 								? '<strong>VOID-GOD // GALACTUS</strong><br>Hold F to fire energy pulses. Dodge marked attacks and target the chest core during the final charge.'
-								: '<strong>VOID GUARDIANS</strong><br>WASD drift · Space/C rise/descend · Shift boost · Hold F to fire. Defeat Sentinel, Rift-Stalker, Grav-Rift and Colossus.'
+								: '<strong>VOID GUARDIANS</strong><br>WASD drift · Space/C rise/descend · Shift boost · Hold F to fire. Defeat all four guardians in order to summon the Void-God.'
 			}
 			if (l.keys.has('KeyF') && this._shotCooldown <= 0)
 				this._firePulse()
@@ -349,6 +417,8 @@ export class VoidDimension {
 				}
 			}
 		}
+		this.arenaArt.root.visible = this.arenaArt.ready
+		if (this._stage !== 'god' || this.boss.dead) this.prison.clear()
 		this._shotCooldown = Math.max(0, this._shotCooldown - dt)
 		for (const foe of this.guardians)
 			foe.update(dt, l.playerRoot.position)
@@ -369,7 +439,7 @@ export class VoidDimension {
 				? `${target.kind === 'entityBoss' ? 'VOID-ENTITY' : target === this.boss ? 'VOID-GOD' : target.kind.toUpperCase()}  ${Math.ceil(target.hp)} / ${target.maxHp} HP${target === this.boss ? ` // ${this.boss.specials.phaseLabel}` : target.kind === 'entityBoss' ? ` // PHASE ${target.phase}` : ''}`
 				: this._stage === 'escape'
 					? 'VOID DEFEATED // EXIT OPEN'
-					: 'LOCATE THE NEXT GUARDIAN'
+					: `VOID GUARDIAN ${this._guardianIndex + 1} / ${this.guardians.length} — HOLD F TO FIRE`
 		}
 
 		this._updatePulses(dt)
@@ -431,15 +501,18 @@ export class VoidDimension {
 		const shot = this.pulses.find((item) => item.life <= 0)
 		if (!shot) return
 		shot.life = 1.85
-		shot.mesh.position
-			.copy(this.level.playerRoot.position)
-			.add(this.lookOffset)
+		this.blaster.fireOrigin(shot.mesh.position)
+		this.plasmaArt.load()
 		shot.mesh.visible = true
 		shot.target = target
 		shot.decoy = this.fx.pickDecoy(target.position)
 		this._shotCooldown = 0.6
 	}
 	_updatePulses(dt) {
+		// At most one expensive decorative projectile is visible, even
+		// if all six gameplay pulses are active simultaneously.
+		this.plasmaArt.root.visible = false
+		let heroUsed = false
 		for (const shot of this.pulses) {
 			if (shot.life <= 0) continue
 			shot.life -= dt
@@ -482,11 +555,26 @@ export class VoidDimension {
 					this._pulseScratch,
 					Math.min(distance, 85 * dt) / distance
 				)
+				if (this.plasmaArt.ready && !heroUsed) {
+					heroUsed = true
+					this.plasmaArt.root.visible = true
+					this.plasmaArt.root.position.copy(
+						shot.mesh.position
+					)
+					this.plasmaArt.root.lookAt(aim)
+					shot.mesh.visible = false
+				} else {
+					shot.mesh.visible = true
+				}
 			}
 		}
 	}
 
 	dispose() {
+		this.prison.dispose()
+		this.blaster.dispose()
+		this.plasmaArt.dispose()
+		this.arenaArt.dispose()
 		this.boss.dispose()
 		for (const foe of this.guardians) foe.dispose()
 		this.entity.dispose()
