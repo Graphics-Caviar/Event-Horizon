@@ -30,6 +30,11 @@ const OUTCOMES = {
 		subtitle: 'The aliens overwhelmed you. Try again and watch your surroundings.',
 		tone: 'bad',
 	},
+	overload: {
+		title: 'JETPACK OVERLOAD',
+		subtitle: 'The red nitrogen cylinder was a deadly decoy. Cyan cylinders refill your fuel; avoid the red ones.',
+		tone: 'bad',
+	},
 }
 
 const LEVEL_NAMES = {
@@ -128,7 +133,7 @@ export class LevelScreens {
 		this.subtitleEl.textContent = copy.subtitle
 		this.retryBtn.textContent = levelThreeComplete
 			? 'RESTART MISSION'
-			: result.outcome === 'overrun'
+			: ['overrun', 'overload'].includes(result.outcome)
 				? 'TRY AGAIN'
 				: 'FLY AGAIN'
 		this.scoreEl.textContent = Math.round(

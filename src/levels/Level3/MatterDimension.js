@@ -147,7 +147,7 @@ export class MatterDimension {
 		}
 		this.routeLength =
 			this.routeLengths[this.routeLengths.length - 1]
-		this.encounterSites = [0.1, 0.31, 0.52, 0.73, 0.92].map(
+		this.encounterSites = [0.1, 0.31, 0.52, 0.73, 0.96].map(
 			(progress) => this.routePointAt(progress)
 		)
 		const mesh = (material, point, scale) => {
