@@ -154,9 +154,9 @@ export class MatterDebris {
 			}
 		})
 		this._updateFragments()
-        // Single optional hero rock, reused for the first major falling chunk.
-        // The remaining debris uses the lightweight geometry pool.
-        this.heroArt = createLevel3Art(level, this.group, 'debris', 12)
+		// Single optional hero rock, reused for the first major falling chunk.
+		// The remaining debris uses the lightweight geometry pool.
+		this.heroArt = createLevel3Art(level, this.group, 'debris', 12)
 	}
 
 	trigger(
@@ -183,7 +183,7 @@ export class MatterDebris {
 			duckable,
 			seed: ++this.serial,
 		})
-        if (major) this.heroArt?.load()
+		if (major) this.heroArt?.load()
 		e.mesh.geometry = major
 			? this.architectureGeometry
 			: this.geometry
@@ -491,26 +491,39 @@ export class MatterDebris {
 						false
 			}
 		}
-        // One expensive mesh maximum, only while a major rock is falling.
-        if (this.heroArt?.ready) {
-            const major = this.events.find(e =>
-                e.active && e.major && e.age >= this.config.warningSeconds &&
-                e.age < this.config.warningSeconds + this.config.fallSeconds &&
-                e.mesh.visible)
-            this.heroArt.root.visible = Boolean(major)
-            if (major) {
-                this.heroArt.root.position.copy(major.mesh.position)
-                this.heroArt.root.rotation.copy(major.mesh.rotation)
-                this.heroArt.root.scale.setScalar(Math.max(0.4, major.radius / 7))
-                major.mesh.visible = false
-            }
-        }
+		// One expensive mesh maximum, only while a major rock is falling.
+		if (this.heroArt?.ready) {
+			const major = this.events.find(
+				(e) =>
+					e.active &&
+					e.major &&
+					e.age >= this.config.warningSeconds &&
+					e.age <
+						this.config.warningSeconds +
+							this.config
+								.fallSeconds &&
+					e.mesh.visible
+			)
+			this.heroArt.root.visible = Boolean(major)
+			if (major) {
+				this.heroArt.root.position.copy(
+					major.mesh.position
+				)
+				this.heroArt.root.rotation.copy(
+					major.mesh.rotation
+				)
+				this.heroArt.root.scale.setScalar(
+					Math.max(0.4, major.radius / 7)
+				)
+				major.mesh.visible = false
+			}
+		}
 	}
 
 	dispose() {
 		if (this.disposed) return
 		this.disposed = true
-        this.heroArt?.dispose()
+		this.heroArt?.dispose()
 		this.group.removeFromParent()
 		this.fragments.dispose()
 		this.geometry.dispose()

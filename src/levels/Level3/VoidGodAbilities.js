@@ -5,14 +5,14 @@ import * as THREE from 'three'
 const PHASES = [
 	['cosmicCleave', 'voidProjectiles', 'gravityStomp', 'armourOfTheVoid'],
 	[
-        'prisonBubble',
+		'prisonBubble',
 		'singularityBeam',
 		'meteoricCollapse',
 		'gravitationalCrush',
 		'voidClones',
 	],
 	[
-        'prisonBubble',
+		'prisonBubble',
 		'realityBreak',
 		'apocalypticBarrage',
 		'eventHorizon',
@@ -32,7 +32,7 @@ const WARNING = {
 	apocalypticBarrage: 1.4,
 	eventHorizon: 1.8,
 	finalAnnihilation: 3.6,
-    prisonBubble: 1.8,
+	prisonBubble: 1.8,
 }
 
 export class VoidGodAbilities {
@@ -52,7 +52,7 @@ export class VoidGodAbilities {
 		this._target = new THREE.Vector3()
 		this._lastPhase = 1
 		this._notify = ''
-        this.prison = null
+		this.prison = null
 	}
 	get busy() {
 		return this.state === 'windup' || this.state === 'recover'
@@ -98,7 +98,7 @@ export class VoidGodAbilities {
 				'meteoricCollapse',
 				'realityBreak',
 				'finalAnnihilation',
-                'prisonBubble',
+				'prisonBubble',
 			].includes(ability)
 		)
 			this.fx.warn(player, 14, this.timer)
@@ -178,9 +178,9 @@ export class VoidGodAbilities {
 					damage: 19,
 				})
 				break
-            case 'prisonBubble':
-                this.prison?.launch(pos, this._warningTarget)
-                break
+			case 'prisonBubble':
+				this.prison?.launch(pos, this._warningTarget)
+				break
 			case 'voidClones':
 				for (let i = 0; i < 3; i++) {
 					this._target.copy(pos)

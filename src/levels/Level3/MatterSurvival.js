@@ -178,7 +178,9 @@ export class MatterSurvival {
 	_collapseProgress() {
 		const t = Math.max(
 			0,
-			(this.time - (this.collapseTriggeredAt ?? Infinity) - this.collapseWarningSeconds) /
+			(this.time -
+				(this.collapseTriggeredAt ?? Infinity) -
+				this.collapseWarningSeconds) /
 				this.config.collapseSeconds
 		)
 		return t * (0.8 + 0.2 * Math.min(t, 1))
@@ -198,7 +200,10 @@ export class MatterSurvival {
 			this.edge
 		const near = 1 - THREE.MathUtils.clamp((ahead - 18) / 135, 0, 1)
 		const ramp = THREE.MathUtils.clamp(
-			(this.time - (this.collapseTriggeredAt ?? Infinity) - this.collapseWarningSeconds) / 12,
+			(this.time -
+				(this.collapseTriggeredAt ?? Infinity) -
+				this.collapseWarningSeconds) /
+				12,
 			0,
 			1
 		)
@@ -211,7 +216,12 @@ export class MatterSurvival {
 	get remaining() {
 		return this.collapseTriggeredAt === null
 			? Infinity
-			: Math.max(0, this.collapseTriggeredAt + this.collapseWarningSeconds - this.time)
+			: Math.max(
+					0,
+					this.collapseTriggeredAt +
+						this.collapseWarningSeconds -
+						this.time
+				)
 	}
 	isGone(x, z) {
 		if (Math.hypot(x - this.end.x, z - this.end.z) < 28)
@@ -275,29 +285,42 @@ export class MatterSurvival {
 		this.time += delta
 		// Never start collapse from elapsed play time: wait for the actual
 		// halfway point of the Matter Dimension's traversable route.
-		const routeProgress = this.level.matterDimension?.routeProgress(
-			this.level.playerRoot.position
-		) ?? 0
+		const routeProgress =
+			this.level.matterDimension?.routeProgress(
+				this.level.playerRoot.position
+			) ?? 0
 		if (this.collapseTriggeredAt === null && routeProgress >= 0.5) {
 			this.collapseTriggeredAt = this.time
 			this.level._showMovementFeedback?.(
-				'REALITY FRACTURING — FOUR SECONDS TO COLLAPSE', 4
+				'REALITY FRACTURING — FOUR SECONDS TO COLLAPSE',
+				4
 			)
 			this.level._requestShake?.(0.48)
 		}
-		if (this.collapseTriggeredAt !== null &&
-			!this.collapseAnnounced && this.remaining <= 0) {
+		if (
+			this.collapseTriggeredAt !== null &&
+			!this.collapseAnnounced &&
+			this.remaining <= 0
+		) {
 			this.collapseAnnounced = true
 			this.level._showMovementFeedback?.(
-				'DIMENSION COLLAPSING — BOOST TO THE RIFT', 4
+				'DIMENSION COLLAPSING — BOOST TO THE RIFT',
+				4
 			)
 			this.level._requestShake?.(0.65)
 		}
-		if (this.collapseAnnounced && !this.suctionWarned &&
-			this.time >= this.collapseTriggeredAt + this.collapseWarningSeconds + 4) {
+		if (
+			this.collapseAnnounced &&
+			!this.suctionWarned &&
+			this.time >=
+				this.collapseTriggeredAt +
+					this.collapseWarningSeconds +
+					4
+		) {
 			this.suctionWarned = true
 			this.level._showMovementFeedback?.(
-				'VOID CURRENT ACTIVE — BOOST AGAINST THE PULL', 3
+				'VOID CURRENT ACTIVE — BOOST AGAINST THE PULL',
+				3
 			)
 		}
 		this.edge = !this.collapseAnnounced
@@ -342,7 +365,9 @@ export class MatterSurvival {
 			(player.z - this.start.z) * this.direction.z -
 			this.edge
 		const warning =
-			this.collapseTriggeredAt !== null && this.remaining > 0 && this.remaining < 5
+			this.collapseTriggeredAt !== null &&
+			this.remaining > 0 &&
+			this.remaining < 5
 				? 1 - this.remaining / 5
 				: ahead >= 0 && ahead < 20
 					? 1 - ahead / 20

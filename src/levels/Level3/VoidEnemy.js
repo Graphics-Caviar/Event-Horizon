@@ -864,8 +864,12 @@ export class VoidEnemy {
 					this.style.diveDuration
 				if (t < 0.55) {
 					this._moveTowards(
-                        playerPos, delta, this.styleName === 'predator' ? 32 : 17
-                    )
+						playerPos,
+						delta,
+						this.styleName === 'predator'
+							? 32
+							: 17
+					)
 				} else if (t < 0.75) {
 					this._velocity.multiplyScalar(
 						Math.max(0, 1 - 4 * delta)
@@ -1315,20 +1319,27 @@ export class VoidEnemy {
 				this.style.windup +
 					this.style.diveDuration * 0.75
 		const staggerDip = this.state === 'stagger' ? 7 : 0
-        // Level 3 flying Predators follow the jetpack's altitude rather
-        // than repeatedly diving at ground level while the pilot is above.
-        const pilotY = this.level.playerRoot.position.y
-        const airborneY = THREE.MathUtils.clamp(
-            pilotY + 3, ground + 7, ground + 70
-        )
+		// Level 3 flying Predators follow the jetpack's altitude rather
+		// than repeatedly diving at ground level while the pilot is above.
+		const pilotY = this.level.playerRoot.position.y
+		const airborneY = THREE.MathUtils.clamp(
+			pilotY + 3,
+			ground + 7,
+			ground + 70
+		)
 		const targetY = hovering
-            ? (this.styleName === 'predator'
-                ? airborneY
-                : ground + this.style.altitude) +
-                Math.sin(this._bob) * 1.8 - staggerDip
-            : (this.styleName === 'predator'
-                ? THREE.MathUtils.clamp(pilotY, ground + 3.2, ground + 70)
-                : ground + 3.2)
+			? (this.styleName === 'predator'
+					? airborneY
+					: ground + this.style.altitude) +
+				Math.sin(this._bob) * 1.8 -
+				staggerDip
+			: this.styleName === 'predator'
+				? THREE.MathUtils.clamp(
+						pilotY,
+						ground + 3.2,
+						ground + 70
+					)
+				: ground + 3.2
 		this.position.y =
 			delta > 0
 				? THREE.MathUtils.damp(

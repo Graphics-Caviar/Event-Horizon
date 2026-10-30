@@ -76,7 +76,7 @@ export class Level3 extends Level2 {
 			collapseSeconds: 45,
 			...options.survivalConfig,
 		})
-        this.tornadoHazards = new MatterTornadoHazards(this)
+		this.tornadoHazards = new MatterTornadoHazards(this)
 		this.blade = new EnergyBlade(this)
 		this._pilotExplosion = null
 		this._voidKills = 0
@@ -276,14 +276,14 @@ export class Level3 extends Level2 {
 			// condition delayed activation until after flying past a wave.
 			if (
 				!encounter.active &&
-				this._routeProgress >= encounter.progress - 0.035 &&
-				(
-					Math.hypot(
-						player.x - encounter.site.x,
-						player.z - encounter.site.z
-					) < 175 ||
-					this._routeProgress > encounter.progress + 0.08
-				)
+				this._routeProgress >=
+					encounter.progress - 0.035 &&
+				(Math.hypot(
+					player.x - encounter.site.x,
+					player.z - encounter.site.z
+				) < 175 ||
+					this._routeProgress >
+						encounter.progress + 0.08)
 			)
 				encounter.active = true
 			if (!encounter.active) continue
@@ -768,11 +768,15 @@ export class Level3 extends Level2 {
 	_checkPortalArrival() {
 		// Level 3 is a jetpack stage: allow entry from the air.
 		// Avoid a soft-lock when the final alien encounter cannot finish.
-		if (this.completed || this.transitionHeld || this.voidDimension) return
+		if (this.completed || this.transitionHeld || this.voidDimension)
+			return
 		const pilot = this.playerRoot?.position
 		const gate = this.portal?.group?.position || this.portalSite
 		if (!pilot || !gate) return
-		const flatDistance = Math.hypot(pilot.x - gate.x, pilot.z - gate.z)
+		const flatDistance = Math.hypot(
+			pilot.x - gate.x,
+			pilot.z - gate.z
+		)
 		const heightDistance = Math.abs(pilot.y - (gate.y + 8))
 		// Reach the visible Grav Rift, on foot or using the jetpack.
 		if (flatDistance > 24 || heightDistance > 60) return
@@ -808,7 +812,12 @@ export class Level3 extends Level2 {
 		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
-        this.tornadoHazards?.update(step, !!this.voidDimension || !!this.transitionHeld || this.completed)
+		this.tornadoHazards?.update(
+			step,
+			!!this.voidDimension ||
+				!!this.transitionHeld ||
+				this.completed
+		)
 		this.matterDimension?.updateLavaDamage(step)
 		if (this.voidDimension) return
 		this._updateMissionRadio()
@@ -1017,7 +1026,7 @@ export class Level3 extends Level2 {
 		this._pilotExplosion?.dispose()
 		this.voidDimension?.dispose()
 		this.survival?.dispose()
-        this.tornadoHazards?.dispose()
+		this.tornadoHazards?.dispose()
 		this.matterDimension?.dispose()
 		this.arrivalBackdrop?.dispose()
 		this.arrivalShip?.dispose()
