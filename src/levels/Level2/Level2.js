@@ -2917,6 +2917,17 @@ export class Level2 extends Level {
 
 		const time = this.elapsedPlayTime
 		const score = 0
+		const endGoal = this.roverApproach?.trigger
+		const distancePosition =
+			cause === 'rover' || this.boarded
+				? this.rover.group.position
+				: this.playerRoot.position
+		const distanceToGoal = endGoal
+			? Math.hypot(
+					distancePosition.x - endGoal.x,
+					distancePosition.z - endGoal.z
+				)
+			: undefined
 
 		this.state.score = score
 
@@ -2930,6 +2941,10 @@ export class Level2 extends Level {
 					time,
 					hull: 0,
 					progress: 0,
+					distanceToGoal:
+						this._radioScriptSet === 2
+							? distanceToGoal
+							: undefined,
 					level: 2,
 				})
 			},
