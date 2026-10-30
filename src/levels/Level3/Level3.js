@@ -766,21 +766,19 @@ export class Level3 extends Level2 {
 	}
 
 	_checkPortalArrival() {
-		if (
-			Math.abs(
-				this.playerRoot.position.y -
-					(this.planet.heightAt(
-						this.portalSite.x,
-						this.portalSite.z
-					) +
-						(this.pilotWalk?.footOffset ??
-							0))
-			) > 7
-		)
-			return
-		const finalEncounter = this.encounters?.at(-1)
-		if (finalEncounter && !finalEncounter.completed) return
-		super._checkPortalArrival()
+		// Level 3 is a jetpack stage: allow entry from the air.
+		// Avoid a soft-lock when the final alien encounter cannot finish.
+		if (this.completed || this.transitionHeld || this.voidDimension) return
+		const pilot = this.playerRoot?.position
+		const gate = this.portal?.group?.position || this.portalSite
+		if (!pilot || !gate) return
+		const flatDistance = Math.hypot(pilot.x - gate.x, pilot.z - gate.z)
+		const heightDistance = Math.abs(pilot.y - (gate.y + 8))
+		// Reach the visible Grav Rift, on foot or using the jetpack.
+		if (flatDistance > 24 || heightDistance > 60) return
+		this.portal?.playArrival?.()
+		this._showMovementFeedback?.('ENTERING THE VOID DIMENSION', 2)
+		this._completeMission()
 	}
 
 	update(delta) {
@@ -877,7 +875,7 @@ export class Level3 extends Level2 {
 				? ` · F attack · R change attack mode (${bladeMode})`
 				: ' · R changes blade attack mode'
 			const riftObjective =
-				'Defeat the final encounter to enter the Grav Rift.'
+				'Reach the glowing Grav Rift to enter the Void Dimension. Avoid or fight the aliens along the way.'
 			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>${riftObjective} Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
 			this._objectiveKey = ''
 		}
