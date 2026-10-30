@@ -6,6 +6,7 @@
 	},
 	"description": "Event Horizon: Escape from Singularity - 3D browser action game with Three.js and Firebase backend",
 	"devDependencies": {
+		"@gltf-transform/cli": "^4.5.1",
 		"draco3d": "^1.5.8",
 		"meshoptimizer": "^1.3.0",
 		"prettier": "^3.9.6",

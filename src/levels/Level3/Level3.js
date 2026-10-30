@@ -9,6 +9,7 @@ import { EnergyBlade } from './EnergyBlade.js'
 import { VoidEnemy } from './VoidEnemy.js'
 import { VoidColossus } from './VoidColossus.js'
 import { MatterDimension } from './MatterDimension.js'
+import { MatterTornadoHazards } from './MatterTornadoHazards.js'
 import { MatterSurvival } from './MatterSurvival.js'
 import { VoidDimension } from './VoidDimension.js'
 import { RoverExplosion } from '../Level2/RoverExplosion.js'
@@ -75,6 +76,7 @@ export class Level3 extends Level2 {
 			collapseSeconds: 45,
 			...options.survivalConfig,
 		})
+        this.tornadoHazards = new MatterTornadoHazards(this)
 		this.blade = new EnergyBlade(this)
 		this._pilotExplosion = null
 		this._voidKills = 0
@@ -270,13 +272,18 @@ export class Level3 extends Level2 {
 		)
 		this._encounterDelay = Math.max(0, this._encounterDelay - delta)
 		for (const encounter of this.encounters) {
+			// Spawn *before* the player outruns the zone. The old >52
+			// condition delayed activation until after flying past a wave.
 			if (
 				!encounter.active &&
-				this._routeProgress >= encounter.progress &&
-				Math.hypot(
-					player.x - encounter.site.x,
-					player.z - encounter.site.z
-				) > 52
+				this._routeProgress >= encounter.progress - 0.035 &&
+				(
+					Math.hypot(
+						player.x - encounter.site.x,
+						player.z - encounter.site.z
+					) < 175 ||
+					this._routeProgress > encounter.progress + 0.08
+				)
 			)
 				encounter.active = true
 			if (!encounter.active) continue
@@ -803,6 +810,7 @@ export class Level3 extends Level2 {
 		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
+        this.tornadoHazards?.update(step, !!this.transitionHeld || this.completed)
 		this.matterDimension?.updateLavaDamage(step)
 		if (this.voidDimension) return
 		this._updateMissionRadio()
@@ -1011,6 +1019,7 @@ export class Level3 extends Level2 {
 		this._pilotExplosion?.dispose()
 		this.voidDimension?.dispose()
 		this.survival?.dispose()
+        this.tornadoHazards?.dispose()
 		this.matterDimension?.dispose()
 		this.arrivalBackdrop?.dispose()
 		this.arrivalShip?.dispose()
