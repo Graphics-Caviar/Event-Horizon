@@ -409,10 +409,13 @@ export class Level2 extends Level {
 		this.playerRoot.position.copy(this.landingSite)
 		this._syncPlayerToTerrain()
 		if (this.roverApproach) {
-			this.playerRoot.rotation.y = Math.atan2(
-				this.playerRoot.position.x - this.roverSite.x,
-				this.playerRoot.position.z - this.roverSite.z
-			) + Math.PI
+			this.playerRoot.rotation.y =
+				Math.atan2(
+					this.playerRoot.position.x -
+						this.roverSite.x,
+					this.playerRoot.position.z -
+						this.roverSite.z
+				) + Math.PI
 		}
 		this.addObject(this.playerRoot)
 		this.dust = new DustParticles(this)
