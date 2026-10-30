@@ -3,7 +3,7 @@ import { TerrainCrumble } from './TerrainCrumble.js'
 import { installCollapseEffect } from './collapseEffect.js'
 
 export const SURVIVAL_DEFAULTS = Object.freeze({
-	countdown: 30,
+	countdown: 120,
 	collapseSeconds: 45,
 	maxFuel: 100,
 	burnRate: 5,

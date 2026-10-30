@@ -1,40 +1,64 @@
 import * as THREE from 'three'
 import { loadVoidModel } from './voidAssets.js'
 
-const SWING_WINDUP = 0.16
-const SWING_STRIKE = 0.14
-const SWING_RECOVER = 0.3
-const SWING_COOLDOWN = 0.72
-const BLADE_REACH = 5.4
-// cos threshold against the pilot's facing: a generous frontal arc.
-const BLADE_ARC = 0.34
+const SWING_WINDUP = 0.2
+const SWING_STRIKE = 0.3
+const SWING_RECOVER = 0.35
+const SWING_COOLDOWN = 0.85
+const BLADE_HALF_LENGTH = 0.8
+const BLADE_CONTACT_PADDING = 0.3
+const BLADE_CONTACT_SAMPLES = 8
 // Held scale relative to the pickup's 2.8 m display fit.
 const HELD_SCALE = 1.6 / 2.8
+const SWING_END_ANGLE = Math.PI
+const SWING_MODES = ['vertical', 'horizontal', 'thrust']
 
-const REST_POSE = { x: 0.35, z: -0.25 }
+const SWING_MODE_LABELS = {
+	vertical: 'Vertical Swing',
+	horizontal: 'Horizontal Sweep',
+	thrust: 'Forward Thrust',
+}
+const REST_POSE = { x: 0.08, z: -0.12 }
+
+const smooth01 = (value) => value * value * (3 - 2 * value)
 
 /**
  * The pilot's only weapon on foot: an ancient energy blade. The GLB
  * floats as a pickup near the landing site (glow sprite + light so the
  * site reads from a distance), snaps to the pilot's side on approach,
- * and swings on F through windup → strike → follow-through, with damage
- * landing only inside the strike window's frontal arc. Rover ramming
- * remains the heavy-damage option (Level2's existing path).
+ * and swings on F through a raised windup, downward strike and follow-through.
+ * Damage is applied only when the moving blade touches an enemy. Rover
+ * ramming remains the heavy-damage option (Level2's existing path).
  */
 export class EnergyBlade {
 	constructor(level) {
 		this.level = level
 		this.equipped = false
 		this._swingT = -1
-		this._struck = false
+		this._hitEnemies = new Set()
 		this._cooldown = 0
 		this._spin = Math.random() * Math.PI * 2
 		this._model = null
-
+		this._pivot = null
+		this._restPosition = null
+		this._bladeOrientation = null
+		this._overheadPosition = null
+		this._strikePosition = null
+		this._bladeStart = new THREE.Vector3()
+		this._bladeEnd = new THREE.Vector3()
+		this._bladeSample = new THREE.Vector3()
+		this._previousBladeStart = null
+		this._previousBladeEnd = null
+		this._bladeMount = null
+		this.swingMode = 'vertical'
+		const player = level.playerRoot
+		const forward = new THREE.Vector3(
+			-Math.sin(player.rotation.y),
+			0,
+			-Math.cos(player.rotation.y)
+		)
 		const site = level._findWalkableSite(
-			level.landingSite
-				.clone()
-				.add(new THREE.Vector3(26, 0, -20))
+			player.position.clone().addScaledVector(forward, 4)
 		)
 		this._baseY = level.planet.heightAt(site.x, site.z) + 1.6
 		this._pickup = level.addObject(new THREE.Group())
@@ -95,9 +119,12 @@ export class EnergyBlade {
 			return
 		}
 		this._swingT = 0
-		this._struck = false
+		this._hitEnemies.clear()
 		this._cooldown = SWING_COOLDOWN
+		this._previousBladeStart = null
+		this._previousBladeEnd = null
 		level.voidAudio?.play('swing', level.playerRoot.position, 1)
+		this._attackConfig = this._getAttackConfig()
 	}
 
 	update(delta) {
@@ -124,38 +151,85 @@ export class EnergyBlade {
 		this._swingT += delta
 		const t = this._swingT
 		if (t < SWING_WINDUP) {
-			// Draw back over the shoulder.
-			const k = t / SWING_WINDUP
-			this._model.rotation.set(
-				REST_POSE.x - 0.9 * k,
+			const k = smooth01(t / SWING_WINDUP)
+			const attack = this._attackConfig
+
+			this._bladeMount.position.lerpVectors(
+				this._restPosition,
+				attack.start,
+				k
+			)
+
+			this._bladeOrientation.rotation.copy(
+				attack.bladeRotation
+			)
+
+			this._pivot.rotation.set(
+				REST_POSE.x * (1 - k),
 				0,
-				REST_POSE.z - 0.5 * k
+				REST_POSE.z * (1 - k)
 			)
 		} else if (t < SWING_WINDUP + SWING_STRIKE) {
-			// Committed sweep across the body; damage lands mid-swing.
-			const k = (t - SWING_WINDUP) / SWING_STRIKE
-			this._model.rotation.set(
-				-0.55 + 1.1 * k,
-				0,
-				-0.75 + 1.9 * k
+			const k = smooth01((t - SWING_WINDUP) / SWING_STRIKE)
+
+			const attack = this._attackConfig
+
+			this._bladeMount.position.lerpVectors(
+				attack.start,
+				attack.end,
+				k
 			)
-			if (!this._struck && k >= 0.4) {
-				this._struck = true
-				this._strike()
-			}
+
+			this._pivot.rotation.set(
+				attack.axis === 'x' ? attack.angle * k : 0,
+				attack.axis === 'y' ? attack.angle * k : 0,
+				attack.axis === 'z' ? attack.angle * k : 0
+			)
+
+			this._strike()
 		} else if (t < SWING_WINDUP + SWING_STRIKE + SWING_RECOVER) {
-			// Follow-through eases back to the carry pose.
-			const k =
+			const k = smooth01(
 				(t - SWING_WINDUP - SWING_STRIKE) /
-				SWING_RECOVER
-			this._model.rotation.set(
-				0.55 - 0.2 * k,
-				0,
-				1.15 - 1.4 * k
+					SWING_RECOVER
+			)
+
+			const attack = this._attackConfig
+
+			this._bladeMount.position.lerpVectors(
+				attack.end,
+				this._restPosition,
+				k
+			)
+
+			this._pivot.rotation.set(
+				attack.axis === 'x'
+					? attack.angle * (1 - k) +
+							REST_POSE.x * k
+					: REST_POSE.x * k,
+
+				attack.axis === 'y'
+					? attack.angle * (1 - k)
+					: 0,
+
+				attack.axis === 'z'
+					? attack.angle * (1 - k) +
+							REST_POSE.z * k
+					: REST_POSE.z * k
+			)
+
+			this._bladeOrientation.rotation.set(
+				attack.bladeRotation.x * (1 - k),
+				attack.bladeRotation.y * (1 - k),
+				attack.bladeRotation.z * (1 - k)
 			)
 		} else {
 			this._swingT = -1
-			this._model.rotation.set(REST_POSE.x, 0, REST_POSE.z)
+
+			this._bladeMount.position.copy(this._restPosition)
+
+			this._pivot.rotation.set(REST_POSE.x, 0, REST_POSE.z)
+
+			this._bladeOrientation.rotation.set(0, 0, 0)
 		}
 	}
 
@@ -163,60 +237,236 @@ export class EnergyBlade {
 		const level = this.level
 		this.equipped = true
 		this._pickup.visible = false
+
 		const height = level.pilotWalk?.height ?? 3
-		this._model.position.set(0.62, height * 0.42, 0.18)
-		this._model.rotation.set(REST_POSE.x, 0, REST_POSE.z)
+
+		// These positions are relative to the centre of the player.
+		// The pivot itself will remain stationary during the swing.
+		this._restPosition = new THREE.Vector3(0.7, 0.1, 0.2)
+
+		// Position the centre of the blade above the player's head.
+		this._overheadPosition = new THREE.Vector3(
+			0,
+			height * 0.5 + BLADE_HALF_LENGTH,
+			0.15
+		)
+
+		this._strikePosition = this._overheadPosition.clone()
+
+		// Rotation pivot at the centre of the player's body.
+		this._pivot = new THREE.Group()
+		this._pivot.name = 'energy-blade-swing-pivot'
+		this._pivot.position.set(0, height * 0.5, 0)
+
+		// The blade mount moves around the central pivot.
+		this._bladeMount = new THREE.Group()
+		this._bladeMount.name = 'energy-blade-mount'
+		this._bladeMount.position.copy(this._restPosition)
+
+		// The GLB is already centred and aligned along local Y.
 		this._model.scale.multiplyScalar(HELD_SCALE)
-		level.playerRoot.add(this._model)
+		this._model.position.set(0, 0, 0)
+		this._model.rotation.set(Math.PI, Math.PI / 2, 0)
+
+		// Separate group for attack-specific orientation.
+		this._bladeOrientation = new THREE.Group()
+
+		this._bladeOrientation.add(this._model)
+		this._bladeMount.add(this._bladeOrientation)
+
+		this._pivot.add(this._bladeMount)
+
+		level.playerRoot.add(this._pivot)
+
+		this._pivot.rotation.set(REST_POSE.x, 0, REST_POSE.z)
+
 		level.audio?.playCollect()
+
 		level._showMovementFeedback?.(
 			'ANCIENT BLADE ACQUIRED — F TO SWING'
 		)
 	}
 
+	cycleSwingMode() {
+		const currentIndex = SWING_MODES.indexOf(this.swingMode)
+
+		this.swingMode =
+			SWING_MODES[(currentIndex + 1) % SWING_MODES.length]
+
+		// Don't change an attack that is already in progress.
+		this.level._showMovementFeedback?.(
+			`BLADE MODE: ${SWING_MODE_LABELS[this.swingMode].toUpperCase()}`
+		)
+
+		return this.swingMode
+	}
+
+	_getAttackConfig() {
+		switch (this.swingMode) {
+			case 'horizontal':
+				return {
+					// Start on the player's left-hand side.
+					start: new THREE.Vector3(-2.0, 0.1, 0),
+
+					// Finish on the player's right-hand side.
+					end: new THREE.Vector3(2.0, 0.1, 0),
+
+					axis: 'y',
+					angle: 0,
+
+					bladeRotation: new THREE.Euler(
+						Math.PI / 2,
+						Math.PI / 2,
+						0
+					),
+				}
+
+			case 'thrust':
+				return {
+					start: new THREE.Vector3(0, 0.1, 0.8),
+					end: new THREE.Vector3(0, 0.1, 5.0),
+
+					axis: 'none',
+					angle: 0,
+
+					// Rotate the blade to point forwards (+Z).
+					bladeRotation: new THREE.Euler(
+						Math.PI / 2,
+						0,
+						0
+					),
+				}
+
+			case 'vertical':
+			default:
+				return {
+					start: this._overheadPosition.clone(),
+					end: this._overheadPosition.clone(),
+
+					axis: 'x',
+					angle: 2.0,
+
+					// Keep the existing vertical orientation.
+					bladeRotation: new THREE.Euler(0, 0, 0),
+				}
+		}
+	}
+
 	_strike() {
 		const level = this.level
-		const player = level.playerRoot
-		const yaw = player.rotation.y
-		const fx = Math.sin(yaw)
-		const fz = Math.cos(yaw)
+		this._model.updateWorldMatrix(true, false)
+		this._bladeStart
+			.set(0, -BLADE_HALF_LENGTH, 0)
+			.applyMatrix4(this._model.matrixWorld)
+		this._bladeEnd
+			.set(0, BLADE_HALF_LENGTH, 0)
+			.applyMatrix4(this._model.matrixWorld)
 		let hits = 0
+		let hitPosition = null
+		const TEMPORAL_SAMPLES = 16
+
+		const previousStart =
+			this._previousBladeStart ?? this._bladeStart
+
+		const previousEnd = this._previousBladeEnd ?? this._bladeEnd
+
 		for (const enemy of level.aliens) {
-			if (enemy.smashed || !enemy.position || !enemy.damage) {
-				continue
-			}
-			const dx = enemy.position.x - player.position.x
-			const dz = enemy.position.z - player.position.z
-			const distance = Math.hypot(dx, dz)
 			if (
-				distance >
-				BLADE_REACH + (enemy.radius || 2) * 0.6
+				enemy.smashed ||
+				enemy._loaded === false ||
+				!enemy.position ||
+				!enemy.damage ||
+				this._hitEnemies.has(enemy)
 			) {
 				continue
 			}
-			if (
-				distance > 0.5 &&
-				(dx * fx + dz * fz) / distance < BLADE_ARC
+
+			const enemyHeight = enemy.style?.fit ?? 4
+			const enemyRadius = enemy.radius ?? 2
+
+			const contactRadius =
+				enemyRadius + BLADE_CONTACT_PADDING
+
+			const contactRadiusSq = contactRadius * contactRadius
+
+			let touchesBlade = false
+
+			// Sample the blade at multiple points along its movement.
+			for (
+				let frameSample = 0;
+				frameSample <= TEMPORAL_SAMPLES &&
+				!touchesBlade;
+				frameSample++
 			) {
-				continue
+				const frameK = frameSample / TEMPORAL_SAMPLES
+
+				const start = new THREE.Vector3().lerpVectors(
+					previousStart,
+					this._bladeStart,
+					frameK
+				)
+
+				const end = new THREE.Vector3().lerpVectors(
+					previousEnd,
+					this._bladeEnd,
+					frameK
+				)
+
+				// Sample points along the blade itself.
+				for (
+					let bladeSample = 0;
+					bladeSample <= BLADE_CONTACT_SAMPLES;
+					bladeSample++
+				) {
+					const bladeK =
+						bladeSample /
+						BLADE_CONTACT_SAMPLES
+
+					const sample = start
+						.clone()
+						.lerp(end, bladeK)
+
+					const nearestY = THREE.MathUtils.clamp(
+						sample.y,
+						enemy.position.y,
+						enemy.position.y + enemyHeight
+					)
+
+					const dx = sample.x - enemy.position.x
+					const dy = sample.y - nearestY
+					const dz = sample.z - enemy.position.z
+
+					if (
+						dx * dx + dy * dy + dz * dz <=
+						contactRadiusSq
+					) {
+						touchesBlade = true
+						break
+					}
+				}
 			}
-			// Flyers only expose themselves on their low dives.
-			if (
-				enemy.kind === 'flyer' &&
-				enemy.position.y - player.position.y > 5
-			) {
-				continue
+
+			if (!touchesBlade) continue
+
+			this._hitEnemies.add(enemy)
+			enemy.damage(level.combatConfig.bladeDamage)
+
+			if (enemy.smashed || enemy.hp < enemy.maxHp) {
+				hits += 1
+				hitPosition ||= enemy.position
 			}
-			enemy.damage(this.level.combatConfig.bladeDamage)
-			hits += 1
 		}
-		if (hits > 0) {
+
+		// Save the current blade position for the next frame.
+		this._previousBladeStart = this._bladeStart.clone()
+		this._previousBladeEnd = this._bladeEnd.clone()
+		if (hits > 0 && hitPosition) {
 			level._requestShake?.(0.18)
 			level.dust?.spawnBurst(
 				{
-					x: player.position.x + fx * 3,
-					y: player.position.y - 0.5,
-					z: player.position.z + fz * 3,
+					x: hitPosition.x,
+					y: hitPosition.y + 1,
+					z: hitPosition.z,
 				},
 				{
 					count: 10,
@@ -231,5 +481,6 @@ export class EnergyBlade {
 
 	dispose() {
 		this._model?.removeFromParent()
+		this._pivot?.removeFromParent()
 	}
 }
