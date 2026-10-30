@@ -426,8 +426,6 @@ export class Level2 extends Level {
 		this._jumpWasDown = false
 		this._feetScratch = new THREE.Vector3()
 		// Reused movement and footstep-dust scratch vectors.
-		this._camForward = new THREE.Vector3()
-		this._camRight = new THREE.Vector3()
 		this._inputScratch = new THREE.Vector3()
 		this._dustScratch = new THREE.Vector3()
 		this._footstepDistance = 0
@@ -574,24 +572,18 @@ export class Level2 extends Level {
 				return
 			}
 			if (
+				e.code === 'Space' &&
+				(e.target === document.body ||
+					e.target ===
+						this.sceneManager.renderer
+							.domElement) &&
 				!this.paused &&
-				!this.transitionHeld &&
-				!this.completed
-			) {
-				// Space and arrow keys are gameplay controls; suppress browser
-				// defaults such as activating the still-focused level card.
-				if (
-					[
-						'Space',
-						'ArrowUp',
-						'ArrowDown',
-						'ArrowLeft',
-						'ArrowRight',
-					].includes(e.code)
-				)
-					e.preventDefault()
+				!this.completed &&
+				!this.transitionHeld
+			)
+				e.preventDefault()
+			if (!this.paused && !this.transitionHeld)
 				this.keys.add(e.code)
-			}
 		}
 		this._onKeyUp = (e) => this.keys.delete(e.code)
 		// Losing focus mid-hold never delivers the matching keyup, which
@@ -1448,13 +1440,7 @@ export class Level2 extends Level {
 			this.levelHudEl.appendChild(this.roverHealthEl)
 		}
 		this.roverHealthEl.hidden = this._radioScriptSet === 3
-		if (!this.roverHealthEl.hidden) {
-			const roverHud = `ROVER HP ${Math.ceil(this.roverHP)} / ${this.maxRoverHP}<div style="height:6px;background:#263342;margin-top:5px"><div style="height:100%;background:#ffbd66;width:${(100 * this.roverHP) / this.maxRoverHP}%"></div></div>`
-			if (this._roverHudHtml !== roverHud) {
-				this._roverHudHtml = roverHud
-				this.roverHealthEl.innerHTML = roverHud
-			}
-		}
+		this.roverHealthEl.innerHTML = `ROVER HP ${Math.ceil(this.roverHP)} / ${this.maxRoverHP}<div style="height:6px;background:#263342;margin-top:5px"><div style="height:100%;background:#ffbd66;width:${(100 * this.roverHP) / this.maxRoverHP}%"></div></div>`
 
 		const hpText = this.levelHudEl.querySelector('#l2-hp-text')
 		const hpBar = this.levelHudEl.querySelector('#l2-hp-bar')
@@ -1511,6 +1497,16 @@ export class Level2 extends Level {
 		)
 	}
 
+	_cameraSurfaceHeightAt(x, z) {
+		return this.planet.heightAt(x, z)
+	}
+
+	_constrainCameraToTerrain(position, target) {
+		constrainTerrainCamera(position, target, this.planet, (x, z) =>
+			this._cameraSurfaceHeightAt(x, z)
+		)
+	}
+
 	_setupCamera() {
 		const camera = this.sceneManager.camera
 		camera.fov = 68
@@ -1524,10 +1520,9 @@ export class Level2 extends Level {
 		this._lookAt = this.playerRoot.position
 			.clone()
 			.add(new THREE.Vector3(0, 1.8, 0))
-		constrainTerrainCamera(
+		this._constrainCameraToTerrain(
 			camera.position,
-			this._lookAt.clone(),
-			this.planet
+			this._lookAt.clone()
 		)
 		camera.lookAt(this._lookAt)
 		camera.updateProjectionMatrix()
@@ -2808,7 +2803,7 @@ export class Level2 extends Level {
 
 			const targetHeight = this.boarded ? 3.5 : 1.8
 
-			constrainTerrainCamera(
+			this._constrainCameraToTerrain(
 				camera.position,
 				focus
 					.clone()
@@ -2818,8 +2813,7 @@ export class Level2 extends Level {
 							targetHeight,
 							0
 						)
-					),
-				this.planet
+					)
 			)
 
 			const lookLead = this.boarded
@@ -2872,7 +2866,6 @@ export class Level2 extends Level {
 		const displayKey = `${objectiveKey}:${distanceLabel}`
 		if (
 			this.objectiveEl &&
-			!this._customObjective &&
 			displayKey !== this._objectiveKey &&
 			this.playerHP != 0
 		) {

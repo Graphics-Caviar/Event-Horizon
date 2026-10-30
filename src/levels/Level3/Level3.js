@@ -43,8 +43,6 @@ export class Level3 extends Level2 {
 				collider.enabled = false
 		}
 		this.hazards.enabled = false
-		// Level 3 owns the objective panel; stop Level2 rewriting it each frame.
-		this._customObjective = true
 		this.roverDisabled = true
 		this.rover.group.visible = false
 		if (this.rover.collider) this.rover.collider.enabled = false
@@ -61,6 +59,9 @@ export class Level3 extends Level2 {
 		this.dust.material.uniforms.uColor.value.set(0xb0b1ac)
 		this._buildJetpack()
 		this._buildFlightPose()
+		// Reused by the jetpack flight controls to steer relative to the camera.
+		this._camForward = new THREE.Vector3()
+		this._camRight = new THREE.Vector3()
 		// The void warband: positional audio, the ancient monuments, the
 		// energy blade, then the enemy roster (Level2's constructor queued
 		// its own aliens virtually — the override below defers to here).
@@ -70,7 +71,7 @@ export class Level3 extends Level2 {
 		// Exactly thirty playable seconds, regardless of the route length.
 		this.survival = new MatterSurvival(this, {
 			countdown: 30,
-			collapseSeconds: 90,
+			collapseSeconds: 45,
 			...options.survivalConfig,
 		})
 		this.blade = new EnergyBlade(this)
@@ -124,6 +125,7 @@ export class Level3 extends Level2 {
 				name: 'first-contact',
 				progress: 0.045,
 				styles: [
+					'sentinel',
 					'predator',
 					'predator',
 					'brute',
@@ -139,6 +141,7 @@ export class Level3 extends Level2 {
 					'predator',
 					'brute',
 					'brute',
+					'colossus',
 				],
 			},
 			{
@@ -151,6 +154,7 @@ export class Level3 extends Level2 {
 					'predator',
 					'predator',
 					'predator',
+					'entity',
 				],
 			},
 			{
@@ -163,6 +167,7 @@ export class Level3 extends Level2 {
 					'predator',
 					'predator',
 					'entity',
+					'stalker',
 				],
 			},
 			{
@@ -304,8 +309,8 @@ export class Level3 extends Level2 {
 				object.position
 					.copy(object.target.position)
 					.add(new THREE.Vector3(-180, 155, -112))
-				// The void wastes most of the 400 m shadow frustum on empty
-				// ground; 1024² with PCF is plenty and much cheaper to rasterize.
+				// The void has a large terrain and crystal field. Keep the shadow
+				// map bounded so flying does not trigger an oversized shadow pass.
 				object.shadow.mapSize.set(1024, 1024)
 			}
 		}
@@ -424,6 +429,17 @@ export class Level3 extends Level2 {
 			this.flightPivot.rotation.x = 0
 	}
 
+	_surfaceHeightAt(x, z) {
+		return (
+			this.survival?.surfaceHeightAt(x, z) ??
+			this.planet.heightAt(x, z)
+		)
+	}
+
+	_cameraSurfaceHeightAt(x, z) {
+		return this._surfaceHeightAt(x, z)
+	}
+
 	_updatePlayerMovement(delta) {
 		if (this.transitionHeld || this.completed) return
 		const thrust = this.survival
@@ -459,7 +475,7 @@ export class Level3 extends Level2 {
 			)
 			if (
 				oldSupport >
-				this.planet.heightAt(
+				this._surfaceHeightAt(
 					this.playerRoot.position.x,
 					this.playerRoot.position.z
 				) +
@@ -517,6 +533,16 @@ export class Level3 extends Level2 {
 				: 18
 		)
 		this.velocity.lerp(input, 1 - Math.exp(-5 * delta))
+		// Once collapse begins, a backwards/downward void current fights the jetpack.
+		// Apply acceleration with delta time; do not teleport or override input.
+		const suction = this.survival?.getSuction(position)
+		if (suction?.backwards) {
+			this.velocity.addScaledVector(
+				this.survival.direction,
+				-suction.backwards * delta
+			)
+			this.velocity.clampLength(0, 38)
+		}
 		this._verticalSpeed = THREE.MathUtils.damp(
 			this._verticalSpeed,
 			thrust
@@ -528,12 +554,33 @@ export class Level3 extends Level2 {
 			4,
 			delta
 		)
+		if (suction?.downwards)
+			this._verticalSpeed -= suction.downwards * delta
 		position.y += this._verticalSpeed * delta
 		const candidate = position
 			.clone()
 			.addScaledVector(this.velocity, delta)
 		this.planet.clampToBounds(candidate, 0.9)
-		const ground = this.planet.heightAt(candidate.x, candidate.z)
+		// Treat a sharp rise in the terrain as a wall. Without this the pilot
+		// is moved into the hillside and then snapped up to its surface on the
+		// next line, which looks like a mid-flight teleport. Gentle uphill
+		// slopes stay flyable because the step allowance is larger than one
+		// frame of climb at normal speed.
+		const maxClimb = 1.5
+		const feet = position.y - footOffset
+		const blockedByTerrain = (x, z) =>
+			this._surfaceHeightAt(x, z) > feet + maxClimb
+		if (blockedByTerrain(candidate.x, candidate.z)) {
+			if (!blockedByTerrain(candidate.x, startZ)) {
+				candidate.z = startZ
+			} else if (!blockedByTerrain(startX, candidate.z)) {
+				candidate.x = startX
+			} else {
+				candidate.x = startX
+				candidate.z = startZ
+			}
+		}
+		const ground = this._surfaceHeightAt(candidate.x, candidate.z)
 		// Stay outside props at low altitude; fly over them above their clearance.
 		// Only resolve nearby prop colliders right at surface level. The old
 		// 18-unit band kept snapping a flying pilot against rocks and plants
@@ -545,19 +592,38 @@ export class Level3 extends Level2 {
 				this.gameplayColliders
 			)
 			this.planet.clampToBounds(candidate, 0.9)
+			// A prop push must not shove the pilot back into a hillside.
+			if (
+				(candidate.x !== startX ||
+					candidate.z !== startZ) &&
+				blockedByTerrain(candidate.x, candidate.z)
+			) {
+				candidate.x = startX
+				candidate.z = startZ
+			}
 		}
 		// Keep horizontal flight continuous across uneven or collapsing terrain.
 		// The previous height gate froze X/Z as soon as an uphill tile rose
 		// above the pilot, then resumed after the floor snap, causing jitter.
 		position.x = candidate.x
 		position.z = candidate.z
-		const floor =
-			(this.matterDimension?.supportHeightAt(
+		const terrainFloor = this._surfaceHeightAt(
+			position.x,
+			position.z
+		)
+		const supportFloor =
+			this.matterDimension?.supportHeightAt(
 				position.x,
 				position.z,
 				position.y - footOffset
-			) ?? this.planet.heightAt(position.x, position.z)) +
-			footOffset
+			) ?? terrainFloor
+		// Floating slabs are one-way landing surfaces. While the jetpack is
+		// still climbing, ignore them so the pilot cannot snap onto a top from
+		// underneath; once descent starts they become solid.
+		const floor =
+			(this._verticalSpeed > 0
+				? terrainFloor
+				: supportFloor) + footOffset
 		const ceiling = this.baseY + 220 + footOffset
 		if (position.y >= ceiling) {
 			position.y = ceiling
@@ -623,14 +689,10 @@ export class Level3 extends Level2 {
 				this.levelHudEl.appendChild(this.survivalHudEl)
 			}
 			const fuel = Math.ceil(this.survival.fuel)
-			const percent = Math.round(
-				(100 * fuel) / this.survival.config.maxFuel
-			)
-			const survivalHud = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
-			if (this._survivalHudHtml !== survivalHud) {
-				this._survivalHudHtml = survivalHud
-				this.survivalHudEl.innerHTML = survivalHud
-			}
+			const percent =
+				(100 * this.survival.fuel) /
+				this.survival.config.maxFuel
+			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
 		}
 		const target = this.aliens
 			.filter(
@@ -650,13 +712,9 @@ export class Level3 extends Level2 {
 						this.playerRoot.position
 					)
 			)[0]
-		const enemyStatus = target
+		this.enemyStatusEl.textContent = target
 			? `${target.styleName.toUpperCase()}  ${target.hp} / ${target.maxHp} HP`
 			: ''
-		if (this._enemyStatusText !== enemyStatus) {
-			this._enemyStatusText = enemyStatus
-			this.enemyStatusEl.textContent = enemyStatus
-		}
 	}
 
 	_checkPortalArrival() {
@@ -672,13 +730,16 @@ export class Level3 extends Level2 {
 			) > 7
 		)
 			return
+		if (this.encounters?.some((encounter) => !encounter.completed))
+			return
 		super._checkPortalArrival()
 	}
 
 	update(delta) {
 		if (this.paused) return
-		// Refresh the shadow map on alternate frames: half the shadow-pass
-		// cost, with no perceptible lag at 30–60 fps.
+		// Refresh dynamic shadows on alternate frames. The player and enemies
+		// still cast moving shadows without rerasterizing the whole void every
+		// frame while the jetpack is active.
 		const renderer = this.sceneManager.renderer
 		if (renderer) {
 			this._shadowTick = (this._shadowTick + 1) & 1
@@ -747,7 +808,14 @@ export class Level3 extends Level2 {
 			const bladeHint = this.blade?.equipped
 				? ' · F swing blade'
 				: ''
-			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>Fight through five escalating encounters to reach the rift. Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
+			const encountersLeft =
+				this.encounters?.filter(
+					(encounter) => !encounter.completed
+				).length ?? 0
+			const riftObjective = encountersLeft
+				? `Defeat Void Sentinels, Colossi, Entities and Rift Stalkers (${encountersLeft} encounters left) before crossing the Grav Rift.`
+				: 'The Grav Rift is clear. Cross it to reach the final boss.'
+			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>${riftObjective} Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
 			this._objectiveKey = ''
 		}
 	}

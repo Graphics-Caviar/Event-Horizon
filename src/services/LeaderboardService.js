@@ -26,7 +26,7 @@ import {
 	where,
 	limit as limitTo,
 	serverTimestamp,
-	countFromServer,
+	getCountFromServer,
 } from 'firebase/firestore'
 import { db, isFirebaseReady } from './firebaseConfig.js'
 import { withTimeout } from './timeout.js'
@@ -138,14 +138,20 @@ export class LeaderboardService {
 				const run = entry.data()
 				const rank =
 					1 +
-					entries.slice(0, index).filter((previous) => {
-						const earlier = previous.data()
-						return (
-							earlier.score > run.score ||
-							(earlier.score === run.score &&
-								earlier.timeElapsed < run.timeElapsed)
-						)
-					}).length
+					entries
+						.slice(0, index)
+						.filter((previous) => {
+							const earlier =
+								previous.data()
+							return (
+								earlier.score >
+									run.score ||
+								(earlier.score ===
+									run.score &&
+									earlier.timeElapsed <
+										run.timeElapsed)
+							)
+						}).length
 				return { rank, ...run }
 			})
 		} catch (error) {
@@ -191,17 +197,25 @@ export class LeaderboardService {
 
 			// Rank the player's best run across the full board, not just the
 			// top-N window. Equal score/time runs share the same competition rank.
-			const betterScore = await countFromServer(
+			const betterScore = await getCountFromServer(
 				query(
 					this._scoresRef(levelId),
 					where('score', '>', personalBest.score)
 				)
 			)
-			const fasterTie = await countFromServer(
+			const fasterTie = await getCountFromServer(
 				query(
 					this._scoresRef(levelId),
-					where('score', '==', personalBest.score),
-					where('timeElapsed', '<', personalBest.timeElapsed)
+					where(
+						'score',
+						'==',
+						personalBest.score
+					),
+					where(
+						'timeElapsed',
+						'<',
+						personalBest.timeElapsed
+					)
 				)
 			)
 			return {
