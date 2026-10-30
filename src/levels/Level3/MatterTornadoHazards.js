@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { createLevel3Art } from './Level3VisualAssets.js'
 
-/** Two telegraphed storms: real suction/damage remains independent of art. */
+/** Six telegraphed storms: suction/damage remains independent of art. */
 export class MatterTornadoHazards {
     constructor(level) {
         this.level = level
@@ -36,7 +36,7 @@ export class MatterTornadoHazards {
         })
         this.dummy = new THREE.Object3D()
 
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < 6; i++) {
             const line = new THREE.Line(this.geometry.clone(), this.material)
             line.frustumCulled = false
             const warn = new THREE.Mesh(this.warningGeometry, this.warningMaterial)
@@ -54,7 +54,7 @@ export class MatterTornadoHazards {
             this.vortices.push({
                 line, warn, funnel, rocks, art,
                 center: new THREE.Vector3(), phase: 'waiting',
-                timer: 5 + i * 6, damageTimer: 0, index: i,
+                timer: 2 + i * 1.45, damageTimer: 0, index: i,
             })
             line.visible = warn.visible = funnel.visible = rocks.visible = false
         }
@@ -69,12 +69,12 @@ export class MatterTornadoHazards {
     _choose(v) {
         const player = this.level.playerRoot.position
         const angle = this._rand() * Math.PI * 2
-        const r = 20 + this._rand() * 27
+        const r = 26 + this._rand() * 45
         v.center.set(player.x + Math.cos(angle) * r, 0, player.z + Math.sin(angle) * r)
         this.level.planet.clampToBounds(v.center, 20)
         v.center.y = this.level.planet.heightAt(v.center.x, v.center.z)
         v.phase = 'warning'
-        v.timer = 2
+        v.timer = 1.7
         v.warn.position.copy(v.center)
         v.warn.position.y += 0.25
         v.warn.visible = true
@@ -94,7 +94,7 @@ export class MatterTornadoHazards {
         data.needsUpdate = true
         v.funnel.position.copy(v.center)
         v.funnel.position.y += 27
-        v.funnel.rotation.y = this.time * (v.index ? -0.7 : 0.7)
+        v.funnel.rotation.y = this.time * (v.index % 2 ? -0.7 : 0.7)
         for (let i = 0; i < v.rocks.count; i++) {
             const h = (i % 14) / 13 * 52 + 1.5
             const angle = i * 2.399963 + this.time * (1.9 + (i % 4) * 0.2)
@@ -133,7 +133,7 @@ export class MatterTornadoHazards {
             if (v.phase === 'waiting' && v.timer <= 0) this._choose(v)
             if (v.phase === 'warning' && v.timer <= 0) {
                 v.phase = 'active'
-                v.timer = 9
+                v.timer = 11
                 v.warn.visible = false
                 v.line.visible = v.funnel.visible = v.rocks.visible = true
                 v.art?.load()
@@ -141,22 +141,32 @@ export class MatterTornadoHazards {
             if (v.phase !== 'active') continue
             if (v.timer <= 0) {
                 v.phase = 'waiting'
-                v.timer = 6 + this._rand() * 5
+                v.timer = 3.5 + this._rand() * 3.5
                 v.line.visible = v.funnel.visible = v.rocks.visible = false
                 if (v.art) v.art.root.visible = false
                 continue
             }
-            this._animate(v)
             const p = this.level.playerRoot.position
+            // Slow pursuit: no instant re-targeting, so players can dodge.
+            const chaseX = p.x - v.center.x, chaseZ = p.z - v.center.z
+            const chaseDistance = Math.hypot(chaseX, chaseZ)
+            if (chaseDistance > 7 && chaseDistance < 125) {
+                const travel = Math.min(chaseDistance - 7, step * (5 + v.index % 3 * 2))
+                v.center.x += chaseX / chaseDistance * travel
+                v.center.z += chaseZ / chaseDistance * travel
+                this.level.planet.clampToBounds(v.center, 18)
+                v.center.y = this.level.planet.heightAt(v.center.x, v.center.z)
+            }
+            this._animate(v)
             const dx = v.center.x - p.x, dz = v.center.z - p.z
             const dist = Math.hypot(dx, dz)
-            if (dist < 27 && dist > 0.5) {
-                const strength = 1 - dist / 27
-                this.level.velocity.x += (dx / dist) * 14 * strength * step
-                this.level.velocity.z += (dz / dist) * 14 * strength * step
-                if (this.level._airborne) this.level._verticalSpeed += 5 * strength * step
+            if (dist < 36 && dist > 0.5) {
+                const strength = 1 - dist / 36
+                this.level.velocity.x += (dx / dist) * 22 * strength * step
+                this.level.velocity.z += (dz / dist) * 22 * strength * step
+                if (this.level._airborne) this.level._verticalSpeed += 6 * strength * step
                 v.damageTimer -= dt
-                if (dist < 8 && v.damageTimer <= 0) {
+                if (dist < 9 && v.damageTimer <= 0) {
                     v.damageTimer = 1.5
                     this.level._applyAlienHit?.(9)
                 }

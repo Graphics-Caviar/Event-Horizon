@@ -2,11 +2,11 @@ import * as THREE from 'three'
 import { createLevel3Art } from './Level3VisualAssets.js'
 
 export const MATTER_DEBRIS_DEFAULTS = Object.freeze({
-	fragments: 64,
-	poolSize: 14,
+	fragments: 150,
+	poolSize: 36,
 	warningSeconds: 3,
 	fallSeconds: 2.4,
-	interval: 4.3,
+	interval: 3.2,
 	targetPlayer: true,
 	damage: 15,
 	radius: 5,
@@ -27,14 +27,14 @@ export class MatterDebris {
 			0,
 			Math.min(256, Math.floor(c.fragments))
 		)
-		c.poolSize = Math.max(1, Math.min(24, Math.floor(c.poolSize)))
+		c.poolSize = Math.max(1, Math.min(40, Math.floor(c.poolSize)))
 		c.warningSeconds = Math.max(2.5, c.warningSeconds)
 		c.fallSeconds = Math.max(1, c.fallSeconds)
-		c.interval = Math.max(5, c.interval)
+		c.interval = Math.max(2.2, c.interval)
 		this.group = new THREE.Group()
 		this.group.name = 'matter-debris'
 		this.time = 0
-		this.nextEvent = 6
+		this.nextEvent = 3
 		this.serial = 0
 		this.disposed = false
 		this.geometry = new THREE.IcosahedronGeometry(1, 1)
@@ -273,7 +273,7 @@ export class MatterDebris {
 			this.nextEvent =
 				this.time +
 				(this.level.survival?.remaining <= 0
-					? 2.65
+					? 2.2
 					: this.config.interval)
 			if (this.config.targetPlayer) {
 				// A shower has one clearly telegraphed attack plus several scattered
@@ -281,7 +281,7 @@ export class MatterDebris {
 				const center = this.level.playerRoot.position
 				const collapsing =
 					this.level.survival?.remaining <= 0
-				const count = collapsing ? 4 : 2
+				const count = collapsing ? 12 : 7
 				for (let i = 0; i < count; i++) {
 					const point = center.clone()
 					if (i > 0) {
@@ -314,14 +314,14 @@ export class MatterDebris {
 						i === 0 && this.serial % 3 === 1
 					if (duckable) point.y += 2
 					this.trigger(point, {
-						delay: delta + i * 0.3,
+						delay: delta + i * 0.16,
 						duckable,
 						medium: i !== 0,
 						airborne: true,
 						major:
 							i === 0 &&
 							!duckable &&
-							this.serial % 4 === 3,
+							this.serial % 4 === 0,
 					})
 				}
 			} else {

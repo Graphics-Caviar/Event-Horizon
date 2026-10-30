@@ -2,9 +2,8 @@ import * as THREE from 'three'
 
 /**
  * Optimized Matter / Void assets. The real optimized GLBs are enabled by
- * default once generated with tools/optimize-level3-glbs.mjs. Use
- * ?level3Art=off to disable them, or ?level3Art=high to explicitly preview
- * the original high-poly originals if they are present.
+ * by default: original supplied GLBs, or optimized variants when requested. Use ?level3Art=off on a slower PC to disable
+ * these decorative meshes without changing hazards or collision.
  *
  * No gameplay hitbox or collision depends on these cosmetic meshes.
  * The AssetManager owns decoded geometry; this module only owns presentation
@@ -30,8 +29,9 @@ function modelCandidates(key) {
     const name = raw.substring(raw.lastIndexOf('/') + 1)
     const optimized = `/assets/models/level3-visuals/optimized/${name}`
     const mode = new URLSearchParams(window.location.search).get('level3Art')
-    // Original heavy meshes must only be decoded after an explicit opt-in.
-    return mode === 'high' ? [raw, optimized] : [optimized]
+    // Use the original GLB when no optimized version exists. Players can
+    // explicitly disable these heavy visual meshes with ?level3Art=off.
+    return mode === 'optimized' ? [optimized, raw] : [raw, optimized]
 }
 
 function presentationMaterial(kind) {

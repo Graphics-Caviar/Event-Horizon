@@ -71,7 +71,7 @@ export class Level3 extends Level2 {
 		this.voidAudio = new VoidAudio(this.audio)
 		this.monuments = new VoidMonuments(this)
 		this.matterDimension = new MatterDimension(this)
-		// The terrain stays stable for two minutes before collapse begins.
+		// The Matter path fractures at the halfway marker, not on a timer.
 		this.survival = new MatterSurvival(this, {
 			collapseSeconds: 45,
 			...options.survivalConfig,
@@ -719,7 +719,7 @@ export class Level3 extends Level2 {
 			const percent =
 				(100 * this.survival.fuel) /
 				this.survival.config.maxFuel
-			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
+			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.collapseTriggeredAt === null ? 'COLLAPSE STARTS AT HALFWAY' : this.survival.remaining > 0 ? 'GROUND SHAKING — COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
 		}
 		if (!this.bladeModeHudEl) {
 			this.bladeModeHudEl = document.createElement('div')
@@ -808,7 +808,7 @@ export class Level3 extends Level2 {
 		this.arrivalShip?.update(delta, { thrust: 0 })
 		const step = Math.min(delta, 0.05)
 		super.update(step)
-        this.tornadoHazards?.update(step, !!this.transitionHeld || this.completed)
+        this.tornadoHazards?.update(step, !!this.voidDimension || !!this.transitionHeld || this.completed)
 		this.matterDimension?.updateLavaDamage(step)
 		if (this.voidDimension) return
 		this._updateMissionRadio()
