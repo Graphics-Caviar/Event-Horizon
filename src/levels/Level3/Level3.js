@@ -991,17 +991,20 @@ export class Level3 extends Level2 {
 		const time = this.elapsedPlayTime
 		this.state.score = 0
 		const outcome = nitrogenOverload ? 'overload' : 'overrun'
-		this._endTimer = setTimeout(() => {
-			this.onEnd?.({
-				outcome,
-				won: false,
-				score: 0,
-				time,
-				hull: 0,
-				progress: 0,
-				level: this.level,
-			})
-		}, nitrogenOverload ? 2400 : 1000)
+		this._endTimer = setTimeout(
+			() => {
+				this.onEnd?.({
+					outcome,
+					won: false,
+					score: 0,
+					time,
+					hull: 0,
+					progress: 0,
+					level: this.level,
+				})
+			},
+			nitrogenOverload ? 2400 : 1000
+		)
 	}
 
 	dispose() {
