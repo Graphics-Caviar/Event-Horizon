@@ -135,6 +135,76 @@ export class VoidRigAnimator {
 				)
 			return
 		}
+		// Galactus uses the model's real 66-bone humanoid skeleton. The
+		// entire pose is blended back to bind rotations each frame, so
+		// repeated windups never twist limbs cumulatively.
+		if (this.species === 'galactus') {
+			const winding = [
+				'windup',
+				'prepare',
+				'charge',
+			].includes(state)
+			const striking = state === 'strike'
+			const hit = state === 'stagger'
+			const strength = winding ? 0.55 : striking ? 0.85 : 0
+			this.pose(
+				'pelvis',
+				breath * 0.6,
+				0,
+				Math.sin(this.time) * 0.025,
+				alpha
+			)
+			this.pose(
+				'spine_01',
+				-strength * 0.11 + (hit ? 0.12 : 0),
+				0,
+				0,
+				alpha
+			)
+			this.pose(
+				'spine_03',
+				-strength * 0.22,
+				Math.sin(this.time * 0.8) * 0.04,
+				0,
+				alpha
+			)
+			this.pose(
+				'head',
+				strength * 0.14 - breath,
+				Math.sin(this.time * 0.55) * 0.05,
+				0,
+				alpha
+			)
+			for (const side of ['l', 'r']) {
+				const sign = side === 'l' ? 1 : -1
+				this.pose(
+					`upperarm_${side}`,
+					-strength * 0.9 + breath,
+					0,
+					sign * (0.11 + strength * 0.22),
+					alpha
+				)
+				this.pose(
+					`lowerarm_${side}`,
+					-0.14 - strength * 0.42,
+					0,
+					0,
+					alpha
+				)
+				this.pose(
+					`thigh_${side}`,
+					Math.sin(
+						this.time * 1.2 +
+							(sign > 0 ? 0 : Math.PI)
+					) * 0.045,
+					0,
+					0,
+					alpha
+				)
+				this.pose(`calf_${side}`, -0.08, 0, 0, alpha)
+			}
+			return
+		}
 		const heavy = this.species === 'colossus'
 		const gait =
 			moving && !airborne && !dead ? (heavy ? 0.2 : 0.3) : 0

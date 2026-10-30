@@ -77,6 +77,7 @@ export class Level3 extends Level2 {
 		this.blade = new EnergyBlade(this)
 		this._voidKills = 0
 		this._bossDefeated = false
+		this._galactusDefeated = false
 		// Level 3 reuses Level 2's radio hooks; these cue ids replace the
 		// surface ones, and the mission beats are detected in _updateRadio.
 		this._radioIntroScript = 'l3.opening'
@@ -925,7 +926,8 @@ export class Level3 extends Level2 {
 		const time = this.elapsedPlayTime
 		const bonus =
 			(this._voidKills || 0) * 150 +
-			(this._bossDefeated ? 800 : 0)
+			(this._bossDefeated ? 800 : 0) +
+			(this._galactusDefeated ? 1200 : 0)
 		const score = Math.round(
 			1500 +
 				Math.max(0, 600 - time) * 3 +
