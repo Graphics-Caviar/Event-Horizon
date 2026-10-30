@@ -84,7 +84,7 @@ const CONFIG = {
 		],
 	},
 	entityBoss: {
-		hp: 620,
+		hp: 3000,
 		size: 20,
 		speed: 5,
 		detection: 400,

@@ -3,7 +3,7 @@ import { loadVoidModel } from './voidAssets.js'
 import { VoidRigAnimator } from './VoidRigAnimator.js'
 
 // Galactus — Void-God boss
-const BOSS_MAX_HP = 500
+const BOSS_MAX_HP = 1500
 const FIREBALL_SPEED = 28
 const FIREBALL_RADIUS = 3.5
 export const FIREBALL_DAMAGE = 18
