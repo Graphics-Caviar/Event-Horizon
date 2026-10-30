@@ -30,7 +30,7 @@ const LEVEL_INTEL = Object.freeze({
 		overview: 'The gate opens onto the ashen wastes. Cross the storm, deal with the void warband and reach the escape portal.',
 		hints: [
 			'Hold Space to fly with the jetpack, release to descend. Shift still sprints on the ground.',
-			'An energy blade waits near the landing site. Walk within 3 m to equip it, then press F to swing.',
+			'An energy blade waits near the landing site. Walk within 3 m to equip it, press F to swing, and press R to switch between vertical and horizontal attacks.',
 			'Void constructs pay 150 points each and the colossus 800. The colossus shockwave only strikes grounded pilots — stay airborne when the ring passes.',
 			'The portal accepts you on foot, by jetpack or by rover. If the warband is overwhelming you, fly over them instead of fighting.',
 		],

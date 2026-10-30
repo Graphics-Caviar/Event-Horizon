@@ -33,6 +33,7 @@ export class Level3 extends Level2 {
 			lavaDamageInterval: 1,
 			...options.combatConfig,
 		}
+		this._rWasDown = false
 		// Keep inherited controller references, but retire surface-only scenery.
 		this.wreckRoot.removeFromParent()
 		for (const collider of this.gameplayColliders) {
@@ -68,9 +69,8 @@ export class Level3 extends Level2 {
 		this.voidAudio = new VoidAudio(this.audio)
 		this.monuments = new VoidMonuments(this)
 		this.matterDimension = new MatterDimension(this)
-		// Exactly thirty playable seconds, regardless of the route length.
+		// The terrain stays stable for two minutes before collapse begins.
 		this.survival = new MatterSurvival(this, {
-			countdown: 30,
 			collapseSeconds: 45,
 			...options.survivalConfig,
 		})
@@ -85,6 +85,26 @@ export class Level3 extends Level2 {
 		this._fWasDown = false
 		this._spawnVoidRoster()
 		if (import.meta.env.DEV) window.__level3 = this
+	}
+
+	/** R switches Level 3 blade modes; Level 2 still resets the rover. */
+	_handleRKey() {
+		if (!this.blade?.equipped) return false
+
+		const mode = this.blade.cycleSwingMode()
+
+		const labels = {
+			vertical: 'VERTICAL SWING',
+			horizontal: 'HORIZONTAL SWEEP',
+			thrust: 'FORWARD THRUST',
+		}
+
+		this._showMovementFeedback(
+			`BLADE MODE — ${labels[mode]}`,
+			2
+		)
+
+		return true
 	}
 
 	/** Keep the cinematic's distant structure visible after landing. This is
@@ -694,6 +714,18 @@ export class Level3 extends Level2 {
 				this.survival.config.maxFuel
 			this.survivalHudEl.innerHTML = `NITROGEN ${fuel} / ${this.survival.config.maxFuel}<div style="height:8px;background:#263342;margin:5px 0 10px"><div style="height:100%;background:${percent < 25 ? '#ffb347' : '#62ffda'};width:${percent}%"></div></div><span style="color:#ffb37b">${this.survival.remaining > 0 ? 'TERRAIN COLLAPSE IN ' + Math.ceil(this.survival.remaining) + 's' : 'TERRAIN COLLAPSING - KEEP MOVING'}</span>`
 		}
+		if (!this.bladeModeHudEl) {
+			this.bladeModeHudEl = document.createElement('div')
+			this.bladeModeHudEl.style.marginTop = '12px'
+			this.bladeModeHudEl.style.fontSize = '11px'
+			this.levelHudEl.appendChild(this.bladeModeHudEl)
+		}
+		const bladeModeNames = {
+			vertical: 'VERTICAL',
+			horizontal: 'HORIZONTAL',
+			thrust: 'THRUST',
+		}
+		this.bladeModeHudEl.textContent = `ATTACK MODE: ${bladeModeNames[this.blade?.swingMode] || 'VERTICAL'} · R TO SWITCH`
 		const target = this.aliens
 			.filter(
 				(e) =>
@@ -729,8 +761,6 @@ export class Level3 extends Level2 {
 							0))
 			) > 7
 		)
-			return
-		if (this.encounters?.some((encounter) => !encounter.completed))
 			return
 		super._checkPortalArrival()
 	}
@@ -770,8 +800,19 @@ export class Level3 extends Level2 {
 		this.voidAudio?.update(this.sceneManager.camera)
 		this.monuments?.update(step)
 		this.blade?.update(step)
+
+		const rDown = this.keys.has('KeyR')
+
+		if (rDown && !this._rWasDown) {
+			this._handleRKey()
+		}
+
+		this._rWasDown = rDown
+
 		const fDown = this.keys.has('KeyF')
-		if (fDown && !this._fWasDown) this.blade?.trySwing()
+		if (fDown && !this._fWasDown) {
+			this.blade?.trySwing()
+		}
 		this._fWasDown = fDown
 		const height = this.pilotWalk?.height ?? 3
 		this.jetpack.position.set(
@@ -805,16 +846,18 @@ export class Level3 extends Level2 {
 				Math.sin(this.elapsedPlayTime * 45) * 0.15
 		}
 		if (!this.completed && !this.boarded) {
+			const bladeModes = {
+				vertical: 'Vertical Swing',
+				horizontal: 'Horizontal Sweep',
+				thrust: 'Forward Thrust',
+			}
+
+			const bladeMode = bladeModes[this.blade?.swingMode]
 			const bladeHint = this.blade?.equipped
-				? ' · F swing blade'
-				: ''
-			const encountersLeft =
-				this.encounters?.filter(
-					(encounter) => !encounter.completed
-				).length ?? 0
-			const riftObjective = encountersLeft
-				? `Defeat Void Sentinels, Colossi, Entities and Rift Stalkers (${encountersLeft} encounters left) before crossing the Grav Rift.`
-				: 'The Grav Rift is clear. Cross it to reach the final boss.'
+				? ` · F attack · R change attack mode (${bladeMode})`
+				: ' · R changes blade attack mode'
+			const riftObjective =
+				'Cross the Grav Rift to reach the final boss.'
 			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>${riftObjective} Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
 			this._objectiveKey = ''
 		}

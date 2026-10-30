@@ -554,6 +554,7 @@ export class Level2 extends Level {
 				!this.transitionHeld
 			) {
 				e.preventDefault()
+				if (this._handleRKey?.(e)) return
 				const nearby =
 					this.playerRoot.position.distanceTo(
 						this.rover.group.position
