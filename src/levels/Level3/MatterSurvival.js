@@ -34,6 +34,7 @@ export class MatterSurvival {
 			this.end.clone().sub(this.start).setY(0).length()
 		)
 		this.edge = -Infinity
+		this.sceneryScanTimer = 0
 		this.group = new THREE.Group()
 		this.group.name = 'nitrogen-refill-stations'
 		this.resources = []
@@ -300,12 +301,29 @@ export class MatterSurvival {
 			? this.edge
 			: -100000
 		this.crumble.update(delta)
-		this._scanScenery()
-		for (const c of [
-			...(this.level.planet.colliders || []),
-			...(this.level.gameplayColliders || []),
-		]) {
-			if (this.isGone(c.x, c.z)) c.enabled = false
+		// GLB scenery can arrive asynchronously. Discover it periodically, then
+		// avoid traversing the entire world and copying collider arrays every
+		// frame, especially while the player is holding the jetpack control.
+		this.sceneryScanTimer -= delta
+		if (this.sceneryScanTimer <= 0) {
+			this.sceneryScanTimer = 0.75
+			this._scanScenery()
+			for (const colliders of [
+				this.level.planet.colliders,
+				this.level.gameplayColliders,
+			]) {
+				if (!colliders) continue
+				for (const collider of colliders) {
+					if (
+						collider.enabled !== false &&
+						this.isGone(
+							collider.x,
+							collider.z
+						)
+					)
+						collider.enabled = false
+				}
+			}
 		}
 		this.tremorUniform.value =
 			this.remaining > 0

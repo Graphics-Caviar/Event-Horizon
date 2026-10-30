@@ -59,6 +59,9 @@ export class LevelScreens {
 			'.level-panel-kicker'
 		)
 		this.resultsEl = document.getElementById('screen-results')
+		this.resultsKickerEl = this.resultsEl.querySelector(
+			'.level-panel-kicker'
+		)
 
 		this.titleEl = document.getElementById('results-title')
 		this.subtitleEl = document.getElementById('results-subtitle')
@@ -66,6 +69,9 @@ export class LevelScreens {
 		this.timeEl = document.getElementById('results-time')
 		this.hullEl = document.getElementById('results-hull')
 		this.distanceEl = document.getElementById('results-distance')
+		this.distanceLabelEl = document.getElementById(
+			'results-distance-label'
+		)
 		this.noteEl = document.getElementById('results-note')
 		this.retryBtn = document.getElementById('btn-results-retry')
 		this.resumeBtn = document.getElementById('btn-pause-resume')
@@ -99,21 +105,49 @@ export class LevelScreens {
 	 * @param {{text: string, tone?: string}} [note]
 	 */
 	showResults(result, note) {
-		const copy = OUTCOMES[result.outcome] || OUTCOMES.destroyed
+		const level = Number(result.level) || 1
+		const levelThreeComplete = result.won && level === 3
+		const baseCopy = levelThreeComplete
+			? {
+					title: 'LEVEL COMPLETE',
+					subtitle: 'The Void Devourer is defeated. The mission is complete.',
+					tone: 'good',
+				}
+			: OUTCOMES[result.outcome] || OUTCOMES.destroyed
+		const copy =
+			result.outcome === 'overrun' && level === 3
+				? {
+						...baseCopy,
+						subtitle: 'The Void overwhelmed you. Try again and watch your surroundings.',
+					}
+				: baseCopy
+		this.resultsKickerEl.textContent =
+			LEVEL_NAMES[level] || LEVEL_NAMES[1]
 		this.titleEl.textContent = copy.title
 		this.titleEl.dataset.tone = copy.tone
 		this.subtitleEl.textContent = copy.subtitle
-		if (result.outcome == 'overrun') {
-			this.retryBtn.textContent = 'TRY AGAIN'
-		}
+		this.retryBtn.textContent = levelThreeComplete
+			? 'RESTART MISSION'
+			: result.outcome === 'overrun'
+				? 'TRY AGAIN'
+				: 'FLY AGAIN'
 		this.scoreEl.textContent = Math.round(
 			result.score
 		).toLocaleString()
 		this.timeEl.textContent = formatTime(result.time)
 		this.hullEl.textContent = `${Math.max(0, Math.round(result.hull))}%`
-		this.distanceEl.textContent = `${Math.round(
-			Math.max(0, Math.min(1, result.progress)) * 100
-		)}%`
+		if (Number.isFinite(result.distanceToGoal)) {
+			this.distanceLabelEl.textContent = 'TO GOAL'
+			this.distanceEl.textContent = `${Math.max(
+				0,
+				Math.round(result.distanceToGoal)
+			).toLocaleString()} m`
+		} else {
+			this.distanceLabelEl.textContent = 'DISTANCE'
+			this.distanceEl.textContent = `${Math.round(
+				Math.max(0, Math.min(1, result.progress)) * 100
+			)}%`
+		}
 		this.setNote(note)
 
 		this.hidePause()
