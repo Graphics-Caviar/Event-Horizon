@@ -69,6 +69,9 @@ export class LevelScreens {
 		this.timeEl = document.getElementById('results-time')
 		this.hullEl = document.getElementById('results-hull')
 		this.distanceEl = document.getElementById('results-distance')
+		this.distanceLabelEl = document.getElementById(
+			'results-distance-label'
+		)
 		this.noteEl = document.getElementById('results-note')
 		this.retryBtn = document.getElementById('btn-results-retry')
 		this.resumeBtn = document.getElementById('btn-pause-resume')
@@ -133,9 +136,18 @@ export class LevelScreens {
 		).toLocaleString()
 		this.timeEl.textContent = formatTime(result.time)
 		this.hullEl.textContent = `${Math.max(0, Math.round(result.hull))}%`
-		this.distanceEl.textContent = `${Math.round(
-			Math.max(0, Math.min(1, result.progress)) * 100
-		)}%`
+		if (Number.isFinite(result.distanceToGoal)) {
+			this.distanceLabelEl.textContent = 'TO GOAL'
+			this.distanceEl.textContent = `${Math.max(
+				0,
+				Math.round(result.distanceToGoal)
+			).toLocaleString()} m`
+		} else {
+			this.distanceLabelEl.textContent = 'DISTANCE'
+			this.distanceEl.textContent = `${Math.round(
+				Math.max(0, Math.min(1, result.progress)) * 100
+			)}%`
+		}
 		this.setNote(note)
 
 		this.hidePause()

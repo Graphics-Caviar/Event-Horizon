@@ -408,6 +408,15 @@ export class Level2 extends Level {
 		this.playerRoot.name = 'level2-pilot'
 		this.playerRoot.position.copy(this.landingSite)
 		this._syncPlayerToTerrain()
+		if (this.roverApproach) {
+			this.playerRoot.rotation.y =
+				Math.atan2(
+					this.playerRoot.position.x -
+						this.roverSite.x,
+					this.playerRoot.position.z -
+						this.roverSite.z
+				) + Math.PI
+		}
 		this.addObject(this.playerRoot)
 		this.dust = new DustParticles(this)
 		// Momentum-based on-foot locomotion state (see
@@ -821,7 +830,7 @@ export class Level2 extends Level {
 				const ordinal = spawnOrdinal++
 				const angle = ordinal * 2.399963229728653
 				const offset = encounter.nearLanding
-					? 28 + (ordinal % 3) * 7
+					? 90 + (ordinal % 3) * 5
 					: 27 + (ordinal % 3) * 8
 				const home = routePoint
 					.clone()
@@ -2936,6 +2945,17 @@ export class Level2 extends Level {
 
 		const time = this.elapsedPlayTime
 		const score = 0
+		const endGoal = this.roverApproach?.trigger
+		const distancePosition =
+			cause === 'rover' || this.boarded
+				? this.rover.group.position
+				: this.playerRoot.position
+		const distanceToGoal = endGoal
+			? Math.hypot(
+					distancePosition.x - endGoal.x,
+					distancePosition.z - endGoal.z
+				)
+			: undefined
 
 		this.state.score = score
 
@@ -2949,6 +2969,10 @@ export class Level2 extends Level {
 					time,
 					hull: 0,
 					progress: 0,
+					distanceToGoal:
+						this._radioScriptSet === 2
+							? distanceToGoal
+							: undefined,
 					level: 2,
 				})
 			},
