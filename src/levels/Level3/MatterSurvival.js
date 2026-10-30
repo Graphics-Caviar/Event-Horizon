@@ -316,7 +316,10 @@ export class MatterSurvival {
 				for (const collider of colliders) {
 					if (
 						collider.enabled !== false &&
-						this.isGone(collider.x, collider.z)
+						this.isGone(
+							collider.x,
+							collider.z
+						)
 					)
 						collider.enabled = false
 				}

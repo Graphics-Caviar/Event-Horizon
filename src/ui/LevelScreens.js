@@ -106,10 +106,10 @@ export class LevelScreens {
 		const levelThreeComplete = result.won && level === 3
 		const baseCopy = levelThreeComplete
 			? {
-				title: 'LEVEL COMPLETE',
-				subtitle: 'The Void Devourer is defeated. The mission is complete.',
-				tone: 'good',
-			}
+					title: 'LEVEL COMPLETE',
+					subtitle: 'The Void Devourer is defeated. The mission is complete.',
+					tone: 'good',
+				}
 			: OUTCOMES[result.outcome] || OUTCOMES.destroyed
 		const copy =
 			result.outcome === 'overrun' && level === 3
