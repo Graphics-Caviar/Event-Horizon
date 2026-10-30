@@ -9,6 +9,8 @@ export const SURVIVAL_DEFAULTS = Object.freeze({
 	burnRate: 5,
 	refill: 45,
 	respawn: 12,
+	// The red cells are intentional instant-death decoys, spaced among refills.
+	trapEvery: 6,
 })
 
 /** Collapse and fuel share the playable clock; cinematics never spend either. */
@@ -58,6 +60,20 @@ export class MatterSurvival {
 				emissiveIntensity: 1.4,
 			})
 		)
+		const trapMaterial = own(
+			new THREE.MeshStandardMaterial({
+				color: 0xff284f,
+				emissive: 0xed0028,
+				emissiveIntensity: 2.1,
+			})
+		)
+		const trapPadMaterial = own(
+			new THREE.MeshStandardMaterial({
+				color: 0x49202f,
+				emissive: 0x5d0818,
+				emissiveIntensity: 0.65,
+			})
+		)
 		const capGeometry = own(
 			new THREE.CylinderGeometry(0.8, 0.8, 0.35, 12)
 		)
@@ -80,17 +96,38 @@ export class MatterSurvival {
 				depthWrite: false,
 			})
 		)
+		const trapHaloMaterial = own(
+			new THREE.MeshBasicMaterial({
+				color: 0xff4265,
+				transparent: true,
+				opacity: 0.85,
+				depthWrite: false,
+			})
+		)
 		const count = Math.max(4, Math.ceil(this.length / 38))
 		for (let i = 0; i <= count; i++) {
+			// Keep the first and final stations safe. Red decoys appear
+			// periodically along the route and are visible before collection.
+			const trap =
+				i > 0 &&
+				i < count &&
+				this.config.trapEvery > 0 &&
+				(i - 3) % this.config.trapEvery === 0
 			const point = this.start
 				.clone()
 				.lerp(this.end, i / count)
 			point.y = level.planet.heightAt(point.x, point.z) + 0.4
-			const pad = new THREE.Mesh(padGeometry, padMaterial)
+			const pad = new THREE.Mesh(
+				padGeometry,
+				trap ? trapPadMaterial : padMaterial
+			)
 			pad.position.copy(point).y -= 1
 			const can = new THREE.Group()
 			can.name = 'floating-nitrogen-cell'
-			const core = new THREE.Mesh(canGeometry, fuelMaterial)
+			const core = new THREE.Mesh(
+				canGeometry,
+				trap ? trapMaterial : fuelMaterial
+			)
 			can.add(core)
 			for (const sign of [-1, 1]) {
 				const cap = new THREE.Mesh(capGeometry, casing)
@@ -112,7 +149,7 @@ export class MatterSurvival {
 			for (const angle of [0.55, -0.55]) {
 				const ring = new THREE.Mesh(
 					ringGeometry,
-					haloMaterial
+					trap ? trapHaloMaterial : haloMaterial
 				)
 				ring.rotation.set(Math.PI / 2, angle, angle)
 				halo.add(ring)
@@ -121,6 +158,7 @@ export class MatterSurvival {
 			can.position.copy(point).y += 4.5
 			this.group.add(pad, can)
 			this.pickups.push({
+				trap,
 				point,
 				can,
 				halo,
@@ -300,15 +338,27 @@ export class MatterSurvival {
 			p.halo.rotation.y -= delta * 1.8
 			if (
 				p.cooldown <= 0 &&
-				this.fuel < this.config.maxFuel &&
-				player.distanceTo(p.can.position) < 5.5
+				player.distanceTo(p.can.position) < 5.5 &&
+				(p.trap || this.fuel < this.config.maxFuel)
 			) {
+				p.cooldown = p.trap ? Infinity : this.config.respawn
+				p.can.visible = false
+				if (p.trap) {
+					// Never gate lethal pickups on missing fuel; full tanks
+					// must not make the red decoy safe.
+					this.level.playerHP = 0
+					this.level._updateLevelHUD?.()
+					this.level._showMovementFeedback?.(
+						'JETPACK OVERLOAD — FATAL SYSTEM FAILURE',
+						2
+					)
+					this.level._gameOver()
+					return
+				}
 				this.fuel = Math.min(
 					this.config.maxFuel,
 					this.fuel + this.config.refill
 				)
-				p.cooldown = this.config.respawn
-				p.can.visible = false
 				this.level._showMovementFeedback(
 					`NITROGEN +${this.config.refill} / JETPACK REFILLED`,
 					1.5
