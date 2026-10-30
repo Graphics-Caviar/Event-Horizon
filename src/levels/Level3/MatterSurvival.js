@@ -341,7 +341,9 @@ export class MatterSurvival {
 				player.distanceTo(p.can.position) < 5.5 &&
 				(p.trap || this.fuel < this.config.maxFuel)
 			) {
-				p.cooldown = p.trap ? Infinity : this.config.respawn
+				p.cooldown = p.trap
+					? Infinity
+					: this.config.respawn
 				p.can.visible = false
 				if (p.trap) {
 					// Never gate lethal pickups on missing fuel; full tanks
