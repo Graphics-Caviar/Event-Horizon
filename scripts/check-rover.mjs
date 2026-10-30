@@ -159,6 +159,22 @@ for (let i = 0; i < 1500; i++) {
 		)
 	}
 }
+// A focus below the surface must not catapult the camera into the sky, and a
+// removed surface (Level 3 collapse) must leave the camera free to follow it.
+const buriedTarget = new THREE.Vector3(0, planet.heightAt(0, 0) - 200, 0)
+const buriedCamera = buriedTarget.clone().add(new THREE.Vector3(20, -10, 20))
+constrainTerrainCamera(buriedCamera, buriedTarget, planet)
+assert.ok(
+	buriedCamera.y < planet.heightAt(0, 0) + 100,
+	'buried focus must not launch the camera into the sky'
+)
+const voidTarget = new THREE.Vector3(0, -500, 0)
+const voidCamera = voidTarget.clone().add(new THREE.Vector3(20, -10, 20))
+constrainTerrainCamera(voidCamera, voidTarget, planet, () => -Infinity)
+assert.ok(
+	voidCamera.y < planet.heightAt(voidCamera.x, voidCamera.z),
+	'removed surface must not constrain the camera'
+)
 // Disposing during asynchronous initialization must not create a leaked world.
 const cancelled = new Rover(level, { position: new THREE.Vector3() })
 cancelled.dispose()

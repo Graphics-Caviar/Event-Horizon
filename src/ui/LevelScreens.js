@@ -59,6 +59,9 @@ export class LevelScreens {
 			'.level-panel-kicker'
 		)
 		this.resultsEl = document.getElementById('screen-results')
+		this.resultsKickerEl = this.resultsEl.querySelector(
+			'.level-panel-kicker'
+		)
 
 		this.titleEl = document.getElementById('results-title')
 		this.subtitleEl = document.getElementById('results-subtitle')
@@ -99,13 +102,32 @@ export class LevelScreens {
 	 * @param {{text: string, tone?: string}} [note]
 	 */
 	showResults(result, note) {
-		const copy = OUTCOMES[result.outcome] || OUTCOMES.destroyed
+		const level = Number(result.level) || 1
+		const levelThreeComplete = result.won && level === 3
+		const baseCopy = levelThreeComplete
+			? {
+					title: 'LEVEL COMPLETE',
+					subtitle: 'The Void Devourer is defeated. The mission is complete.',
+					tone: 'good',
+				}
+			: OUTCOMES[result.outcome] || OUTCOMES.destroyed
+		const copy =
+			result.outcome === 'overrun' && level === 3
+				? {
+						...baseCopy,
+						subtitle: 'The Void overwhelmed you. Try again and watch your surroundings.',
+					}
+				: baseCopy
+		this.resultsKickerEl.textContent =
+			LEVEL_NAMES[level] || LEVEL_NAMES[1]
 		this.titleEl.textContent = copy.title
 		this.titleEl.dataset.tone = copy.tone
 		this.subtitleEl.textContent = copy.subtitle
-		if (result.outcome == 'overrun') {
-			this.retryBtn.textContent = 'TRY AGAIN'
-		}
+		this.retryBtn.textContent = levelThreeComplete
+			? 'RESTART MISSION'
+			: result.outcome === 'overrun'
+				? 'TRY AGAIN'
+				: 'FLY AGAIN'
 		this.scoreEl.textContent = Math.round(
 			result.score
 		).toLocaleString()

@@ -17,17 +17,20 @@ import { assetUrl } from '../../core/assetUrl.js'
  */
 export const VOID_ASSETS = {
 	flyingPredator: {
-		path: '/assets/models/aliens/alien-flying-predator.glb',
+		path: '/assets/models/aliens/alien-flying-predator-rigged.glb',
+		rigged: true,
 		fit: 6.6,
 		simplify: 0.2,
 	},
 	alienBrute: {
-		path: '/assets/models/aliens/armored-alien-brute.glb',
+		path: '/assets/models/aliens/armored-alien-brute-rigged.glb',
+		rigged: true,
 		fit: 7.2,
 		simplify: 0.2,
 	},
 	riftStalker: {
 		path: '/assets/models/void/rift-stalker.glb',
+		rigged: true,
 		role: 'enemy · fast melee',
 		fit: 5.4,
 		simplify: 0.24,
@@ -52,6 +55,12 @@ export const VOID_ASSETS = {
 		role: 'boss',
 		fit: 9.5,
 		simplify: 0.22,
+	},
+	voidGod: {
+		path: '/assets/models/void/void_god.glb',
+		role: 'final boss',
+		fit: 12,
+		simplify: 0.08,
 	},
 	bossArena: {
 		path: '/assets/models/void/boss-arena.glb',

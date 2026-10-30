@@ -59,6 +59,9 @@ export class Level3 extends Level2 {
 		this.dust.material.uniforms.uColor.value.set(0xb0b1ac)
 		this._buildJetpack()
 		this._buildFlightPose()
+		// Reused by the jetpack flight controls to steer relative to the camera.
+		this._camForward = new THREE.Vector3()
+		this._camRight = new THREE.Vector3()
 		// The void warband: positional audio, the ancient monuments, the
 		// energy blade, then the enemy roster (Level2's constructor queued
 		// its own aliens virtually — the override below defers to here).
@@ -122,6 +125,7 @@ export class Level3 extends Level2 {
 				name: 'first-contact',
 				progress: 0.045,
 				styles: [
+					'sentinel',
 					'predator',
 					'predator',
 					'brute',
@@ -137,6 +141,7 @@ export class Level3 extends Level2 {
 					'predator',
 					'brute',
 					'brute',
+					'colossus',
 				],
 			},
 			{
@@ -149,6 +154,7 @@ export class Level3 extends Level2 {
 					'predator',
 					'predator',
 					'predator',
+					'entity',
 				],
 			},
 			{
@@ -161,6 +167,7 @@ export class Level3 extends Level2 {
 					'predator',
 					'predator',
 					'entity',
+					'stalker',
 				],
 			},
 			{
@@ -302,8 +309,18 @@ export class Level3 extends Level2 {
 				object.position
 					.copy(object.target.position)
 					.add(new THREE.Vector3(-180, 155, -112))
+				// The void has a large terrain and crystal field. Keep the shadow
+				// map bounded so flying does not trigger an oversized shadow pass.
+				object.shadow.mapSize.set(1024, 1024)
 			}
 		}
+		const renderer = this.sceneManager.renderer
+		if (renderer) {
+			renderer.shadowMap.type = THREE.PCFShadowMap
+			renderer.shadowMap.autoUpdate = false
+			renderer.shadowMap.needsUpdate = true
+		}
+		this._shadowTick = 0
 	}
 
 	_buildJetpack() {
@@ -412,6 +429,17 @@ export class Level3 extends Level2 {
 			this.flightPivot.rotation.x = 0
 	}
 
+	_surfaceHeightAt(x, z) {
+		return (
+			this.survival?.surfaceHeightAt(x, z) ??
+			this.planet.heightAt(x, z)
+		)
+	}
+
+	_cameraSurfaceHeightAt(x, z) {
+		return this._surfaceHeightAt(x, z)
+	}
+
 	_updatePlayerMovement(delta) {
 		if (this.transitionHeld || this.completed) return
 		const thrust = this.survival
@@ -447,7 +475,7 @@ export class Level3 extends Level2 {
 			)
 			if (
 				oldSupport >
-				this.planet.heightAt(
+				this._surfaceHeightAt(
 					this.playerRoot.position.x,
 					this.playerRoot.position.z
 				) +
@@ -533,34 +561,69 @@ export class Level3 extends Level2 {
 			.clone()
 			.addScaledVector(this.velocity, delta)
 		this.planet.clampToBounds(candidate, 0.9)
-		const ground = this.planet.heightAt(candidate.x, candidate.z)
+		// Treat a sharp rise in the terrain as a wall. Without this the pilot
+		// is moved into the hillside and then snapped up to its surface on the
+		// next line, which looks like a mid-flight teleport. Gentle uphill
+		// slopes stay flyable because the step allowance is larger than one
+		// frame of climb at normal speed.
+		const maxClimb = 1.5
+		const feet = position.y - footOffset
+		const blockedByTerrain = (x, z) =>
+			this._surfaceHeightAt(x, z) > feet + maxClimb
+		if (blockedByTerrain(candidate.x, candidate.z)) {
+			if (!blockedByTerrain(candidate.x, startZ)) {
+				candidate.z = startZ
+			} else if (!blockedByTerrain(startX, candidate.z)) {
+				candidate.x = startX
+			} else {
+				candidate.x = startX
+				candidate.z = startZ
+			}
+		}
+		const ground = this._surfaceHeightAt(candidate.x, candidate.z)
 		// Stay outside props at low altitude; fly over them above their clearance.
-		if (candidate.y - footOffset < ground + 18) {
+		// Only resolve nearby prop colliders right at surface level. The old
+		// 18-unit band kept snapping a flying pilot against rocks and plants
+		// while crossing its edge, which looked like midair jitter.
+		if (candidate.y - footOffset < ground + 5) {
 			this.planet.resolveCircleCollisions(
 				candidate,
 				0.9,
 				this.gameplayColliders
 			)
 			this.planet.clampToBounds(candidate, 0.9)
+			// A prop push must not shove the pilot back into a hillside.
+			if (
+				(candidate.x !== startX ||
+					candidate.z !== startZ) &&
+				blockedByTerrain(candidate.x, candidate.z)
+			) {
+				candidate.x = startX
+				candidate.z = startZ
+			}
 		}
-		if (
-			(this.survival?.surfaceHeightAt(
-				candidate.x,
-				candidate.z
-			) ?? this.planet.heightAt(candidate.x, candidate.z)) +
-				footOffset <=
-			position.y
-		) {
-			position.x = candidate.x
-			position.z = candidate.z
-		}
-		const floor =
-			(this.matterDimension?.supportHeightAt(
+		// Keep horizontal flight continuous across uneven or collapsing terrain.
+		// The previous height gate froze X/Z as soon as an uphill tile rose
+		// above the pilot, then resumed after the floor snap, causing jitter.
+		position.x = candidate.x
+		position.z = candidate.z
+		const terrainFloor = this._surfaceHeightAt(
+			position.x,
+			position.z
+		)
+		const supportFloor =
+			this.matterDimension?.supportHeightAt(
 				position.x,
 				position.z,
 				position.y - footOffset
-			) ?? this.planet.heightAt(position.x, position.z)) +
-			footOffset
+			) ?? terrainFloor
+		// Floating slabs are one-way landing surfaces. While the jetpack is
+		// still climbing, ignore them so the pilot cannot snap onto a top from
+		// underneath; once descent starts they become solid.
+		const floor =
+			(this._verticalSpeed > 0
+				? terrainFloor
+				: supportFloor) + footOffset
 		const ceiling = this.baseY + 220 + footOffset
 		if (position.y >= ceiling) {
 			position.y = ceiling
@@ -568,20 +631,24 @@ export class Level3 extends Level2 {
 		}
 		if (position.y <= floor) {
 			position.y = floor
-			this._verticalSpeed = 0
-			this._airborne = false
-			this.dust.spawnBurst(
-				this._feetScratch
-					.copy(position)
-					.setY(floor - footOffset),
-				{
-					count: 14,
-					strength: 2,
-					spread: 1.5,
-					size: 0.9,
-					upBias: 0.45,
-				}
-			)
+			if (this._verticalSpeed <= 0 && !thrust) {
+				this._verticalSpeed = 0
+				this._airborne = false
+				this.dust.spawnBurst(
+					this._feetScratch
+						.copy(position)
+						.setY(floor - footOffset),
+					{
+						count: 14,
+						strength: 2,
+						spread: 1.5,
+						size: 0.9,
+						upBias: 0.45,
+					}
+				)
+			} else if (this._verticalSpeed < 0) {
+				this._verticalSpeed = 0
+			}
 		}
 		this._speed = this.velocity.length()
 		this._flightSpeed =
@@ -663,11 +730,22 @@ export class Level3 extends Level2 {
 			) > 7
 		)
 			return
+		if (this.encounters?.some((encounter) => !encounter.completed))
+			return
 		super._checkPortalArrival()
 	}
 
 	update(delta) {
 		if (this.paused) return
+		// Refresh dynamic shadows on alternate frames. The player and enemies
+		// still cast moving shadows without rerasterizing the whole void every
+		// frame while the jetpack is active.
+		const renderer = this.sceneManager.renderer
+		if (renderer) {
+			this._shadowTick = (this._shadowTick + 1) & 1
+			if (this._shadowTick === 0)
+				renderer.shadowMap.needsUpdate = true
+		}
 		if (this.voidDimension) {
 			this.voidDimension.update(delta)
 			return
@@ -730,7 +808,14 @@ export class Level3 extends Level2 {
 			const bladeHint = this.blade?.equipped
 				? ' · F swing blade'
 				: ''
-			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>Fight through five escalating encounters to reach the rift. Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
+			const encountersLeft =
+				this.encounters?.filter(
+					(encounter) => !encounter.completed
+				).length ?? 0
+			const riftObjective = encountersLeft
+				? `Defeat Void Sentinels, Colossi, Entities and Rift Stalkers (${encountersLeft} encounters left) before crossing the Grav Rift.`
+				: 'The Grav Rift is clear. Cross it to reach the final boss.'
+			this.objectiveEl.innerHTML = `<strong>LEVEL 3 · VOID OF GODS · MATTER DIMENSION</strong><br><span style="font-size:12px;opacity:.85">WASD move · Shift sprint · Hold Space to fly · Shift+Space jetpack BOOST (more fuel) · Release to descend / C duck · ${bladeHint}<br>${riftObjective} Collect cyan nitrogen cells, avoid molten pools and dodge falling debris.</span>`
 			this._objectiveKey = ''
 		}
 	}
@@ -863,6 +948,8 @@ export class Level3 extends Level2 {
 		this.stormLandscape?.dispose()
 		if (import.meta.env.DEV && window.__level3 === this)
 			delete window.__level3
+		const renderer = this.sceneManager.renderer
+		if (renderer) renderer.shadowMap.autoUpdate = true
 		super.dispose()
 	}
 }
