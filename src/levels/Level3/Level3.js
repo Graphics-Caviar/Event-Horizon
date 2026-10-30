@@ -100,10 +100,7 @@ export class Level3 extends Level2 {
 			thrust: 'FORWARD THRUST',
 		}
 
-		this._showMovementFeedback(
-			`BLADE MODE — ${labels[mode]}`,
-			2
-		)
+		this._showMovementFeedback(`BLADE MODE — ${labels[mode]}`, 2)
 
 		return true
 	}

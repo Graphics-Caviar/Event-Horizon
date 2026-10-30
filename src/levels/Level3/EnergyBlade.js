@@ -11,16 +11,12 @@ const BLADE_CONTACT_SAMPLES = 8
 // Held scale relative to the pickup's 2.8 m display fit.
 const HELD_SCALE = 1.6 / 2.8
 const SWING_END_ANGLE = Math.PI
-const SWING_MODES = [
-    'vertical',
-    'horizontal',
-    'thrust',
-]
+const SWING_MODES = ['vertical', 'horizontal', 'thrust']
 
 const SWING_MODE_LABELS = {
-    vertical: 'Vertical Swing',
-    horizontal: 'Horizontal Sweep',
-    thrust: 'Forward Thrust',
+	vertical: 'Vertical Swing',
+	horizontal: 'Horizontal Sweep',
+	thrust: 'Forward Thrust',
 }
 const REST_POSE = { x: 0.08, z: -0.12 }
 
@@ -174,9 +170,7 @@ export class EnergyBlade {
 				REST_POSE.z * (1 - k)
 			)
 		} else if (t < SWING_WINDUP + SWING_STRIKE) {
-			const k = smooth01(
-				(t - SWING_WINDUP) / SWING_STRIKE
-			)
+			const k = smooth01((t - SWING_WINDUP) / SWING_STRIKE)
 
 			const attack = this._attackConfig
 
@@ -193,9 +187,7 @@ export class EnergyBlade {
 			)
 
 			this._strike()
-		} else if (
-			t < SWING_WINDUP + SWING_STRIKE + SWING_RECOVER
-		) {
+		} else if (t < SWING_WINDUP + SWING_STRIKE + SWING_RECOVER) {
 			const k = smooth01(
 				(t - SWING_WINDUP - SWING_STRIKE) /
 					SWING_RECOVER
@@ -211,7 +203,8 @@ export class EnergyBlade {
 
 			this._pivot.rotation.set(
 				attack.axis === 'x'
-					? attack.angle * (1 - k) + REST_POSE.x * k
+					? attack.angle * (1 - k) +
+							REST_POSE.x * k
 					: REST_POSE.x * k,
 
 				attack.axis === 'y'
@@ -219,7 +212,8 @@ export class EnergyBlade {
 					: 0,
 
 				attack.axis === 'z'
-					? attack.angle * (1 - k) + REST_POSE.z * k
+					? attack.angle * (1 - k) +
+							REST_POSE.z * k
 					: REST_POSE.z * k
 			)
 
@@ -233,11 +227,7 @@ export class EnergyBlade {
 
 			this._bladeMount.position.copy(this._restPosition)
 
-			this._pivot.rotation.set(
-				REST_POSE.x,
-				0,
-				REST_POSE.z
-			)
+			this._pivot.rotation.set(REST_POSE.x, 0, REST_POSE.z)
 
 			this._bladeOrientation.rotation.set(0, 0, 0)
 		}
@@ -252,11 +242,7 @@ export class EnergyBlade {
 
 		// These positions are relative to the centre of the player.
 		// The pivot itself will remain stationary during the swing.
-		this._restPosition = new THREE.Vector3(
-			0.7,
-			0.1,
-			0.2
-		)
+		this._restPosition = new THREE.Vector3(0.7, 0.1, 0.2)
 
 		// Position the centre of the blade above the player's head.
 		this._overheadPosition = new THREE.Vector3(
@@ -292,11 +278,7 @@ export class EnergyBlade {
 
 		level.playerRoot.add(this._pivot)
 
-		this._pivot.rotation.set(
-			REST_POSE.x,
-			0,
-			REST_POSE.z
-		)
+		this._pivot.rotation.set(REST_POSE.x, 0, REST_POSE.z)
 
 		level.audio?.playCollect()
 
@@ -386,8 +368,7 @@ export class EnergyBlade {
 		const previousStart =
 			this._previousBladeStart ?? this._bladeStart
 
-		const previousEnd =
-			this._previousBladeEnd ?? this._bladeEnd
+		const previousEnd = this._previousBladeEnd ?? this._bladeEnd
 
 		for (const enemy of level.aliens) {
 			if (
@@ -400,99 +381,103 @@ export class EnergyBlade {
 				continue
 			}
 
-		const enemyHeight = enemy.style?.fit ?? 4
-		const enemyRadius = enemy.radius ?? 2
+			const enemyHeight = enemy.style?.fit ?? 4
+			const enemyRadius = enemy.radius ?? 2
 
-		const contactRadius =
-			enemyRadius + BLADE_CONTACT_PADDING
+			const contactRadius =
+				enemyRadius + BLADE_CONTACT_PADDING
 
-		const contactRadiusSq = contactRadius * contactRadius
+			const contactRadiusSq = contactRadius * contactRadius
 
-		let touchesBlade = false
+			let touchesBlade = false
 
-		// Sample the blade at multiple points along its movement.
-		for (
-			let frameSample = 0;
-			frameSample <= TEMPORAL_SAMPLES && !touchesBlade;
-			frameSample++
-		) {
-			const frameK = frameSample / TEMPORAL_SAMPLES
-
-			const start = new THREE.Vector3().lerpVectors(
-				previousStart,
-				this._bladeStart,
-				frameK
-			)
-
-			const end = new THREE.Vector3().lerpVectors(
-				previousEnd,
-				this._bladeEnd,
-				frameK
-			)
-
-			// Sample points along the blade itself.
+			// Sample the blade at multiple points along its movement.
 			for (
-				let bladeSample = 0;
-				bladeSample <= BLADE_CONTACT_SAMPLES;
-				bladeSample++
+				let frameSample = 0;
+				frameSample <= TEMPORAL_SAMPLES &&
+				!touchesBlade;
+				frameSample++
 			) {
-				const bladeK =
-					bladeSample / BLADE_CONTACT_SAMPLES
+				const frameK = frameSample / TEMPORAL_SAMPLES
 
-				const sample = start.clone().lerp(end, bladeK)
-
-				const nearestY = THREE.MathUtils.clamp(
-					sample.y,
-					enemy.position.y,
-					enemy.position.y + enemyHeight
+				const start = new THREE.Vector3().lerpVectors(
+					previousStart,
+					this._bladeStart,
+					frameK
 				)
 
-				const dx = sample.x - enemy.position.x
-				const dy = sample.y - nearestY
-				const dz = sample.z - enemy.position.z
+				const end = new THREE.Vector3().lerpVectors(
+					previousEnd,
+					this._bladeEnd,
+					frameK
+				)
 
-				if (
-					dx * dx + dy * dy + dz * dz <=
-					contactRadiusSq
+				// Sample points along the blade itself.
+				for (
+					let bladeSample = 0;
+					bladeSample <= BLADE_CONTACT_SAMPLES;
+					bladeSample++
 				) {
-					touchesBlade = true
-					break
+					const bladeK =
+						bladeSample /
+						BLADE_CONTACT_SAMPLES
+
+					const sample = start
+						.clone()
+						.lerp(end, bladeK)
+
+					const nearestY = THREE.MathUtils.clamp(
+						sample.y,
+						enemy.position.y,
+						enemy.position.y + enemyHeight
+					)
+
+					const dx = sample.x - enemy.position.x
+					const dy = sample.y - nearestY
+					const dz = sample.z - enemy.position.z
+
+					if (
+						dx * dx + dy * dy + dz * dz <=
+						contactRadiusSq
+					) {
+						touchesBlade = true
+						break
+					}
 				}
 			}
-		}
 
-		if (!touchesBlade) continue
+			if (!touchesBlade) continue
 
-		this._hitEnemies.add(enemy)
-		enemy.damage(level.combatConfig.bladeDamage)
+			this._hitEnemies.add(enemy)
+			enemy.damage(level.combatConfig.bladeDamage)
 
-		if (enemy.smashed || enemy.hp < enemy.maxHp) {
-			hits += 1
-			hitPosition ||= enemy.position
-		}
-}
-
-// Save the current blade position for the next frame.
-	this._previousBladeStart = this._bladeStart.clone()
-	this._previousBladeEnd = this._bladeEnd.clone()
-			if (hits > 0 && hitPosition) {
-				level._requestShake?.(0.18)
-				level.dust?.spawnBurst(
-					{
-						x: hitPosition.x,
-						y: hitPosition.y + 1,
-						z: hitPosition.z,
-					},
-					{
-						count: 10,
-						strength: 1.8,
-						spread: 1.6,
-						size: 1,
-						upBias: 0.5,
-					}
-				)
+			if (enemy.smashed || enemy.hp < enemy.maxHp) {
+				hits += 1
+				hitPosition ||= enemy.position
 			}
 		}
+
+		// Save the current blade position for the next frame.
+		this._previousBladeStart = this._bladeStart.clone()
+		this._previousBladeEnd = this._bladeEnd.clone()
+		if (hits > 0 && hitPosition) {
+			level._requestShake?.(0.18)
+			level.dust?.spawnBurst(
+				{
+					x: hitPosition.x,
+					y: hitPosition.y + 1,
+					z: hitPosition.z,
+				},
+				{
+					count: 10,
+					strength: 1.8,
+					spread: 1.6,
+					size: 1,
+					upBias: 0.5,
+				}
+			)
+		}
+	}
 
 	dispose() {
 		this._model?.removeFromParent()
