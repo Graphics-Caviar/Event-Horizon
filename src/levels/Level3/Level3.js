@@ -535,7 +535,10 @@ export class Level3 extends Level2 {
 		this.planet.clampToBounds(candidate, 0.9)
 		const ground = this.planet.heightAt(candidate.x, candidate.z)
 		// Stay outside props at low altitude; fly over them above their clearance.
-		if (candidate.y - footOffset < ground + 18) {
+		// Only resolve nearby prop colliders right at surface level. The old
+		// 18-unit band kept snapping a flying pilot against rocks and plants
+		// while crossing its edge, which looked like midair jitter.
+		if (candidate.y - footOffset < ground + 5) {
 			this.planet.resolveCircleCollisions(
 				candidate,
 				0.9,
@@ -543,17 +546,11 @@ export class Level3 extends Level2 {
 			)
 			this.planet.clampToBounds(candidate, 0.9)
 		}
-		if (
-			(this.survival?.surfaceHeightAt(
-				candidate.x,
-				candidate.z
-			) ?? this.planet.heightAt(candidate.x, candidate.z)) +
-				footOffset <=
-			position.y
-		) {
-			position.x = candidate.x
-			position.z = candidate.z
-		}
+		// Keep horizontal flight continuous across uneven or collapsing terrain.
+		// The previous height gate froze X/Z as soon as an uphill tile rose
+		// above the pilot, then resumed after the floor snap, causing jitter.
+		position.x = candidate.x
+		position.z = candidate.z
 		const floor =
 			(this.matterDimension?.supportHeightAt(
 				position.x,
@@ -568,20 +565,24 @@ export class Level3 extends Level2 {
 		}
 		if (position.y <= floor) {
 			position.y = floor
-			this._verticalSpeed = 0
-			this._airborne = false
-			this.dust.spawnBurst(
-				this._feetScratch
-					.copy(position)
-					.setY(floor - footOffset),
-				{
-					count: 14,
-					strength: 2,
-					spread: 1.5,
-					size: 0.9,
-					upBias: 0.45,
-				}
-			)
+			if (this._verticalSpeed <= 0 && !thrust) {
+				this._verticalSpeed = 0
+				this._airborne = false
+				this.dust.spawnBurst(
+					this._feetScratch
+						.copy(position)
+						.setY(floor - footOffset),
+					{
+						count: 14,
+						strength: 2,
+						spread: 1.5,
+						size: 0.9,
+						upBias: 0.45,
+					}
+				)
+			} else if (this._verticalSpeed < 0) {
+				this._verticalSpeed = 0
+			}
 		}
 		this._speed = this.velocity.length()
 		this._flightSpeed =

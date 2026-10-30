@@ -42,16 +42,8 @@ export class MatterSurvival {
 			this.resources.push(r)
 			return r
 		}
-		const padGeometry = own(new THREE.CylinderGeometry(6, 5, 2, 6))
 		const canGeometry = own(
 			new THREE.CylinderGeometry(0.65, 0.65, 2.4, 10)
-		)
-		const padMaterial = own(
-			new THREE.MeshStandardMaterial({
-				color: 0x24243d,
-				emissive: 0x15334a,
-				emissiveIntensity: 0.7,
-			})
 		)
 		const fuelMaterial = own(
 			new THREE.MeshStandardMaterial({
@@ -104,15 +96,11 @@ export class MatterSurvival {
 			const point = this.start
 				.clone()
 				.lerp(this.end, i / count)
-			// Place the tile top on the same ground height used for walking;
-			// raising it above terrain makes the pilot's feet appear buried.
-			point.y = level.planet.heightAt(point.x, point.z)
+			point.y = level.planet.heightAt(point.x, point.z) + 0.4
 			const type =
 				i % BOMB_STATION_INTERVAL === 1
 					? 'bomb'
 					: 'nitrogen'
-			const pad = new THREE.Mesh(padGeometry, padMaterial)
-			pad.position.copy(point).y -= 1
 			const can = new THREE.Group()
 			can.name =
 				type === 'bomb'
@@ -152,7 +140,7 @@ export class MatterSurvival {
 			}
 			can.add(halo)
 			can.position.copy(point).y += 4.5
-			this.group.add(pad, can)
+			this.group.add(can)
 			this.pickups.push({
 				point,
 				index: i,

@@ -165,9 +165,9 @@ export class LeaderboardScreen {
 			)
 		if (this.personalEl) {
 			this.personalEl.innerHTML = personalBestOutsideTop
-				? `<div class="lb-personal-label">YOUR BEST RUN · OUTSIDE THE TOP ${ROW_LIMIT}</div>
+				? `<div class="lb-personal-label">YOUR BEST RUN · RANK #${Number(personalBest.rank || 0).toLocaleString()}</div>
 					<div class="lb-row lb-row-self lb-personal-row">
-						<span class="lb-rank">PB</span>
+						<span class="lb-rank">#${Number(personalBest.rank || 0).toLocaleString()}</span>
 						<span class="lb-pilot">${escapeHtml(personalBest.displayName || 'Pilot')}</span>
 						<span class="lb-score">${Number(personalBest.score || 0).toLocaleString()}</span>
 						<span class="lb-time">${formatTime(personalBest.timeElapsed)}</span>

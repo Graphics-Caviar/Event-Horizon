@@ -78,7 +78,7 @@ export class VoidBoss {
 		// Pre-allocated scratch vectors — avoids `new THREE.Vector3` in update()
 		this._scratchOrbit = new THREE.Vector3()
 		this._scratchDir = new THREE.Vector3()
-		this._scratchFbOfs = new THREE.Vector3()
+		this._scratchAim = new THREE.Vector3()
 
 		this._fireballs = []
 		this._resources = []
@@ -366,15 +366,24 @@ export class VoidBoss {
 
 	// ── fireball spawning ───────────────────────────────────────────────────
 
-	_spawnFireball(targetPos) {
+	_spawnFireball(targetPos, playerVelocity) {
 		// Only ever reactivates a pre-warmed pool entry — no alloc at runtime.
 		const fb = this._fireballs.find((f) => !f.active)
 		if (!fb) return // pool exhausted (all 6 in flight) — silently skip
 
 		// Spawn from the boss head (world position via scratch)
 		this.headGroup.getWorldPosition(fb.group.position)
+		// Lead the pilot by the projectile's travel time so shots stay aimed
+		// at their flight path instead of the position from the start of windup.
+		const distance = fb.group.position.distanceTo(targetPos)
+		this._scratchAim.copy(targetPos)
+		if (playerVelocity)
+			this._scratchAim.addScaledVector(
+				playerVelocity,
+				Math.min(distance / FIREBALL_SPEED, 1.5)
+			)
 		this._scratchDir
-			.subVectors(targetPos, fb.group.position)
+			.subVectors(this._scratchAim, fb.group.position)
 			.normalize()
 		// Offset spawn point so ball starts outside the boss body
 		fb.group.position.addScaledVector(this._scratchDir, 2.5)
@@ -411,7 +420,7 @@ export class VoidBoss {
 
 	// ── update ──────────────────────────────────────────────────────────────
 
-	update(delta, playerPos) {
+	update(delta, playerPos, playerVelocity) {
 		this._time += delta
 		this._hitFlash = Math.max(0, this._hitFlash - delta * 2.5)
 
@@ -502,25 +511,10 @@ export class VoidBoss {
 					this._jawOpen + delta * 2
 				)
 				if (this._timer <= 0) {
-					this._spawnFireball(playerPos)
+					this._spawnFireball(playerPos, playerVelocity)
 					if (enraged) {
-						// Second fireball with slight spread — use scratch to avoid alloc
-						this._scratchFbOfs
-							.copy(playerPos)
-							.add(
-								this._scratchFbOfs.set(
-									(Math.random() -
-										0.5) *
-										6,
-									(Math.random() -
-										0.5) *
-										6,
-									0
-								)
-							)
-						this._spawnFireball(
-							this._scratchFbOfs
-						)
+						// Keep the enraged follow-up aimed at the same predicted path.
+						this._spawnFireball(playerPos, playerVelocity)
 					}
 					this._state = 'recover'
 					this._timer = cooldown

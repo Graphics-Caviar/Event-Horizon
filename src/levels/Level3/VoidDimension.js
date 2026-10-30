@@ -83,20 +83,9 @@ export class VoidDimension {
 		this.shards = this.spaceBackdrop.shards
 		this.drifters = new VoidDrifters(level, this.group)
 
-		const glow = own(
-			new THREE.MeshBasicMaterial({ color: 0x79eeff })
-		)
-		this.rings = []
-		const ringGeometry = own(
-			new THREE.TorusGeometry(14, 0.18, 8, 96)
-		)
-		for (let i = 0; i < 6; i++) {
-			const ring = new THREE.Mesh(ringGeometry, glow)
-			ring.position.set(0, 8, -45 - i * 65)
-			this.group.add(ring)
-			this.rings.push(ring)
-		}
-		this.exit = this.rings.at(-1).position
+		// Keep the exit objective as a position in open space; visible hoops
+		// made the Void look like a sequence of portals instead of outer space.
+		this.exit = new THREE.Vector3(0, 8, -370)
 		level.playerRoot.position.set(0, 8, 15)
 		level.playerRoot.visible = true
 		// First-person mode hides the model itself, not just its gameplay root.
@@ -223,7 +212,7 @@ export class VoidDimension {
 			this.cameraDistance = THREE.MathUtils.clamp(
 				this.cameraDistance + e.deltaY * 0.012,
 				6,
-				28
+				60
 			)
 		}
 		window.addEventListener('pointerdown', this._onPointerDown)
@@ -579,7 +568,7 @@ export class VoidDimension {
 		this._bullets.push({
 			mesh: bullet,
 			velocity: dir.clone().multiplyScalar(BULLET_SPEED),
-			life: 3.5,
+			life: 6,
 		})
 	}
 
@@ -646,7 +635,7 @@ export class VoidDimension {
 			const speed = l.keys.has('ShiftLeft') ? 36 : 22
 			l.velocity.lerp(
 				this.direction.multiplyScalar(speed),
-				1 - Math.exp(-dt * 3)
+				1 - Math.exp(-dt * 5)
 			)
 			l.playerRoot.position.addScaledVector(l.velocity, dt)
 			l.playerRoot.position.clamp(
@@ -670,7 +659,7 @@ export class VoidDimension {
 				this._aimGunAtView()
 
 				// Update boss AI + fireballs
-				this.boss.update(dt, playerPos)
+				this.boss.update(dt, playerPos, l.velocity)
 
 				// Fireball hit: deduct player HP
 				if (this.boss.pendingHit) {
@@ -738,18 +727,17 @@ export class VoidDimension {
 				this._updateBossHUD()
 			} else if (this._bossDefeated) {
 				l.objectiveEl.innerHTML =
-					'<strong>VOID DEVOURER DEFEATED!</strong><br><span style="color:#79eeff">Fly through the cyan rings to the exit gate.</span>'
-				if (l.playerRoot.position.distanceTo(this.exit) < 12)
+					'<strong>VOID DEVOURER DEFEATED!</strong><br><span style="color:#79eeff">Fly to the distant exit point.</span>'
+				if (
+					l.playerRoot.position.distanceTo(
+						this.exit
+					) < 12
+				)
 					l._completeMission()
 			} else if (this._playerDefeated) {
 				// Player died — game over handled by _showOutcome
 			}
 		}
-
-		for (let i = 0; i < this.rings.length; i++)
-			this.rings[i].scale.setScalar(
-				1 + Math.sin(this.time * 1.5 + i) * 0.035
-			)
 
 		// ── Environment animations ────────────────────────────────────────
 		// Camera follows the pilot while preserving the player's orbit angle.

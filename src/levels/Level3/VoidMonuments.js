@@ -75,7 +75,8 @@ export class VoidMonuments {
 				yaw: this.sites.arenaYaw,
 				embed: 2.2,
 				shadows: false,
-				colliders: [],
+				// Block the arena's central mass while leaving room to walk around it.
+				colliders: [{ radius: 32 }],
 			},
 		]
 		defs.forEach((def, index) => {
